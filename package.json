@@ -2,10 +2,15 @@
   "name": "bookleaf-royalty-automation",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "vitest run",
     "build:workflows": "node n8n/build.mjs",
     "test:contract": "vitest run --config tests/contract/vitest.config.js"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.7"
   }
 }
