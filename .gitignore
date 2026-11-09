@@ -1,0 +1,6 @@
+# The brief is confidential; never commit it.
+BookLeaf_Technical_Assignment_*.pdf
+.env
+.env.*
+node_modules/
+.DS_Store
