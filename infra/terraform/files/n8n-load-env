@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Render /opt/n8n/.env (secrets + identity, used by docker compose for ${VAR} interpolation)
+# and /opt/n8n/app.env (workflow config, passed to n8n) from SSM Parameter Store.
+# Runs before every start of n8n-stack.service. The instance role can read only its own prefix.
+set -euo pipefail
+. /etc/n8n/project.env
+
+DIR=/opt/n8n
+log() { echo "[n8n-load-env] $*"; }
+fail() { log "FATAL: $*" >&2; exit 1; }
+
+get() {
+  aws ssm get-parameter --region "$AWS_REGION" --name "$SSM_PREFIX/$1" --with-decryption \
+    --query Parameter.Value --output text
+}
+
+PG_PASSWORD="$(get postgres/password)"
+ENCRYPTION_KEY="$(get n8n/encryption_key)"
+APP_ENV="$(get n8n/app_env)"
+
+# Every value must be one plain line compose can carry without quoting.
+SAFE='^[A-Za-z0-9_./:@,+=-]*$'
+for v in "$PG_PASSWORD" "$ENCRYPTION_KEY"; do
+  [ -n "$v" ] || fail "a required secret is empty"
+  [[ "$v" =~ $SAFE ]] || fail "a secret holds characters the env file cannot carry"
+done
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  [[ "$line" =~ ^[A-Z][A-Z0-9_]*=(.*)$ ]] || fail "app_env line is not KEY=value: ${line%%=*}"
+  [[ "${BASH_REMATCH[1]}" =~ $SAFE ]] || fail "app_env value for ${line%%=*} has unsafe characters"
+done <<< "$APP_ENV"
+
+umask 077
+{
+  echo "POSTGRES_PASSWORD=$PG_PASSWORD"
+  echo "N8N_ENCRYPTION_KEY=$ENCRYPTION_KEY"
+  echo "N8N_HOST=$N8N_HOST"
+  echo "ACME_EMAIL=$ACME_EMAIL"
+  echo "N8N_IMAGE=$N8N_IMAGE"
+  echo "POSTGRES_IMAGE=$POSTGRES_IMAGE"
+  echo "CADDY_IMAGE=$CADDY_IMAGE"
+} > "$DIR/.env.tmp"
+printf '%s\n' "$APP_ENV" > "$DIR/app.env.tmp"
+mv "$DIR/.env.tmp" "$DIR/.env"
+mv "$DIR/app.env.tmp" "$DIR/app.env"
+chmod 600 "$DIR/.env" "$DIR/app.env"
+log "rendered $DIR/.env and $DIR/app.env ($(grep -c = "$DIR/app.env") app keys)"

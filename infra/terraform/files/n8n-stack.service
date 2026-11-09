@@ -1,0 +1,20 @@
+[Unit]
+Description=n8n stack (Caddy + n8n + Postgres) via docker compose
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/n8n
+# Re-read secrets and app config from SSM on every start, so a changed parameter needs only a restart.
+ExecStartPre=/usr/local/bin/n8n-load-env
+ExecStart=/usr/bin/docker compose --project-directory /opt/n8n up -d --remove-orphans
+ExecStop=/usr/bin/docker compose --project-directory /opt/n8n stop
+TimeoutStartSec=900
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

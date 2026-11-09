@@ -1,0 +1,83 @@
+#!/bin/bash
+# First-boot setup for the BookLeaf Assignment 2 n8n box (Ubuntu 24.04 arm64). Runs once.
+# Secrets are NOT in this script: n8n-load-env pulls them from SSM Parameter Store at every boot.
+set -euxo pipefail
+exec > >(tee /var/log/n8n-bootstrap.log) 2>&1
+echo "=== n8n bootstrap $(date -u +%FT%TZ)"
+
+export DEBIAN_FRONTEND=noninteractive
+ARCH="$(dpkg --print-architecture)"
+
+apt-get update -y
+apt-get install -y ca-certificates curl gnupg unzip jq
+
+# ── Swap: 2 GB of RAM is tight for n8n + Postgres under load ────────────────
+if [ ! -f /swapfile ]; then
+  fallocate -l ${swap_gb}G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  echo 'vm.swappiness=10' > /etc/sysctl.d/99-swappiness.conf
+  sysctl -p /etc/sysctl.d/99-swappiness.conf
+fi
+
+# ── AWS CLI v2 (reads the SSM parameters) ────────────────────────────────────
+if ! command -v aws >/dev/null; then
+  case "$ARCH" in
+    amd64) AWSZIP="awscli-exe-linux-x86_64.zip" ;;
+    arm64) AWSZIP="awscli-exe-linux-aarch64.zip" ;;
+  esac
+  curl -fsSL "https://awscli.amazonaws.com/$AWSZIP" -o /tmp/awscliv2.zip
+  unzip -q /tmp/awscliv2.zip -d /tmp && /tmp/aws/install && rm -rf /tmp/aws /tmp/awscliv2.zip
+fi
+
+# ── Docker CE + compose plugin ───────────────────────────────────────────────
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  > /etc/apt/sources.list.d/docker.list
+apt-get update -y
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+cat > /etc/docker/daemon.json <<'JSON'
+{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}
+JSON
+systemctl enable docker
+systemctl restart docker
+
+# ── Box identity (non-secret) ────────────────────────────────────────────────
+mkdir -p /etc/n8n /opt/n8n/initdb
+cat > /etc/n8n/project.env <<'N8NEOF_PENV'
+${project_env}
+N8NEOF_PENV
+chmod 0644 /etc/n8n/project.env
+
+# ── Stack files (quoted heredocs: nothing is expanded) ──────────────────────
+cat > /opt/n8n/docker-compose.yml <<'N8NEOF_COMPOSE'
+${compose_yml}
+N8NEOF_COMPOSE
+cat > /opt/n8n/Caddyfile <<'N8NEOF_CADDY'
+${caddyfile}
+N8NEOF_CADDY
+echo '${init_sql_b64}' | base64 -d > /opt/n8n/initdb/01-bookleaf.sql
+chmod 0644 /opt/n8n/docker-compose.yml /opt/n8n/Caddyfile /opt/n8n/initdb/01-bookleaf.sql
+
+cat > /usr/local/bin/n8n-load-env <<'N8NEOF_LOADENV'
+${load_env_sh}
+N8NEOF_LOADENV
+chmod 0755 /usr/local/bin/n8n-load-env
+
+cat > /etc/systemd/system/n8n-stack.service <<'N8NEOF_UNIT'
+${stack_unit}
+N8NEOF_UNIT
+
+# ── Start (and start again on every boot) ────────────────────────────────────
+systemctl daemon-reload
+systemctl enable --now n8n-stack.service
+
+echo "=== n8n bootstrap complete $(date -u +%FT%TZ)"

@@ -5,3 +5,13 @@ BookLeaf_Technical_Assignment_*.pdf
 node_modules/
 .DS_Store
 graphify-out/
+
+# Terraform: local state holds generated secrets.
+infra/terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+# Local-only credentials (n8n API key, owner password).
+.secrets/
+docker/.data/
