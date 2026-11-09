@@ -1,7 +1,9 @@
-import * as anthropic from './anthropic.js';
-import * as openai from './openai.js';
+import * as anthropicModule from './anthropic.js';
+import * as openaiModule from './openai.js';
 
-const PROVIDERS = Object.freeze({ anthropic, openai });
+/** Plain objects (not module namespaces), so the registry also works inside n8n's Code-node sandbox. */
+const pick = (m) => Object.freeze({ name: m.name, buildRequest: m.buildRequest, parseResponse: m.parseResponse, DEFAULT_MODEL: m.DEFAULT_MODEL });
+const PROVIDERS = Object.freeze({ anthropic: pick(anthropicModule), openai: pick(openaiModule) });
 export const PROVIDER_NAMES = Object.freeze(Object.keys(PROVIDERS));
 
 /**

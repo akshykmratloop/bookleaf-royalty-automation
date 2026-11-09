@@ -42,3 +42,20 @@ export function isRealDate(s) {
   const d = parseIso(s);
   return !Number.isNaN(d.getTime()) && toIsoDate(d) === s;
 }
+
+/** Asia/Kolkata, the business time zone. */
+export const IST_OFFSET_MINUTES = 330;
+
+/**
+ * Calendar date of a Bubble value: YYYY-MM-DD stays as is; an ISO instant (Bubble stores UTC) is
+ * read in the business time zone; empty becomes null. Anything else is returned unchanged so that
+ * validation can reject it.
+ * @param {unknown} v @param {number} [offsetMinutes] @returns {string|null|unknown}
+ */
+export function calendarDate(v, offsetMinutes = IST_OFFSET_MINUTES) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v !== 'string') return v;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const t = new Date(v);
+  return Number.isNaN(t.getTime()) ? v : toIsoDate(new Date(t.getTime() + offsetMinutes * 60_000));
+}

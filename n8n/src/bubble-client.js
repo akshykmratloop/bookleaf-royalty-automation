@@ -1,9 +1,8 @@
-import { toIsoDate } from './dates.js';
+import { calendarDate, IST_OFFSET_MINUTES } from './dates.js';
 
 /** Replaced by the n8n credential; never a real token. */
 export const BUBBLE_TOKEN_PLACEHOLDER = 'Bearer __BUBBLE_API_TOKEN__';
-const DEFAULT_TZ_OFFSET_MINUTES = 330; // Asia/Kolkata
-const MINUTE_MS = 60_000;
+const DEFAULT_TZ_OFFSET_MINUTES = IST_OFFSET_MINUTES;
 const PRODUCTION_PREFIX = /^in production/i;
 const STATUSES = ['SENT', 'FAILED'];
 
@@ -49,12 +48,7 @@ function results(x) {
 }
 
 /** Bubble stores instants in UTC; the calendar date is taken in the business time zone. */
-function toDate(v, offsetMinutes) {
-  if (typeof v !== 'string' || v === '') return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
-  const t = new Date(v);
-  return Number.isNaN(t.getTime()) ? v : toIsoDate(new Date(t.getTime() + offsetMinutes * MINUTE_MS));
-}
+const toDate = (v, offsetMinutes) => (typeof v === 'string' ? calendarDate(v, offsetMinutes) : null);
 
 const num = (v) => (typeof v === 'number' ? v : 0);
 

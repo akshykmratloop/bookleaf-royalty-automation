@@ -1,12 +1,12 @@
 import { formatDate } from './dates.js';
 import { formatInr } from './money.js';
 
-const lastPayout = (b) => (b.lastPayoutDate ? formatDate(b.lastPayoutDate) : 'no payout yet');
+const lastPayout = (b) => (b.lastPayoutDate ? `last payout ${formatDate(b.lastPayoutDate)}` : 'no payout yet');
 
 /** @param {import('./facts-types.js').BookFacts} b @returns {string} */
 const bookLine = (b) =>
   `- ${b.title}: ${b.copiesSold} copies | earned ${formatInr(b.earned)} | paid ${formatInr(b.paid)} | ` +
-  `pending ${formatInr(b.pending)} | last payout ${lastPayout(b)} | ${b.badgeLabel}`;
+  `pending ${formatInr(b.pending)} | ${lastPayout(b)} | ${b.badgeLabel}`;
 
 /** @param {import('./facts-types.js').AuthorFacts} facts @returns {string} plain-text figures block */
 export function figuresText(facts) {

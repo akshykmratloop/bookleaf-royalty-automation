@@ -35,10 +35,14 @@ describe('anthropic provider', () => {
     expect(r.headers['anthropic-version']).toBe('2023-06-01');
     expect(r.headers['x-api-key']).toBe(anthropic.CREDENTIAL_PLACEHOLDER);
     expect(r.body).toMatchObject({
-      model: 'claude-sonnet-5-5', max_tokens: 2000, system: 'SYS',
+      model: 'claude-sonnet-5-5', max_tokens: 2000,
+      system: [{ type: 'text', text: 'SYS', cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: 'USR' }],
     });
     expect(r.body.output_config.format).toEqual({ type: 'json_schema', schema: sectionsSchema });
+    expect(r.body.output_config.effort).toBe('medium');
+    expect(r.body.fallbacks).toBe('default');
+    expect(r.headers['anthropic-beta']).toBe(anthropic.FALLBACK_BETA);
     expect(r.body).not.toHaveProperty('temperature');
     expect(r.body).not.toHaveProperty('thinking');
     expect(JSON.stringify(r)).not.toMatch(/sk-ant/);
@@ -51,7 +55,7 @@ describe('anthropic provider', () => {
     content: [{ type: 'text', text }], usage: { input_tokens: 900, output_tokens: 300 }, ...extra });
   it('parses structured output and usage', () => {
     const r = anthropic.parseResponse(ok(JSON.stringify(sections)));
-    expect(r).toEqual({ ok: true, sections, usage: { inputTokens: 900, outputTokens: 300 }, model: 'claude-sonnet-5-5' });
+    expect(r).toEqual({ ok: true, sections, usage: { inputTokens: 900, outputTokens: 300, cacheWriteTokens: 0, cacheReadTokens: 0 }, model: 'claude-sonnet-5-5' });
   });
   it('skips thinking blocks', () => {
     const j = ok(JSON.stringify(sections)); j.content.unshift({ type: 'thinking', thinking: '' });
@@ -90,7 +94,7 @@ describe('openai provider', () => {
   it('parses output and drops null optional sections', () => {
     const body = { ...sections, productionParagraph: null, allPaidParagraph: null };
     const r = openai.parseResponse(ok(JSON.stringify(body)));
-    expect(r).toEqual({ ok: true, sections, usage: { inputTokens: 800, outputTokens: 250 }, model: 'gpt-4.1-mini-2025' });
+    expect(r).toEqual({ ok: true, sections, usage: { inputTokens: 800, outputTokens: 250, cacheWriteTokens: 0, cacheReadTokens: 0 }, model: 'gpt-4.1-mini-2025' });
   });
   it.each([
     ['API error', { error: { code: 'rate_limit', message: 'slow down' } }, 'API_ERROR'],
@@ -115,7 +119,7 @@ describe('registry', () => {
 
 describe('costUsd', () => {
   it('prices Sonnet 5.5 at $2 / $10 per million', () => {
-    expect(PRICES['claude-sonnet-5-5']).toEqual({ inputPerMTok: 2, outputPerMTok: 10 });
+    expect(PRICES['claude-sonnet-5-5']).toMatchObject({ inputPerMTok: 2, outputPerMTok: 10, cacheReadMultiplier: 0.1 });
     expect(costUsd({ inputTokens: 1_000_000, outputTokens: 1_000_000 }, 'claude-sonnet-5-5')).toBe(12);
     expect(costUsd({ inputTokens: 900, outputTokens: 300 }, 'claude-sonnet-5-5')).toBeCloseTo(0.0048, 6);
   });
@@ -124,5 +128,35 @@ describe('costUsd', () => {
   });
   it('returns null for an unknown model rather than guessing', () => {
     expect(costUsd({ inputTokens: 10, outputTokens: 10 }, 'mystery')).toBeNull();
+  });
+});
+
+describe('regeneration conversations', () => {
+  const messages = [{ role: 'user', content: 'USR' }, { role: 'assistant', content: '{"x":1}' }, { role: 'user', content: 'FIX' }];
+  it('anthropic sends the conversation and ends on a user turn (no prefill)', () => {
+    const r = anthropic.buildRequest({ ...input, messages });
+    expect(r.body.messages).toEqual(messages);
+    expect(r.body.messages.at(-1).role).toBe('user');
+  });
+  it('anthropic can drop the server-side fallback', () => {
+    const r = anthropic.buildRequest({ ...input, serverFallback: false });
+    expect(r.body).not.toHaveProperty('fallbacks');
+    expect(r.headers).not.toHaveProperty('anthropic-beta');
+  });
+  it('openai sends the conversation as input items', () => {
+    expect(openai.buildRequest({ ...input, messages }).body.input).toEqual(messages);
+  });
+});
+
+describe('cache-aware usage and cost', () => {
+  it('anthropic reports cache writes and reads separately and prices them', () => {
+    const u = anthropic.usageOf({ usage: { input_tokens: 1000, output_tokens: 500, cache_creation_input_tokens: 2000, cache_read_input_tokens: 0 } });
+    expect(u).toEqual({ inputTokens: 1000, outputTokens: 500, cacheWriteTokens: 2000, cacheReadTokens: 0 });
+    expect(costUsd(u, 'claude-sonnet-5-5')).toBe((1000 * 2 + 2000 * 2 * 1.25 + 500 * 10) / 1e6);
+    expect(costUsd({ ...u, cacheWriteTokens: 0, cacheReadTokens: 2000 }, 'claude-sonnet-5-5')).toBe((1000 * 2 + 2000 * 0.2 + 500 * 10) / 1e6);
+  });
+  it('openai cached tokens are carved out of input_tokens', () => {
+    const u = openai.usageOf({ usage: { input_tokens: 3000, output_tokens: 100, input_tokens_details: { cached_tokens: 1024 } } });
+    expect(u).toEqual({ inputTokens: 1976, outputTokens: 100, cacheWriteTokens: 0, cacheReadTokens: 1024 });
   });
 });
