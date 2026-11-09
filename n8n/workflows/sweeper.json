@@ -1,0 +1,66 @@
+{
+  "name": "BookLeaf - Stuck Job Sweeper",
+  "nodes": [
+    {
+      "id": "55a7a795-a607-4bdd-a537-7e9f00f56030",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "6e468925-4d77-46a0-a677-77b24d82b9dc",
+      "name": "Sweep Stuck Jobs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE royalty_jobs\nSET status = 'FAILED', error_code = 'TIMEOUT',\n    error = 'The job did not finish within 10 minutes, so it was stopped. Send it again if needed.',\n    completed_at = now(), updated_at = now()\nWHERE status IN ('QUEUED', 'PROCESSING') AND created_at < now() - interval '10 minutes'\nRETURNING job_id::text AS job_id, log_id, author_id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "__CREDENTIAL_postgres__",
+          "name": "BookLeaf Postgres (bookleaf db)"
+        }
+      },
+      "position": [
+        260,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Sweep Stuck Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

@@ -6,11 +6,12 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --exclude \"tests/contract/**\"",
     "build:workflows": "node n8n/build.mjs",
-    "test:contract": "vitest run --config tests/contract/vitest.config.js"
+    "test:contract": "node tests/contract/run.mjs"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "vitest": "^3.2.7"
   }
 }

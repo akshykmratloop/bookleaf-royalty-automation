@@ -1,0 +1,23 @@
+/**
+ * Credentials the workflows use, by logical key. Workflow sources reference them by key; the built
+ * JSON carries a placeholder id that deploy.mjs swaps for the real credential id on the instance.
+ */
+export const CREDENTIALS = Object.freeze({
+  webhook: { type: 'httpHeaderAuth', name: 'BookLeaf Webhook Key (X-BookLeaf-Key)' },
+  postgres: { type: 'postgres', name: 'BookLeaf Postgres (bookleaf db)' },
+  anthropic: { type: 'httpHeaderAuth', name: 'BookLeaf Anthropic API (x-api-key)' },
+  openai: { type: 'httpBearerAuth', name: 'BookLeaf OpenAI API (bearer)' },
+  smtp: { type: 'smtp', name: 'BookLeaf SMTP' },
+  smtpDrill: { type: 'smtp', name: 'BookLeaf SMTP (drill: unreachable server)' },
+  bubble: { type: 'httpBearerAuth', name: 'BookLeaf Bubble API (bearer)' },
+  n8nApi: { type: 'httpHeaderAuth', name: 'BookLeaf n8n API (X-N8N-API-KEY)' },
+});
+
+export const placeholderId = (key) => `__CREDENTIAL_${key}__`;
+
+/** @param {keyof typeof CREDENTIALS} key @returns {Record<string, {id:string, name:string}>} node `credentials` value */
+export function credentialRef(key) {
+  const c = CREDENTIALS[key];
+  if (!c) throw new Error(`Unknown credential ${key}`);
+  return { [c.type]: { id: placeholderId(key), name: c.name } };
+}
