@@ -13,7 +13,7 @@ Bubble (author + admin portals, privacy rules, NotificationLog)
   │     n8n: auth → validate → idempotency (Postgres unique key) → job QUEUED → 202 {job_id}
   │       → fetch author data (Bubble Data API) → integrity check → facts
   │       → AI email (JSON) → fact-check → one retry → provider failover
-  │       → HTML render → SMTP (AWS SES) → job SENT / FAILED + reason
+  │       → HTML render → email (SMTP or Resend) → job SENT / FAILED + reason
   │       → push callback: Bubble Workflow API `notification_result`
   └─ pull mode (free plan): Bubble sends the full payload and polls GET /jobs
 n8n error workflow + sweeper: no job is left "processing".
@@ -28,3 +28,6 @@ n8n error workflow + sweeper: no job is left "processing".
 | 2026-11-08 | Status reference date defaults to 2025-12-31, switchable to today | The dataset's as-of date (same as Assignment 1); from today every pending book would be red |
 | 2026-11-08 | n8n on its own t4g.small (ap-south-1) | The Assignment 1 server is full; keeps the two apart |
 | 2026-11-08 | Figures in emails come only from data; AI prose is fact-checked | A wrong ₹ figure must never reach an author |
+| 2026-11-10 | Email sender `EMAIL_PROVIDER = smtp \| resend` (no AWS SES) | SES account review can take weeks; SMTP (n8n Send Email node, nodemailer) can reach any inbox; Resend is the alternative |
+| 2026-11-10 | Bubble app `bookleaf-royalties-81850`, created on the free plan; trial within 10 days of creation | Bubble allows starting the trial up to 10 days after an app is created; trials are per app |
+| 2026-11-10 | Bubble's built-in Agent scaffolds from exact specs; every result is checked against `bubble-app/schema.mjs` by `scripts/editor/verify-schema.mjs` | Faster than clicking, and nothing is trusted without a check |

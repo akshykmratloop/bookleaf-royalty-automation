@@ -4,3 +4,4 @@ BookLeaf_Technical_Assignment_*.pdf
 .env.*
 node_modules/
 .DS_Store
+graphify-out/

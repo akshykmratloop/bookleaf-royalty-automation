@@ -3,18 +3,19 @@
 Legend: ⬜ TODO · 🔄 In progress · ✅ Done (commit SHA) · ⛔ Blocked
 
 ## Step 0 — Set-up and spike
-- 🔄 Repo scaffold, coordination files, private GitHub repo
-- ⬜ Bubble account + app created (free plan), editor automation spike
-- ⬜ SES sender verification + production-access request
+- ✅ Repo scaffold, coordination files, private GitHub repo (416360c)
+- ✅ Bubble account + app `bookleaf-royalties-81850` (free plan); editor automation spike passed
+- ⬜ Email sender credentials (SMTP or Resend) in `bubble/.env` — from the user
 
 ## Step 1 — n8n
-- ⬜ `n8n/src` modules with unit tests (validate, integrity, facts, checker, prompt, render-email, bubble-client)
+- ✅ `n8n/src` logic modules, 175 unit tests (d190336) — prompt text still to write
 - ⬜ Workflow build (`n8n/build.mjs`) + deploy script
 - ⬜ Terraform + Compose n8n host, deployed
 - ⬜ Contract tests (pull mode) green
 
 ## Step 2 — Bubble data (free plan)
-- ⬜ Option sets, data types, privacy rules
+- ✅ Option sets + data types, verified against `bubble-app/schema.mjs`
+- ⬜ Privacy rules
 - ⬜ Seed CSVs + upload; 10 author logins + 1 admin
 
 ## Step 3 — Author portal (free plan)
