@@ -78,7 +78,7 @@ export async function buildWorkflow(srcName) {
     const parameters = entry ? { ...rest.parameters, jsCode: await jsCodeFor(n) } : rest.parameters;
     nodes.push({ id: nodeId(srcName, n.name), ...rest, parameters });
   }
-  const settings = src.errorWorkflow ? { ...SETTINGS, errorWorkflow: `__WORKFLOW_${src.errorWorkflow}__` } : { ...SETTINGS };
+  const settings = { ...SETTINGS, ...src.settings, ...(src.errorWorkflow ? { errorWorkflow: `__WORKFLOW_${src.errorWorkflow}__` } : {}) };
   return { name: src.name, nodes, connections: connectionsFrom(src.edges), settings };
 }
 

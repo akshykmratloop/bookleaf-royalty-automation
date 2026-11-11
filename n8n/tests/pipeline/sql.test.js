@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CLAIM_DRAFT, DISCARD_DRAFT, SELECT_DRAFT } from '../../src/pipeline/sql-approve.js';
-import { INSERT_JOB, MARK_PROCESSING, SELECT_JOBS, SET_STAGE, SWEEP_STUCK, UPDATE_JOB } from '../../src/pipeline/sql.js';
+import { INSERT_JOB, LOAD_SETTINGS, MARK_PROCESSING, SELECT_JOBS, SET_STAGE, SWEEP_STUCK, UPDATE_JOB } from '../../src/pipeline/sql.js';
 import { shapeJobs } from '../../src/pipeline/status.js';
 
 /** The SQL is exercised live by the contract suite; these pin the guards that keep it safe. */
@@ -9,6 +9,15 @@ describe('job ledger SQL guards', () => {
     expect(SWEEP_STUCK).toMatch(/WHERE status IN \('QUEUED', 'PROCESSING'\)/);
     expect(SWEEP_STUCK).not.toMatch(/DRAFTED|DISCARDED/);
     expect(SWEEP_STUCK).toMatch(/stage = 'failed'/);
+  });
+  it('the sweeper waits stuck_job_minutes and says so in the error', () => {
+    expect(SWEEP_STUCK).toContain("bookleaf_setting('stuck_job_minutes')::int");
+    expect(SWEEP_STUCK).toContain('< now() - make_interval(mins => s.minutes)');
+    expect(SWEEP_STUCK).toContain("format('The job did not finish within %s minutes");
+    expect(SWEEP_STUCK).not.toMatch(/interval '\d+ minutes'/);
+  });
+  it('Load Settings reads every setting as one JSON object', () => {
+    expect(LOAD_SETTINGS).toBe('SELECT jsonb_object_agg(key, value) AS settings FROM bookleaf_settings');
   });
   it('UPDATE_JOB still only touches unfinished jobs and records the stage', () => {
     expect(UPDATE_JOB).toMatch(/WHERE j\.job_id = p\.job_id AND j\.status IN \('QUEUED', 'PROCESSING'\)/);
@@ -24,9 +33,12 @@ describe('job ledger SQL guards', () => {
     expect(INSERT_JOB).not.toContain("v->>'callback_status'");
     expect(UPDATE_JOB).not.toContain('callback_status');
   });
-  it('a draft is claimed atomically: only DRAFTED, only within 24 hours', () => {
+  it('a draft is claimed atomically: only DRAFTED, only within draft_ttl_hours', () => {
+    const fresh = "drafted_at > now() - make_interval(hours => bookleaf_setting('draft_ttl_hours')::int)";
     expect(CLAIM_DRAFT).toMatch(/SET status = 'PROCESSING', stage = 'sending'/);
-    expect(CLAIM_DRAFT).toMatch(/AND status = 'DRAFTED' AND drafted_at > now\(\) - interval '24 hours'/);
+    expect(CLAIM_DRAFT).toContain(`AND status = 'DRAFTED' AND ${fresh}`);
+    expect(SELECT_DRAFT).toContain(`(${fresh}) AS fresh`);
+    expect(`${CLAIM_DRAFT}${SELECT_DRAFT}`).not.toMatch(/interval '\d+ hours'/);
     expect(DISCARD_DRAFT).toMatch(/SET status = 'DISCARDED', stage = 'discarded'/);
     expect(DISCARD_DRAFT).toMatch(/AND status = 'DRAFTED'/);
     expect(SELECT_DRAFT).toMatch(/AS fresh/);

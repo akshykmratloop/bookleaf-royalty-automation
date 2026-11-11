@@ -6,12 +6,12 @@ export const INSERT_ROUTES = Object.freeze({ QUEUED: 0, DUPLICATE: 1, RATE_LIMIT
 /**
  * Turns the insert row into the webhook answer.
  * @param {{job_id:string|null, status:string|null, error_code:string|null, inserted:boolean, recent_sends:number}} row
- * @param {{maxSendsPerHour:number}} config
+ * @param {{max_sends_per_hour:number}} settings
  * @returns {{route:number, outcome:string, http_status:number, response:Object, job_id:string|null}}
  */
-export function classifyInsert(row, config) {
+export function classifyInsert(row, settings) {
   if (!row || !row.job_id) {
-    const f = failure('RATE_LIMITED', `The limit is ${config.maxSendsPerHour} per hour; try again later.`);
+    const f = failure('RATE_LIMITED', `The limit is ${settings.max_sends_per_hour} per hour; try again later.`);
     return { route: INSERT_ROUTES.RATE_LIMITED, outcome: 'RATE_LIMITED', http_status: f.http_status, response: errorBody(f), job_id: null };
   }
   if (row.inserted) {

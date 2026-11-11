@@ -5,11 +5,11 @@ import { checkEdited, EDIT_MARKER, formatIssues, parseEditText, renderEdited, to
 import { prepareJob } from '../../src/pipeline/prepare.js';
 import { renderEmail } from '../../src/render-email.js';
 import { signatureFor } from '../../src/signature.js';
-import { ENV, fixedRandom, NOW } from './env.js';
+import { fixedRandom, NOW, SETTINGS } from './settings-fixture.js';
 import { payloadFor } from './fixtures.js';
 import { anthropicOk, goodSections } from './ai-fixtures.js';
 
-const job = prepareJob(payloadFor('AUTH002'), ENV, NOW, fixedRandom).job;
+const job = prepareJob(payloadFor('AUTH002'), SETTINGS, NOW, fixedRandom).job;
 const ctx = buildContext(job).ctx;
 const ai = afterAi({ response: anthropicOk(), ctx, job, attempt: 1 }).ai;
 const { facts, titles } = ctx;

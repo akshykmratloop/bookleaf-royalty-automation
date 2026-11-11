@@ -1,10 +1,11 @@
+import { resolveReferenceDate } from '../dates.js';
 import { canonicalJson } from './canonical.js';
-import { readConfig, resolveReferenceDate } from './config.js';
 import { effectiveDrills } from './drills.js';
 import { failure } from './errors.js';
 import { idempotencyKey, uuidV4 } from './ids.js';
 import { recipientFor } from './recipient.js';
 import { validateRequest } from './request.js';
+import { readSettings } from './settings.js';
 
 /**
  * @typedef {Object} Job
@@ -16,7 +17,7 @@ import { validateRequest } from './request.js';
  * @property {'send'|'draft'} delivery @property {'warm'|'formal'|'concise'} tone
  * @property {'short'|'standard'|'detailed'} length @property {string} note @property {string} sign_off
  * @property {import('../types.js').AuthorBundle} bundle
- * @property {import('./config.js').Config} config
+ * @property {import('./settings.js').Settings} settings the validated server settings this job runs with
  */
 
 /** Fields that decide what the email says and where it goes. */
@@ -30,28 +31,29 @@ const styleOf = (r) => ({ delivery: r.delivery, tone: r.tone, length: r.length, 
 
 /**
  * First step of the royalty-summary webhook: settings, validation, drills, recipient, ids.
- * @param {unknown} body webhook body @param {Record<string,string|undefined>} env @param {number} nowMs
+ * @param {unknown} body webhook body @param {unknown} stored the Load Settings row's `settings` @param {number} nowMs
  * @param {() => number[]} [random] for tests
  * @returns {{ok:true, job:Job}|import('./errors.js').Failure}
  */
-export function prepareJob(body, env, nowMs, random) {
-  const cfg = readConfig(env);
-  if (!cfg.ok) return cfg;
-  const { config } = cfg;
+export function prepareJob(body, stored, nowMs, random) {
+  const read = readSettings(stored);
+  if (!read.ok) return read;
+  const { settings } = read;
   const req = validateRequest(body);
   if (!req.ok) return failure('VALIDATION', `${req.errors.length} field(s) need attention.`, req.errors);
   const r = req.value;
-  const drills = effectiveDrills(r.drills, config);
+  const drills = effectiveDrills(r.drills, settings);
   if (!drills.ok) return drills;
-  const to = recipientFor(r, config, r.bundle.author.email);
+  const to = recipientFor(r, settings, r.bundle.author.email);
   if (!to.ok) return to;
-  const referenceDate = r.reference_date ?? resolveReferenceDate(config.referenceDateDefault, nowMs);
+  const referenceDate = r.reference_date ?? resolveReferenceDate(settings.reference_date_default, nowMs);
+  const fingerprint = fingerprintOf(r, referenceDate, to.recipient);
   const job = {
     job_id: uuidV4(random),
-    idem_key: idempotencyKey(r.author_id, fingerprintOf(r, referenceDate, to.recipient), nowMs),
+    idem_key: idempotencyKey(r.author_id, fingerprint, nowMs, settings.duplicate_window_minutes),
     author_id: r.author_id, author_code: r.bundle.author.code, log_id: r.log_id, batch_id: r.batch_id,
     mode: r.mode, requested_by: r.requested_by, reference_date: referenceDate, recipient: to.recipient,
-    attempt: r.attempt, drills: drills.drills, ...styleOf(r), bundle: r.bundle, config,
+    attempt: r.attempt, drills: drills.drills, ...styleOf(r), bundle: r.bundle, settings,
   };
   return { ok: true, job };
 }
@@ -61,6 +63,6 @@ export function insertParams(job) {
   return JSON.stringify({
     job_id: job.job_id, idem_key: job.idem_key, log_id: job.log_id, batch_id: job.batch_id, author_id: job.author_id,
     author_code: job.author_code, mode: job.mode, requested_by: job.requested_by,
-    max_sends: job.config.maxSendsPerHour, recipient: job.recipient, drills: job.drills, ...styleOf(job),
+    max_sends: job.settings.max_sends_per_hour, recipient: job.recipient, drills: job.drills, ...styleOf(job),
   });
 }

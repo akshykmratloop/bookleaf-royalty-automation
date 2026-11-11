@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, daysBetween, formatDate, payoutDeadlineFor, quarterEnd, toIsoDate } from '../src/dates.js';
+import { addDays, daysBetween, formatDate, payoutDeadlineFor, quarterEnd, resolveReferenceDate, toIsoDate } from '../src/dates.js';
 
 const d = (s) => new Date(`${s}T00:00:00Z`);
 
@@ -20,5 +20,12 @@ describe('dates', () => {
   it('formats dates', () => {
     expect(formatDate('2026-02-14')).toBe('14 Feb 2026');
     expect(formatDate('2025-12-01')).toBe('1 Dec 2025');
+  });
+});
+
+describe('resolveReferenceDate', () => {
+  it('turns "today" into the date in India and passes a fixed date through', () => {
+    expect(resolveReferenceDate('today', Date.UTC(2026, 0, 31, 20, 0))).toBe('2026-02-01');
+    expect(resolveReferenceDate('2025-12-31', Date.UTC(2026, 0, 31))).toBe('2025-12-31');
   });
 });

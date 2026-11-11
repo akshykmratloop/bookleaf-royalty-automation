@@ -3,8 +3,6 @@ import { signatureFor } from '../signature.js';
 import { formatIssues, toEditText } from './edit.js';
 import { MAX_ERROR_LENGTH } from './errors.js';
 
-export const SENDER_NAME = 'BookLeaf Author Relations';
-
 /**
  * @typedef {Object} JobUpdate fields for sql.UPDATE_JOB (absent fields keep their value)
  * @property {string} job_id @property {'SENT'|'FAILED'} [status] @property {string} [error_code] @property {string} [error]
@@ -22,13 +20,11 @@ export function aiColumns(ai) {
 /**
  * Renders the email (prose from AI, every figure from data) and the row written once it is sent.
  * @param {{ctx:import('./context.js').Context, job:import('./prepare.js').Job, ai:Object}} input
- * `from` is null when EMAIL_FROM is unset: the Send Email node then uses the SMTP account address.
- * @returns {{email:{from:string|null, to:string, subject:string, html:string, text:string}, update:JobUpdate}}
+ * @returns {{email:{from:string, to:string, subject:string, html:string, text:string}, update:JobUpdate}}
  */
 export function renderForSend({ ctx, job, ai }) {
   const r = renderFor({ ctx, job, ai });
-  const from = senderFor(job.config);
-  const email = { from, to: job.recipient, subject: r.subject, html: r.html, text: r.text };
+  const email = { from: senderFor(job.settings), to: job.recipient, subject: r.subject, html: r.html, text: r.text };
   const update = {
     job_id: job.job_id, author_code: ctx.bundle.author.code, subject: r.subject, html: r.html, text_body: r.text,
     sent_to: job.recipient, ...aiColumns(ai),
@@ -36,13 +32,16 @@ export function renderForSend({ ctx, job, ai }) {
   return { email, update };
 }
 
-/** @param {{emailFrom:string}} config @returns {string|null} null = the SMTP account address */
-export const senderFor = (config) => (config.emailFrom ? `${SENDER_NAME} <${config.emailFrom}>` : null);
+/** @param {import('./settings.js').Settings} settings @returns {string} the From line: sender_name <email_from> */
+export const senderFor = (settings) => `${settings.sender_name} <${settings.email_from}>`;
+
+/** @param {import('./settings.js').Settings} settings @returns {{name:string, supportEmail:string}} header and footer */
+export const brandOf = (settings) => ({ name: settings.brand_name, supportEmail: settings.support_email });
 
 /** The email as the author would get it: AI prose, figures from facts, signature from the job's tone and sign-off. */
 function renderFor({ ctx, job, ai }) {
-  const signature = signatureFor(job.tone, job.sign_off);
-  return renderEmail({ sections: ai.sections, facts: ctx.facts, bundle: ctx.bundle, brand: job.config.brand, signature });
+  const signature = signatureFor(job.tone, job.sign_off, job.settings.sender_name);
+  return renderEmail({ sections: ai.sections, facts: ctx.facts, bundle: ctx.bundle, brand: brandOf(job.settings), signature });
 }
 
 /**

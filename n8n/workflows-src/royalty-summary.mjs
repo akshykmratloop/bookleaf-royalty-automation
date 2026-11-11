@@ -1,15 +1,18 @@
 import { ANTHROPIC_VERSION, FALLBACK_BETA, URL as ANTHROPIC_URL } from '../src/providers/anthropic.js';
 import { URL as OPENAI_URL } from '../src/providers/openai.js';
-import { INSERT_JOB, MARK_PROCESSING, SET_STAGE, UPDATE_JOB } from '../src/pipeline/sql.js';
+import { INSERT_JOB, LOAD_SETTINGS, MARK_PROCESSING, SET_STAGE, UPDATE_JOB } from '../src/pipeline/sql.js';
 import { code, http, KEY_HASHES_PLACEHOLDER, note, pg, respond, route, sendEmail, webhook } from './lib/nodes.mjs';
+import { TUNING } from './lib/tuning.mjs';
 
 /**
  * Bubble posts the author and books with the request, gets 202 + job id at once, then polls job-status
  * (n8n never calls Bubble: no Data API reads, no push callback).
  */
+const WEBHOOK = "$('Royalty Summary Webhook').first().json";
 const JOB = "$('Prepare Job').first().json.job";
 const CTX = "$('Build Context').first().json.ctx";
-const AI = { timeoutMs: 45_000, retry: 2, waitMs: 2000, errorOutput: true };
+/** Timeout from the ai_timeout_ms setting (carried on the job); retries are build-time node settings. */
+const AI = { timeout: `={{ ${JOB}.settings.ai_timeout_ms }}`, retry: TUNING.aiRetries, waitMs: TUNING.aiRetryWaitMs, errorOutput: true };
 const anthropicCall = (name, body) => http(name, {
   method: 'POST', url: ANTHROPIC_URL, credential: 'anthropic', authType: 'httpHeaderAuth', body, ...AI,
   headers: { 'anthropic-version': ANTHROPIC_VERSION, 'anthropic-beta': FALLBACK_BETA },
@@ -23,9 +26,10 @@ const RENDERED = "$('Render Email').first().json";
 const FIRST_ANSWER = "$('Call OpenAI (fallback)').isExecuted ? $('Call OpenAI (fallback)').first().json : $('Call Anthropic').first().json";
 
 const nodes = [
-  note('About', '## BookLeaf royalty summary\nPOST /webhook/royalty-summary with header X-BookLeaf-Key (checked in Prepare Job; current and next key accepted).\nAnswers 202 {job_id} at once, then writes, fact-checks and sends the email (or saves a DRAFTED job for approval when delivery=draft) and records the result in royalty_jobs, with a live `stage`. Every failure branch ends in **Update Job**. Code nodes are generated from n8n/src by n8n/build.mjs.', 260),
+  note('About', '## BookLeaf royalty summary\nPOST /webhook/royalty-summary with header X-BookLeaf-Key (checked in Prepare Job; current and next key accepted).\nServer settings come from the bookleaf_settings table (Load Settings). Answers 202 {job_id} at once, then writes, fact-checks and sends the email (or saves a DRAFTED job for approval when delivery=draft) and records the result in royalty_jobs, with a live `stage`. Every failure branch ends in **Update Job**. Code nodes are generated from n8n/src by n8n/build.mjs.', 260),
   webhook('Royalty Summary Webhook', 'POST', 'royalty-summary'),
-  code('Prepare Job', 'prepare', `return main({ body: $json.body, headers: $json.headers, keyHashes: '${KEY_HASHES_PLACEHOLDER}', env: $env, now: Date.now() });`),
+  pg('Load Settings', LOAD_SETTINGS, null),
+  code('Prepare Job', 'prepare', `return main({ body: ${WEBHOOK}.body, headers: ${WEBHOOK}.headers, keyHashes: '${KEY_HASHES_PLACEHOLDER}', settings: $json.settings, now: Date.now() });`),
   route('Valid?', 2, '$json.route'),
   respond('Respond Rejected'),
   pg('Insert Job', INSERT_JOB, '$json.insert_params'),
@@ -61,7 +65,7 @@ const nodes = [
 ];
 
 const edges = [
-  ['Royalty Summary Webhook', 'Prepare Job'], ['Prepare Job', 'Valid?'],
+  ['Royalty Summary Webhook', 'Load Settings'], ['Load Settings', 'Prepare Job'], ['Prepare Job', 'Valid?'],
   ['Valid?', 'Respond Rejected', 0], ['Valid?', 'Insert Job', 1],
   ['Insert Job', 'Classify'], ['Classify', 'Respond Accepted'], ['Respond Accepted', 'Queued?'],
   ['Queued?', 'Mark Processing', 0], ['Mark Processing', 'Build Context'],

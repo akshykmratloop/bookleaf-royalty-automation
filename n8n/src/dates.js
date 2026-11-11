@@ -15,6 +15,14 @@ export function payoutDeadlineFor(date) {
   return addDays(quarterEnd(date), PAYOUT_WINDOW_DAYS);
 }
 
+/**
+ * @param {string} setting the reference_date_default setting: YYYY-MM-DD or "today"
+ * @param {number} nowMs @returns {string} YYYY-MM-DD; "today" is the date in India
+ */
+export function resolveReferenceDate(setting, nowMs) {
+  return setting === 'today' ? toIsoDate(new Date(nowMs + IST_OFFSET_MINUTES * 60_000)) : setting;
+}
+
 /** @param {Date} date @param {number} days @returns {Date} */
 export function addDays(date, days) {
   return new Date(date.getTime() + days * DAY_MS);

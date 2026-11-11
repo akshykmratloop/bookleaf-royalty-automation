@@ -11,7 +11,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildWorkflow, WORKFLOW_SOURCES } from './build.mjs';
 import { CREDENTIALS, placeholderId } from './workflows-src/lib/credentials.mjs';
-import { KEY_HASHES_PLACEHOLDER, SMTP_FROM_PLACEHOLDER } from './workflows-src/lib/nodes.mjs';
+import { KEY_HASHES_PLACEHOLDER } from './workflows-src/lib/nodes.mjs';
 import { keyHashesFor } from './src/pipeline/auth.js';
 import { readEnvFile, requireKeys } from './tools/env-file.mjs';
 import { n8nApi } from './tools/n8n-api.mjs';
@@ -41,12 +41,12 @@ async function upsertCredentials(api, data) {
   return ids;
 }
 
-/** Swaps build placeholders (credential ids, error workflow id, sender address, key hashes) for real values. */
-function resolvePlaceholders(wf, credIds, workflowIds, { smtpFrom, keyHashes }) {
+/** Swaps build placeholders (credential ids, error workflow id, key hashes) for real values. */
+function resolvePlaceholders(wf, credIds, workflowIds, { keyHashes }) {
   let text = JSON.stringify(wf);
   for (const [key, id] of Object.entries(credIds)) text = text.split(placeholderId(key)).join(id);
   for (const [name, id] of Object.entries(workflowIds)) text = text.split(`__WORKFLOW_${name}__`).join(id);
-  text = text.split(SMTP_FROM_PLACEHOLDER).join(smtpFrom).split(KEY_HASHES_PLACEHOLDER).join(keyHashes);
+  text = text.split(KEY_HASHES_PLACEHOLDER).join(keyHashes);
   const left = text.match(/__(CREDENTIAL|WORKFLOW)_[^"]*__|__WEBHOOK_KEY_HASHES__/);
   if (left) throw new Error(`Unresolved placeholder ${left[0]} in ${wf.name}`);
   return JSON.parse(text);
@@ -90,7 +90,7 @@ async function main() {
   const existing = await api.listAll('/workflows');
   const workflowIds = {};
   for (const name of WORKFLOW_SOURCES) {
-    const wf = resolvePlaceholders(await buildWorkflow(name), credIds, workflowIds, { smtpFrom: smtp.user, keyHashes });
+    const wf = resolvePlaceholders(await buildWorkflow(name), credIds, workflowIds, { keyHashes });
     workflowIds[wf.name] = await upsertWorkflow(api, wf, existing);
   }
   await waitForWebhooks(baseUrl);

@@ -8,28 +8,29 @@ import { failedUpdate, renderForSend, sentUpdate } from '../../src/pipeline/fina
 import { nodeErrorSummary } from '../../src/pipeline/node-errors.js';
 import { prepareJob } from '../../src/pipeline/prepare.js';
 import { parseStatusQuery, shapeJobs } from '../../src/pipeline/status.js';
-import { ENV, fixedRandom, NOW } from './env.js';
+import { fixedRandom, NOW, SETTINGS } from './settings-fixture.js';
 import { payloadFor } from './fixtures.js';
 import { anthropicOk } from './ai-fixtures.js';
 
-const job = prepareJob(payloadFor('AUTH002'), ENV, NOW, fixedRandom).job;
+const job = prepareJob(payloadFor('AUTH002'), SETTINGS, NOW, fixedRandom).job;
 const ctx = buildContext(job).ctx;
 const ai = afterAi({ response: anthropicOk(), ctx, job, attempt: 1 }).ai;
 const ID = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
 
 describe('classifyInsert', () => {
-  const config = { maxSendsPerHour: 60 };
+  const settings = { max_sends_per_hour: 60 };
   it('new row → 202 QUEUED', () => {
-    expect(classifyInsert({ job_id: ID, status: 'QUEUED', inserted: true }, config))
+    expect(classifyInsert({ job_id: ID, status: 'QUEUED', inserted: true }, settings))
       .toMatchObject({ route: INSERT_ROUTES.QUEUED, http_status: 202, response: { job_id: ID, status: 'QUEUED', duplicate: false } });
   });
   it('existing row → 200 duplicate with its current status', () => {
-    expect(classifyInsert({ job_id: ID, status: 'SENT', inserted: false }, config))
+    expect(classifyInsert({ job_id: ID, status: 'SENT', inserted: false }, settings))
       .toMatchObject({ route: INSERT_ROUTES.DUPLICATE, http_status: 200, response: { job_id: ID, status: 'SENT', duplicate: true } });
   });
   it('no row → 429 RATE_LIMITED', () => {
-    const r = classifyInsert({ job_id: null, inserted: false, recent_sends: 60 }, config);
+    const r = classifyInsert({ job_id: null, inserted: false, recent_sends: 60 }, settings);
     expect(r).toMatchObject({ route: INSERT_ROUTES.RATE_LIMITED, http_status: 429, response: { error: { code: 'RATE_LIMITED' } } });
+    expect(classifyInsert({ job_id: null }, { max_sends_per_hour: 7 }).response.error.message).toContain('The limit is 7 per hour');
   });
 });
 
@@ -104,13 +105,16 @@ describe('nodeErrorSummary for HTTP errors', () => {
   });
 });
 
-describe('sender and plain-text table details', () => {
-  it('from is null without EMAIL_FROM (the Send Email node then uses the SMTP account)', () => {
-    const noFrom = { ...job, config: { ...job.config, emailFrom: '' } };
-    expect(renderForSend({ ctx, job: noFrom, ai }).email.from).toBeNull();
+describe('sender, brand and plain-text table details', () => {
+  it('the From line and default signature use sender_name; header and footer use brand_name and support_email', () => {
+    const settings = { ...SETTINGS, sender_name: 'Royalty Desk', brand_name: 'Leaf & Co', support_email: 'help@bookleaf.test' };
+    const { email } = renderForSend({ ctx, job: { ...job, settings }, ai });
+    expect(email.from).toBe('Royalty Desk <sender@bookleaf.test>');
+    expect(email.text).toMatch(/Warm regards,\nRoyalty Desk$/);
+    expect(email.html).toContain('Leaf &amp; Co &middot; help@bookleaf.test');
   });
   it('a book never paid reads "no payout yet" in the text table', async () => {
-    const kavita = prepareJob(payloadFor('AUTH009'), ENV, NOW, fixedRandom).job;
+    const kavita = prepareJob(payloadFor('AUTH009'), SETTINGS, NOW, fixedRandom).job;
     const kctx = buildContext(kavita).ctx;
     const { email } = renderForSend({ ctx: kctx, job: kavita, ai: { ...ai, sections: { ...ai.sections, bookParagraphs: [] } } });
     expect(email.text).toContain('pending ₹850 | no payout yet | Overdue');

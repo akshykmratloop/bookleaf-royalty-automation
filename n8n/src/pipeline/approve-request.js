@@ -14,7 +14,7 @@ export const BODY_MAX = 8000;
 export const APPROVE_ERRORS = Object.freeze({
   NOT_FOUND: 'No job has this id.',
   NOT_A_DRAFT: 'This job is not a draft waiting for approval.',
-  DRAFT_EXPIRED: 'This draft is more than 24 hours old. Create a new draft.',
+  DRAFT_EXPIRED: 'This draft is more than {hours} hours old. Create a new draft.',
   EDIT_BLOCKED: 'The edited email has problems the fact check will not let through, so it was not sent.',
   ALREADY_SENT: 'This draft has already been sent (or is being sent).',
 });
@@ -70,6 +70,11 @@ export function approveResponse(fields) {
   };
 }
 
-/** @param {keyof typeof APPROVE_ERRORS} code @param {string} jobId @param {string|null|undefined} status @param {Object} [extra] */
-export const approveError = (code, jobId, status, extra = {}) =>
-  approveResponse({ ...extra, ok: false, job_id: jobId, status: status ?? '', error_code: code, error: APPROVE_ERRORS[code] });
+/**
+ * @param {keyof typeof APPROVE_ERRORS} code @param {string} jobId @param {string|null|undefined} status @param {Object} [extra]
+ * @param {Record<string, string|number>} [vars] fills {name} slots in the message (DRAFT_EXPIRED: hours)
+ */
+export const approveError = (code, jobId, status, extra = {}, vars = {}) => approveResponse({
+  ...extra, ok: false, job_id: jobId, status: status ?? '', error_code: code,
+  error: APPROVE_ERRORS[code].replace(/\{(\w+)\}/g, (_, name) => String(vars[name])),
+});

@@ -139,3 +139,43 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   unaffected). New test: every KB display is in the system prompt and none of the five modules above
   repeats one.
 - **Sizes:** unchanged node counts (69); Code 214.0 KB (+0.8 KB: `formatInr` now comes along).
+
+## Step 3d — workflows read bookleaf_settings instead of $env
+
+- **Changed:** `readSettings()` in `settings.js` checks the "Load Settings" row (`LOAD_SETTINGS`:
+  `SELECT jsonb_object_agg(key, value) AS settings FROM bookleaf_settings`): every known key present
+  and valid, unknown keys ignored (a newer migration never breaks older workflows), problems named
+  without values → 500 `INTERNAL`. royalty-summary and approve-draft gained a **Load Settings**
+  Postgres node right after the webhook; job-status loads none. The job carries `settings` instead of
+  `config`; every reader moved: drills (`allow_drills`), recipient (`default_demo_inbox`), reference
+  date, idempotency bucket (`duplicate_window_minutes`, until step 6 replaces idem_key), insert cap and
+  429 text (`max_sends_per_hour`), AI bodies (`ai_primary`, `ai_fallback`), AI node timeouts (expression
+  on `ai_timeout_ms`), cost (`model_prices`; the `PRICES` constants are gone), From line
+  (`sender_name <email_from>`, now always set, so the deploy-time `__SMTP_FROM__` fallback is gone),
+  default signature (`sender_name`), header/footer (`brand_name`, `support_email`), `DRAFT_EXPIRED`
+  text (`draft_ttl_hours`). The SQL reads `bookleaf_setting()` itself for the draft freshness
+  (Load Draft, Claim Draft) and the sweeper threshold and message (`stuck_job_minutes`).
+  `pipeline/config.js` is deleted (`isEmail` → `validate-fields.js`, `resolveReferenceDate` →
+  `dates.js`). New `workflows-src/lib/tuning.mjs`: AI retries 2 × 2 s, Send Email 2 tries (step 5
+  makes it 1), sweeper every minute (lead's decision). The error handler's `$env.N8N_INTERNAL_URL`
+  became the constant `http://127.0.0.1:5678/api/v1` (both compose files run n8n on 5678; the node
+  goes away in step 8). Build test: no workflow contains `$env`.
+- **Tests:** the `SETTINGS` fixture (`tests/pipeline/settings-fixture.js`: seeded defaults + test
+  per-environment values) replaces the `ENV` fixture; `readSettings` and every reader above are
+  tested with non-default values; the "defaults reproduce today's constants" pins are deleted (their
+  readers moved). npm test 424.
+- **Live checks (local):** contracts 35/35; a test row stuck for 11 minutes was failed by the sweeper
+  within ~45 s with "did not finish within 10 minutes" (row deleted); `allow_drills=false` made the
+  very next drill request a 400 `DISABLED`, then it was set back to true.
+- **Sizes:** 69 → **71** working nodes (+2 Load Settings). Code 19 nodes, 214.0 → **224.8 KB**: the
+  schema's checks and descriptions are bundled into Prepare Job (30.1 KB) and Parse Request.
+- **Deviations:** the sweeper saves only failed executions (`saveDataSuccessExecution: 'none'`), since
+  at one run a minute successful sweeps would bury everything else in the executions list (build.mjs
+  now merges a workflow's own `settings`). `sender_name` must not contain `" , ; : < > @ \` or control
+  characters (it is a From display name; a comma would split the address list); check only, the seed
+  is unchanged. The provider modules keep their `DEFAULT_MODEL`/`DEFAULT_MAX_TOKENS`/`DEFAULT_EFFORT`
+  as library defaults; the workflows always pass the settings.
+- **Release engineer:** write the production per-environment settings (step 3b) **before** deploying
+  this, or every request answers 500 (`email_from must be an email address`). `alert_email` is read
+  only from step 8. The previous tag reads `$env`: keep `n8n/app_env` and the env flag until the
+  rollback window has passed.

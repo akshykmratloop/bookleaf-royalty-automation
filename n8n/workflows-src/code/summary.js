@@ -1,6 +1,6 @@
 /**
  * Entry points for the royalty-summary workflow's Code nodes. Each takes plain data (the node body
- * passes $json, $env and earlier nodes' output) and returns n8n items. All logic lives in n8n/src.
+ * passes $json and earlier nodes' output) and returns n8n items. All logic lives in n8n/src.
  */
 import { afterAi, AI_ROUTES } from '../../src/pipeline/after-ai.js';
 import { authFailure, isAuthorized } from '../../src/pipeline/auth.js';
@@ -17,18 +17,18 @@ const failItem = (job, f, extra) => item({ route: 0, update: failedUpdate(job, f
 const rejected = (f) => item({ route: 0, http_status: f.http_status, response: errorBody(f) });
 
 /**
- * Check the key, then validate the webhook body. route 0 = reject (respond 4xx), 1 = insert the job.
- * `keyHashes` is written in at deploy time (SHA-256 of the current and next webhook keys).
+ * Check the key, then the settings (Load Settings) and the webhook body. route 0 = reject (respond
+ * 4xx/500), 1 = insert the job. `keyHashes` is written in at deploy time (SHA-256 of the accepted keys).
  */
-export function prepare({ body, headers, keyHashes, env, now }) {
+export function prepare({ body, headers, keyHashes, settings, now }) {
   if (!isAuthorized(headers, keyHashes)) return rejected(authFailure());
-  const r = prepareJob(body, env, now);
+  const r = prepareJob(body, settings, now);
   if (!r.ok) return rejected(r);
   return item({ route: 1, job: r.job, insert_params: insertParams(r.job) });
 }
 
 /** Insert result → webhook answer. route 0 = queued (continue), 1 = duplicate, 2 = rate limited. */
-export const classify = ({ row, job }) => item(classifyInsert(row, job.config));
+export const classify = ({ row, job }) => item(classifyInsert(row, job.settings));
 
 /** Data + integrity + facts + prompt. route 0 = fail the job, 1 = call the AI. */
 export function context({ job }) {

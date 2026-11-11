@@ -1,15 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SETTINGS_SCHEMA, settingProblem } from '../../src/pipeline/settings.js';
-import { DEFAULT_BRAND } from '../../src/brand.js';
-import { DEFAULT_SIGN_OFF } from '../../src/signature.js';
-import { readConfig } from '../../src/pipeline/config.js';
-import { IDEMPOTENCY_WINDOW_MS } from '../../src/pipeline/ids.js';
-import { SWEEP_STUCK } from '../../src/pipeline/sql.js';
-import { CLAIM_DRAFT } from '../../src/pipeline/sql-approve.js';
-import { PRICES } from '../../src/providers/cost.js';
-import * as anthropic from '../../src/providers/anthropic.js';
-import * as openai from '../../src/providers/openai.js';
-import { buildWorkflow } from '../../build.mjs';
+import { readSettings, SETTINGS_SCHEMA, settingProblem } from '../../src/pipeline/settings.js';
+import { SETTINGS } from './settings-fixture.js';
 
 const KEYS = [
   'brand_name', 'sender_name', 'email_from', 'support_email', 'default_demo_inbox', 'allow_drills', 'reference_date_default',
@@ -75,28 +66,37 @@ describe('settingProblem', () => {
   it('names an unknown key', () => {
     expect(settingProblem('max_sends', 60)).toBe('"max_sends" is not a known setting');
   });
+  it('sender_name must be safe in an email From line', () => {
+    for (const bad of ['Author Relations, BookLeaf', 'A "B"', 'A <b@c.d>', 'A;B', 'Team: all', 'A\nBcc: x@y.z', 'a@b'])
+      expect(settingProblem('sender_name', bad), bad).toMatch(/^sender_name must not contain/);
+    expect(settingProblem('sender_name', "Anita O'Brien & Team (Royalties)")).toBeNull();
+  });
 });
 
-/** Until each step moves its reader onto the settings table, the seed must reproduce today's constants. */
-describe('defaults reproduce the behaviour hard-coded today (delete a pin when its constant goes)', () => {
-  it('brand, sender and AI writers', () => {
-    expect(dflt('brand_name')).toBe(DEFAULT_BRAND.name);
-    expect(dflt('sender_name')).toBe(DEFAULT_SIGN_OFF);
-    expect(dflt('ai_primary')).toEqual({ model: anthropic.DEFAULT_MODEL, effort: anthropic.DEFAULT_EFFORT, max_tokens: anthropic.DEFAULT_MAX_TOKENS });
-    expect(dflt('ai_fallback')).toEqual({ model: openai.DEFAULT_MODEL, max_tokens: openai.DEFAULT_MAX_TOKENS });
-    expect(dflt('model_prices')).toEqual(PRICES);
+describe('readSettings (the Load Settings row, before a workflow uses it)', () => {
+  it('returns every known setting, validated; a key this code does not know is ignored (a newer migration)', () => {
+    const r = readSettings({ ...SETTINGS, added_later: 1 });
+    expect(r).toEqual({ ok: true, settings: SETTINGS });
   });
-  it('limits and windows', async () => {
-    const env = readConfig({}).config;
-    expect(dflt('max_sends_per_hour')).toBe(env.maxSendsPerHour);
-    expect(dflt('reference_date_default')).toBe(env.referenceDateDefault);
-    expect(dflt('duplicate_window_minutes') * 60_000).toBe(IDEMPOTENCY_WINDOW_MS);
-    expect(CLAIM_DRAFT).toContain(`interval '${dflt('draft_ttl_hours')} hours'`);
-    expect(SWEEP_STUCK).toContain(`interval '${dflt('stuck_job_minutes')} minutes'`);
-    const summary = await buildWorkflow('royalty-summary');
-    const ai = summary.nodes.filter((n) => n.type === 'n8n-nodes-base.httpRequest' && /anthropic|openai/.test(n.parameters.url));
-    expect(ai.map((n) => n.parameters.options.timeout)).toEqual(ai.map(() => dflt('ai_timeout_ms')));
+  it('fails INTERNAL (500), naming each missing or invalid setting but no value', () => {
+    const { brand_name: _gone, ...rest } = SETTINGS;
+    const r = readSettings({ ...rest, email_from: 'not-an-address', max_sends_per_hour: 0 });
+    expect(r).toMatchObject({ ok: false, code: 'INTERNAL', http_status: 500 });
+    expect(r.message).toContain('brand_name is missing');
+    expect(r.message).toContain('email_from must be an email address');
+    expect(r.message).toContain('max_sends_per_hour must be a whole number from 1 to 10000');
+    expect(r.message).not.toContain('not-an-address');
   });
+  it('a fresh environment fails until email_from is set', () => {
+    const seeded = Object.fromEntries(KEYS.map((k) => [k, dflt(k)]));
+    expect(readSettings(seeded).message).toMatch(/Server settings are invalid: email_from must be an email address\.$/);
+  });
+  it('an empty or missing table (no row: the aggregate is NULL) fails INTERNAL', () => {
+    for (const stored of [null, undefined, [], 'x']) expect(readSettings(stored)).toMatchObject({ ok: false, code: 'INTERNAL' });
+  });
+});
+
+describe('seeded values', () => {
   it('gpt-4.1-mini is priced at the published OpenAI standard rate (USD per 1M tokens)', () => {
     expect(dflt('model_prices')['gpt-4.1-mini']).toEqual({ inputPerMTok: 0.4, outputPerMTok: 1.6, cacheWriteMultiplier: 1, cacheReadMultiplier: 0.25 });
     expect(SETTINGS_SCHEMA.model_prices.description).toMatch(/gpt-4\.1-mini: OpenAI standard tier .*2026-11-11/);

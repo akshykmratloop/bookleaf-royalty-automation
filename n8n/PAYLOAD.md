@@ -57,15 +57,15 @@ Bubble date (ISO instant, read in India time), or empty.
 | `batch_id` | Optional. Groups a bulk send. |
 | `requested_by` | Required. Admin email or name, 1-254 chars. |
 | `mode` | Required. `single` or `bulk`. |
-| `reference_date` | Optional. "Figures as of" date. Empty = server default `REFERENCE_DATE_DEFAULT` (2025-12-31, or `today`). |
-| `demo_inbox` | Optional email. **Emails never go to `author.email`.** Empty = server `DEFAULT_DEMO_INBOX`; neither set = job refused with `NO_RECIPIENT` (422). |
-| `attempt` | Optional, 1-20, default 1. Bump it for a deliberate "send again" within 10 minutes (see idempotency). |
-| `drills` | Optional. Failure drills, honoured only when the server runs `ALLOW_DRILLS=true` (otherwise **400**, never silently ignored). `ai_down` fails both AI providers; `primary_down` fails only Anthropic, so the OpenAI fallback writes the email (the job's `provider`/`model` show OpenAI); `email_down` points SMTP at an unreachable server; `data_down` fails the data step. Bubble maps its flat `ai_down`/`email_down`/`data_down`/`primary_down` parameters into this object. |
+| `reference_date` | Optional. "Figures as of" date. Empty = the `reference_date_default` setting (2025-12-31, or `today`). |
+| `demo_inbox` | Optional email. **Emails never go to `author.email`.** Empty = the `default_demo_inbox` setting; neither set = job refused with `NO_RECIPIENT` (422). |
+| `attempt` | Optional, 1-20, default 1. Bump it for a deliberate "send again" within the duplicate window (see idempotency). |
+| `drills` | Optional. Failure drills, honoured only when the `allow_drills` setting is true (otherwise **400**, never silently ignored). `ai_down` fails both AI providers; `primary_down` fails only Anthropic, so the OpenAI fallback writes the email (the job's `provider`/`model` show OpenAI); `email_down` points SMTP at an unreachable server; `data_down` fails the data step. Bubble maps its flat `ai_down`/`email_down`/`data_down`/`primary_down` parameters into this object. |
 | `delivery` | Optional. `send` (default): write, check and send. `draft`: write, check and render, then stop as `DRAFTED` for an admin to approve (see the approve endpoint). |
 | `tone` | Optional. `warm` (default, BookLeaf's usual tone), `formal` or `concise`. |
 | `length` | Optional. `short` (about 80-180 words of prose), `standard` (default, 150-300) or `detailed` (250-450). The prompt and the word-count warning follow it. |
 | `note` | Optional admin style guidance, 0-300 characters after trimming; control characters (line breaks included) become spaces. It goes into the AI's user message in a fenced block and may change wording and style only: it can never change or add figures, dates or policy, and the fact check still blocks any figure that is not in the data. |
-| `sign_off` | Optional signature name, 0-60 characters: letters, spaces and `. , ' & ( ) -` (no digits). Empty = `BookLeaf Author Relations`. The signature is rendered from data (escaped), never written by the AI: `Warm regards,` / `Kind regards,` (formal) / `Best regards,` (concise), then the name. |
+| `sign_off` | Optional signature name, 0-60 characters: letters, spaces and `. , ' & ( ) -` (no digits). Empty = the `sender_name` setting (`BookLeaf Author Relations`). The signature is rendered from data (escaped), never written by the AI: `Warm regards,` / `Kind regards,` (formal) / `Best regards,` (concise), then the name. |
 | `author` | Required: `code`, `name` (first word = greeting name), `email`, `city`. n8n never reads Bubble's data itself. |
 | `books[]` | Required, up to 50. `status` is the status text; anything starting with "In Production" is treated as in production and its stage (e.g. "Cover Design") is used in the email. `platforms` may be a list or comma-separated text. |
 
@@ -78,13 +78,14 @@ Bubble date (ISO instant, read in India time), or empty.
 | 400 | Validation | `{ "error": { "code": "VALIDATION", "message": "…", "retryable": false, "fields": [{ "path": "books[0].copies_sold", "code": "TYPE", "message": "must be an integer" }] } }` |
 | 403 | Missing / wrong `X-BookLeaf-Key` | `{ "error": { "code": "FORBIDDEN", "message": "…", "retryable": false } }` |
 | 422 | `NO_RECIPIENT` | error object as above |
-| 429 | More than `MAX_SENDS_PER_HOUR` jobs (not failed) in the last hour | `{ "error": { "code": "RATE_LIMITED", … } }` |
+| 429 | `max_sends_per_hour` jobs (failed and discarded ones not counted) in the last hour | `{ "error": { "code": "RATE_LIMITED", … } }` |
+| 500 | The server settings are missing or invalid (each one named, no value shown) | `{ "error": { "code": "INTERNAL", "message": "… Server settings are invalid: email_from must be an email address." } }` |
 | 500 | n8n itself failed before answering | `{ "message": "Error in workflow" }` |
 
 **Idempotency:** the key is author id + a SHA-256 fingerprint of everything that shapes the email
 (books, figures, reference date, recipient, drills, attempt, delivery, tone, length, note, sign_off)
-+ the 10-minute window. The same click
-twice returns the same job; changed data, a new `attempt` or the next window makes a new job.
++ the `duplicate_window_minutes` window (10 minutes). The same click twice returns the same job;
+changed data, a new `attempt` or the next window makes a new job.
 
 ## GET /webhook/royalty-summary/jobs
 
@@ -113,8 +114,8 @@ plain poll.
 `status` moves QUEUED → PROCESSING → SENT or FAILED, or (with `delivery: "draft"`) → DRAFTED, and
 from there, through the approve endpoint, → PROCESSING → SENT/FAILED, or → DISCARDED. A job never
 stays QUEUED/PROCESSING: the error workflow marks unexpected failures `INTERNAL`, and the sweeper
-marks anything not finished 10 minutes after it started (an approved draft: after it was claimed)
-`TIMEOUT`. The sweeper never touches DRAFTED or DISCARDED jobs. Poll every 3-5 seconds; a normal
+(every minute) marks anything not finished `stuck_job_minutes` (10) after it started (an approved
+draft: after it was claimed) `TIMEOUT`. The sweeper never touches DRAFTED or DISCARDED jobs. Poll every 3-5 seconds; a normal
 job finishes in about 10-20 seconds.
 
 `stage` shows live progress:
@@ -168,7 +169,7 @@ a bad key):
 | `NOT_FOUND` | No job with this id. |
 | `NOT_A_DRAFT` | The job is not `DRAFTED` (its `status` is in the answer). |
 | `ALREADY_SENT` | `send` on a job already `PROCESSING`/`SENT`, or a second concurrent click. |
-| `DRAFT_EXPIRED` | The draft is more than 24 hours old (check/send; discard still works). |
+| `DRAFT_EXPIRED` | The draft is older than the `draft_ttl_hours` setting (24; check/send; discard still works). |
 | `EDIT_BLOCKED` | `send` with an edit that fails the fact check. |
 
 ## Error codes (`error_code`)
@@ -184,8 +185,38 @@ a bad key):
 | `AI_UNAVAILABLE` | Anthropic failed and the OpenAI fallback failed too (or the answer was unusable twice). | Yes |
 | `AI_FACT_CHECK_FAILED` | The draft quoted a figure not in the data, and the one regeneration with feedback did too. Nothing was sent. | Yes |
 | `EMAIL_FAILED` | The SMTP server refused or could not be reached. The draft is kept on the job. | Yes |
-| `TIMEOUT` | Not finished within 10 minutes (sweeper). | Yes |
+| `TIMEOUT` | Not finished within `stuck_job_minutes` (sweeper). | Yes |
 | `INTERNAL` | Unexpected workflow error; `error` names the node. | Yes |
+
+## Server settings
+
+The workflows read their settings from the table `bookleaf_settings` (database `bookleaf`), one JSON
+value per key, at the start of every request: a change applies to the next request, no redeploy.
+Keys, defaults, descriptions and checks live in `n8n/src/pipeline/settings.js`; a missing or invalid
+setting makes the request fail with **500** `INTERNAL` naming it. The per-environment ones are
+written with `n8n/tools/settings-sql.mjs` and never committed. Job status reads no settings.
+
+| Key | Default | Used for |
+|---|---|---|
+| `brand_name` | BookLeaf Publishing | Email header and footer |
+| `sender_name` | BookLeaf Author Relations | From line and the default signature (no `" , ; : < > @ \`) |
+| `email_from` | *(per environment, required)* | From address |
+| `support_email` | empty | Footer line (left out when empty) |
+| `default_demo_inbox` | *(per environment)* | Recipient when the request names no `demo_inbox` |
+| `allow_drills` | false *(per environment)* | Whether `drills` are accepted |
+| `reference_date_default` | 2025-12-31 | "Figures as of" when the request gives none (`today` = India date) |
+| `ai_primary` | claude-sonnet-5-5, effort medium, 8000 tokens | Anthropic request |
+| `ai_fallback` | gpt-4.1-mini, 4000 tokens | OpenAI request |
+| `ai_timeout_ms` | 45000 | Time limit of each AI request |
+| `model_prices` | USD per million tokens per model | `cost_usd` (a model with no price records none) |
+| `max_sends_per_hour` | 60 | The 429 limit |
+| `duplicate_window_minutes` | 10 | The idempotency window |
+| `draft_ttl_hours` | 24 | `DRAFT_EXPIRED` |
+| `stuck_job_minutes` | 10 | The sweeper's `TIMEOUT` |
+| `alert_email` | *(per environment)* | Who is told about unexpected errors, once the error handler sends alerts (empty = nobody) |
+
+Retries and the sweeper's schedule are node settings, fixed at build time in
+`n8n/workflows-src/lib/tuning.mjs`.
 
 ## Upgrade path (paid Bubble plan): push instead of poll
 

@@ -1,4 +1,5 @@
 import { credentialRef } from './credentials.mjs';
+import { TUNING } from './tuning.mjs';
 
 /**
  * Small constructors for the n8n nodes used by the BookLeaf workflows (n8n 2.x node types and
@@ -36,33 +37,35 @@ export const pg = (name, query, paramExpr, extra = {}) => node(name, 'postgres',
 }, { credentials: credentialRef('postgres'), ...extra });
 
 /**
- * HTTP Request with a JSON body and a credential. `retry` = extra tries after the first.
- * @param {{method:string, url:string, credential:string, authType:string, body?:string, headers?:Object, timeoutMs:number, retry?:number, waitMs?:number, errorOutput?:boolean}} o
+ * HTTP Request with a JSON body and a credential. `timeout`: milliseconds, or an expression giving them.
+ * `retry` = extra tries after the first.
+ * @param {{method:string, url:string, credential:string, authType:string, body?:string, headers?:Object, timeout:number|string, retry?:number, waitMs?:number, errorOutput?:boolean}} o
  */
 export function http(name, o) {
   const parameters = {
     method: o.method, url: o.url, authentication: 'genericCredentialType', genericAuthType: o.authType,
     sendHeaders: Boolean(o.headers), headerParameters: { parameters: Object.entries(o.headers ?? {}).map(([k, v]) => ({ name: k, value: v })) },
     sendBody: Boolean(o.body), ...(o.body ? { contentType: 'json', specifyBody: 'json', jsonBody: `={{ ${o.body} }}` } : {}),
-    options: { timeout: o.timeoutMs },
+    options: { timeout: o.timeout },
   };
   const retry = o.retry ? { retryOnFail: true, maxTries: o.retry + 1, waitBetweenTries: o.waitMs ?? 1000 } : {};
   const onError = o.errorOutput ? { onError: 'continueErrorOutput' } : {};
   return node(name, 'httpRequest', 4.2, parameters, { credentials: credentialRef(o.credential), ...retry, ...onError });
 }
 
-/** deploy.mjs replaces this with the SMTP account address (SMTP_USER_EMAIL). */
-export const SMTP_FROM_PLACEHOLDER = '__SMTP_FROM__';
-
 /**
- * Send Email (SMTP) with both HTML and text, errors to the second output.
+ * Send Email (SMTP) with both HTML and text, errors to the second output. The From line comes from the
+ * settings (sender_name <email_from>).
  * @param {string} name @param {string} credential @param {string} [src] expression for the {from,to,subject,html,text} object
  */
 export const sendEmail = (name, credential, src = '$json.email') => node(name, 'emailSend', 2.1, {
-  resource: 'email', operation: 'send', fromEmail: `={{ ${src}.from || 'BookLeaf Author Relations <${SMTP_FROM_PLACEHOLDER}>' }}`, toEmail: `={{ ${src}.to }}`,
+  resource: 'email', operation: 'send', fromEmail: `={{ ${src}.from }}`, toEmail: `={{ ${src}.to }}`,
   subject: `={{ ${src}.subject }}`, emailFormat: 'both', text: `={{ ${src}.text }}`, html: `={{ ${src}.html }}`,
   options: { appendAttribution: false },
-}, { credentials: credentialRef(credential), onError: 'continueErrorOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 2000 });
+}, {
+  credentials: credentialRef(credential), onError: 'continueErrorOutput',
+  retryOnFail: TUNING.emailTries > 1, maxTries: TUNING.emailTries, waitBetweenTries: TUNING.emailRetryWaitMs,
+});
 
 export const schedule = (name, minutes) => node(name, 'scheduleTrigger', 1.2, { rule: { interval: [{ field: 'minutes', minutesInterval: minutes }] } });
 

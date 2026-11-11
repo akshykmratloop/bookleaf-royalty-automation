@@ -4,6 +4,9 @@
  */
 const P = '$1::jsonb';
 
+/** The "Load Settings" nodes: every bookleaf_settings row as one JSON object (checked by settings.readSettings). */
+export const LOAD_SETTINGS = 'SELECT jsonb_object_agg(key, value) AS settings FROM bookleaf_settings';
+
 export const INSERT_JOB = `WITH p AS (SELECT ${P} AS v),
 recent AS (
   SELECT count(*)::int AS n FROM royalty_jobs
@@ -81,14 +84,16 @@ FROM royalty_jobs
 WHERE job_id = ANY (ARRAY(SELECT jsonb_array_elements_text(${P}->'ids'))::uuid[])`;
 
 /**
- * A job still QUEUED/PROCESSING 10 minutes after it started becomes FAILED (TIMEOUT). An approved
- * draft starts when it is claimed (stage_at), not when the draft was made. DRAFTED and DISCARDED
- * jobs are never touched.
+ * A job still QUEUED/PROCESSING stuck_job_minutes after it started becomes FAILED (TIMEOUT). An
+ * approved draft starts when it is claimed (stage_at), not when the draft was made. DRAFTED and
+ * DISCARDED jobs are never touched.
  */
-export const SWEEP_STUCK = `UPDATE royalty_jobs
+export const SWEEP_STUCK = `WITH s AS (SELECT bookleaf_setting('stuck_job_minutes')::int AS minutes)
+UPDATE royalty_jobs
 SET status = 'FAILED', stage = 'failed', stage_at = now(), error_code = 'TIMEOUT',
-    error = 'The job did not finish within 10 minutes, so it was stopped. Send it again if needed.',
+    error = format('The job did not finish within %s minutes, so it was stopped. Send it again if needed.', s.minutes),
     completed_at = now(), updated_at = now()
+FROM s
 WHERE status IN ('QUEUED', 'PROCESSING')
-  AND (CASE WHEN drafted_at IS NULL THEN created_at ELSE stage_at END) < now() - interval '10 minutes'
+  AND (CASE WHEN drafted_at IS NULL THEN created_at ELSE stage_at END) < now() - make_interval(mins => s.minutes)
 RETURNING job_id::text AS job_id, log_id, author_id`;

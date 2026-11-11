@@ -2,8 +2,8 @@
   "name": "BookLeaf - Stuck Job Sweeper",
   "nodes": [
     {
-      "id": "55a7a795-a607-4bdd-a537-7e9f00f56030",
-      "name": "Every 5 Minutes",
+      "id": "4dff84af-29f8-408b-ace4-724b33013554",
+      "name": "Every Minute",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "parameters": {
@@ -11,7 +11,7 @@
           "interval": [
             {
               "field": "minutes",
-              "minutesInterval": 5
+              "minutesInterval": 1
             }
           ]
         }
@@ -28,7 +28,7 @@
       "typeVersion": 2.6,
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE royalty_jobs\nSET status = 'FAILED', stage = 'failed', stage_at = now(), error_code = 'TIMEOUT',\n    error = 'The job did not finish within 10 minutes, so it was stopped. Send it again if needed.',\n    completed_at = now(), updated_at = now()\nWHERE status IN ('QUEUED', 'PROCESSING')\n  AND (CASE WHEN drafted_at IS NULL THEN created_at ELSE stage_at END) < now() - interval '10 minutes'\nRETURNING job_id::text AS job_id, log_id, author_id",
+        "query": "WITH s AS (SELECT bookleaf_setting('stuck_job_minutes')::int AS minutes)\nUPDATE royalty_jobs\nSET status = 'FAILED', stage = 'failed', stage_at = now(), error_code = 'TIMEOUT',\n    error = format('The job did not finish within %s minutes, so it was stopped. Send it again if needed.', s.minutes),\n    completed_at = now(), updated_at = now()\nFROM s\nWHERE status IN ('QUEUED', 'PROCESSING')\n  AND (CASE WHEN drafted_at IS NULL THEN created_at ELSE stage_at END) < now() - make_interval(mins => s.minutes)\nRETURNING job_id::text AS job_id, log_id, author_id",
         "options": {}
       },
       "credentials": {
@@ -44,7 +44,7 @@
     }
   ],
   "connections": {
-    "Every 5 Minutes": {
+    "Every Minute": {
       "main": [
         [
           {
@@ -59,7 +59,7 @@
   "settings": {
     "executionOrder": "v1",
     "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
+    "saveDataSuccessExecution": "none",
     "saveManualExecutions": true,
     "callerPolicy": "workflowsFromSameOwner"
   }

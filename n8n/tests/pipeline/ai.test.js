@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { afterAi, AI_ROUTES, detectProvider } from '../../src/pipeline/after-ai.js';
 import { buildContext, DRILL_MODEL } from '../../src/pipeline/context.js';
 import { prepareJob } from '../../src/pipeline/prepare.js';
-import { ENV, fixedRandom, NOW } from './env.js';
+import { fixedRandom, NOW, SETTINGS } from './settings-fixture.js';
 import { payloadFor } from './fixtures.js';
 import { anthropicOk, goodSections, openaiOk, wrongSections } from './ai-fixtures.js';
 
-const jobFor = (code, over = {}) => prepareJob(payloadFor(code, over), ENV, NOW, fixedRandom).job;
+const jobFor = (code, over = {}, settings = SETTINGS) => prepareJob(payloadFor(code, over), settings, NOW, fixedRandom).job;
 const ctxFor = (job) => buildContext(job).ctx;
 
 describe('buildContext', () => {
@@ -15,9 +15,15 @@ describe('buildContext', () => {
     const ctx = ctxFor(job);
     expect(ctx.facts.totals.pending).toBe(13024);
     expect(ctx.prompt.situations).toEqual(['OVERDUE', 'PENDING']);
-    expect(ctx.requests.anthropic).toMatchObject({ model: 'claude-sonnet-5-5', output_config: { effort: 'medium' } });
-    expect(ctx.requests.openai).toMatchObject({ model: 'gpt-4.1-mini' });
+    expect(ctx.requests.anthropic).toMatchObject({ model: 'claude-sonnet-5-5', max_tokens: 8000, output_config: { effort: 'medium' } });
+    expect(ctx.requests.openai).toMatchObject({ model: 'gpt-4.1-mini', max_output_tokens: 4000 });
     expect(ctx.titles).toEqual(['Code & Karma', 'Startup Sutra']);
+  });
+  it('model, effort and token limits come from the ai_primary and ai_fallback settings', () => {
+    const settings = { ...SETTINGS, ai_primary: { model: 'claude-x', effort: 'high', max_tokens: 1234 }, ai_fallback: { model: 'gpt-y', max_tokens: 567 } };
+    const { requests } = ctxFor(jobFor('AUTH002', {}, settings));
+    expect(requests.anthropic).toMatchObject({ model: 'claude-x', max_tokens: 1234, output_config: { effort: 'high' } });
+    expect(requests.openai).toMatchObject({ model: 'gpt-y', max_output_tokens: 567 });
   });
   it('AI-down drill points both providers at a model that does not exist', () => {
     const ctx = ctxFor(jobFor('AUTH002', { drills: { ai_down: true } }));
@@ -44,7 +50,7 @@ describe('buildContext', () => {
   it('figures that do not add up fail INTEGRITY before any AI call', () => {
     const p = payloadFor('AUTH002');
     p.books[0].pending += 100;
-    const job = prepareJob(p, ENV, NOW, fixedRandom).job;
+    const job = prepareJob(p, SETTINGS, NOW, fixedRandom).job;
     const r = buildContext(job);
     expect(r).toMatchObject({ ok: false, code: 'INTEGRITY' });
     expect(r.message).toContain('BK003');
@@ -83,6 +89,13 @@ describe('afterAi', () => {
     expect(r.failure).toMatchObject({ code: 'AI_FACT_CHECK_FAILED' });
     expect(r.failure.message).toContain('₹84,500');
     expect(r.ai).toMatchObject({ attempts: 2, input_tokens: 6000, output_tokens: 1400, cost_usd: 0.026 });
+  });
+  it('prices the tokens with the model_prices setting; a model with no price records no cost', () => {
+    const doubled = { ...SETTINGS.model_prices['claude-sonnet-5-5'], inputPerMTok: 4, outputPerMTok: 20 };
+    const priced = jobFor('AUTH002', {}, { ...SETTINGS, model_prices: { 'claude-sonnet-5-5': doubled } });
+    expect(afterAi({ response: anthropicOk(), ctx, job: priced, attempt: 1 }).ai.cost_usd).toBe(0.026);
+    const unpriced = jobFor('AUTH002', {}, { ...SETTINGS, model_prices: { 'gpt-4.1-mini': SETTINGS.model_prices['gpt-4.1-mini'] } });
+    expect(afterAi({ response: anthropicOk(), ctx, job: unpriced, attempt: 1 }).ai.cost_usd).toBeNull();
   });
   it('a fixed second draft passes', () => {
     const first = afterAi({ response: anthropicOk(wrongSections), ctx, job, attempt: 1 });

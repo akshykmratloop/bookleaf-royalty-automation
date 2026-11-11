@@ -7,23 +7,22 @@ import { approveResponse, validateApprove } from '../../src/pipeline/approve-req
 import { buildContext } from '../../src/pipeline/context.js';
 import { draftUpdate } from '../../src/pipeline/finalize.js';
 import { prepareJob } from '../../src/pipeline/prepare.js';
-import { ENV, fixedRandom, NOW } from './env.js';
+import { fixedRandom, NOW, SETTINGS } from './settings-fixture.js';
 import { payloadFor } from './fixtures.js';
 import { anthropicOk } from './ai-fixtures.js';
 
 const ID = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
-const job = prepareJob(payloadFor('AUTH002', { delivery: 'draft', sign_off: 'Anita Rao' }), ENV, NOW, fixedRandom).job;
+const job = prepareJob(payloadFor('AUTH002', { delivery: 'draft', sign_off: 'Anita Rao' }), SETTINGS, NOW, fixedRandom).job;
 const ctx = buildContext(job).ctx;
 const ai = afterAi({ response: anthropicOk(), ctx, job, attempt: 1 }).ai;
 const draft = draftUpdate({ ctx, job, ai });
-const config = { emailFrom: 'sender@bookleaf.test', brand: { name: 'BookLeaf Publishing', supportEmail: '' } };
 /** The SELECT_DRAFT row for this draft (jsonb columns come back parsed). */
 const row = (over = {}) => ({
   job_id: ID, status: 'DRAFTED', stage: 'drafted', tone: job.tone, length: job.length, sign_off: job.sign_off,
   recipient: job.recipient, sections: draft.sections, facts: draft.facts, titles: draft.titles, drills: job.drills, fresh: true, ...over,
 });
 const req = (over = {}) => ({ job_id: ID, action: 'check', subject: draft.subject, body: draft.edit_text, ...over });
-const decide = (r, rw = row()) => decideApproval({ request: req(r), row: rw, config });
+const decide = (r, rw = row(), settings = SETTINGS) => decideApproval({ request: req(r), row: rw, settings });
 
 describe('draftUpdate', () => {
   it('stores a DRAFTED row with sections, facts, titles and editable text', () => {
@@ -67,7 +66,10 @@ describe('decideApproval', () => {
     expect(decide({}, row({ status: 'SENT' })).response).toMatchObject({ ok: false, error_code: 'NOT_A_DRAFT', status: 'SENT' });
     expect(decide({ action: 'send' }, row({ status: 'SENT' })).response).toMatchObject({ error_code: 'ALREADY_SENT', status: 'SENT' });
     expect(decide({ action: 'send' }, row({ status: 'PROCESSING' })).response).toMatchObject({ error_code: 'ALREADY_SENT' });
-    expect(decide({}, row({ fresh: false })).response).toMatchObject({ ok: false, error_code: 'DRAFT_EXPIRED', status: 'DRAFTED' });
+    expect(decide({}, row({ fresh: false })).response).toMatchObject({
+      ok: false, error_code: 'DRAFT_EXPIRED', status: 'DRAFTED', error: 'This draft is more than 24 hours old. Create a new draft.',
+    });
+    expect(decide({}, row({ fresh: false }), { ...SETTINGS, draft_ttl_hours: 6 }).response.error).toContain('more than 6 hours old');
     for (const r of [decide({}, {}), decide({}, row({ fresh: false }))]) expect(r).toMatchObject({ route: APPROVE_ROUTES.RESPOND, http_status: 200 });
   });
   it('check: runs the checker, returns a preview, changes nothing', () => {
@@ -96,6 +98,12 @@ describe('decideApproval', () => {
     expect(r.email.text).toMatch(/Warm regards,\nAnita Rao$/);
     expect(r.drill).toBe(false);
     expect(r.response).toMatchObject({ ok: true, status: 'PROCESSING', passed: true, html: '' });
+  });
+  it('send: sender, brand and default signature come from the settings', () => {
+    const r = decide({ action: 'send' }, row({ sign_off: '' }), { ...SETTINGS, sender_name: 'Royalty Desk', brand_name: 'Leaf Co' });
+    expect(r.email.from).toBe('Royalty Desk <sender@bookleaf.test>');
+    expect(r.email.text).toMatch(/Warm regards,\nRoyalty Desk$/);
+    expect(r.email.html).toContain('Leaf Co');
   });
   it('send: the email-down drill stored on the job is honoured', () => {
     expect(decide({ action: 'send' }, row({ drills: { email_down: true } })).drill).toBe(true);

@@ -1,13 +1,19 @@
 import { UPDATE_JOB } from '../src/pipeline/sql.js';
 import { code, errorTrigger, http, pg, route } from './lib/nodes.mjs';
 
+/**
+ * n8n's own public API, reached from inside its container (N8N_PORT is 5678 in both compose files).
+ * A constant, not $env: the workflows never read the environment.
+ */
+const SELF_API = 'http://127.0.0.1:5678/api/v1';
+
 /** Error workflow of royalty-summary: an unexpected failure still ends as FAILED (INTERNAL), never stuck. */
 const nodes = [
   errorTrigger('Error Trigger'),
   route('Has Execution?', 2, '$json.execution && $json.execution.id ? 1 : 0'),
   http('Fetch Execution', {
-    method: 'GET', credential: 'n8nApi', authType: 'httpHeaderAuth', timeoutMs: 15_000, retry: 2, waitMs: 2000,
-    url: "={{ ($env.N8N_INTERNAL_URL || 'http://127.0.0.1:5678') + '/api/v1/executions/' + $json.execution.id + '?includeData=true' }}",
+    method: 'GET', credential: 'n8nApi', authType: 'httpHeaderAuth', timeout: 15_000, retry: 2, waitMs: 2000,
+    url: `={{ '${SELF_API}/executions/' + $json.execution.id + '?includeData=true' }}`,
   }),
   code('Find Job', 'failedJob', "return main({ trigger: $('Error Trigger').first().json, execution: $json });"),
   route('Job Found?', 2, '$json.route'),

@@ -9,4 +9,4 @@ export { checkEmail } from './checker/index.js';
 export { renderEmail, escapeHtml } from './render-email.js';
 export { getProvider, PROVIDER_NAMES } from './providers/registry.js';
 export { sectionsSchema, strictSectionsSchema } from './providers/schema.js';
-export { costUsd, PRICES } from './providers/cost.js';
+export { costUsd } from './providers/cost.js';

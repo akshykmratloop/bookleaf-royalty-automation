@@ -25,14 +25,17 @@ function loadBundle(job) {
   return { ok: true, value: job.bundle };
 }
 
-/** @param {{system:string, user?:string, messages?:Object[]}} prompt @param {import('./prepare.js').Job} job */
+/**
+ * The bodies of the two AI nodes: model, effort and token limit from the ai_primary / ai_fallback settings.
+ * @param {{system:string, user?:string, messages?:Object[]}} prompt @param {import('./prepare.js').Job} job
+ */
 export function providerRequests(prompt, job) {
   const { ai_down: allDown, primary_down: primaryDown } = job.drills;
-  const { config } = job;
-  const primaryModel = allDown || primaryDown ? DRILL_MODEL : config.primaryModel;
+  const { ai_primary: primary, ai_fallback: fallback } = job.settings;
+  const primaryModel = allDown || primaryDown ? DRILL_MODEL : primary.model;
   return {
-    anthropic: anthropic.buildRequest({ ...prompt, schema: sectionsSchema, model: primaryModel, effort: config.effort }).body,
-    openai: openai.buildRequest({ ...prompt, model: allDown ? DRILL_MODEL : config.fallbackModel }).body,
+    anthropic: anthropic.buildRequest({ ...prompt, schema: sectionsSchema, model: primaryModel, effort: primary.effort, maxTokens: primary.max_tokens }).body,
+    openai: openai.buildRequest({ ...prompt, model: allDown ? DRILL_MODEL : fallback.model, maxTokens: fallback.max_tokens }).body,
   };
 }
 

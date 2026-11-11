@@ -1,5 +1,6 @@
 import { isRealDate } from '../dates.js';
-import { isEmail } from './config.js';
+import { isEmail } from '../validate-fields.js';
+import { failure } from './errors.js';
 
 /**
  * The server settings: one row each in the `bookleaf_settings` table of the `bookleaf` database.
@@ -14,6 +15,9 @@ const unless = (ok, text) => (ok ? null : text);
 const isPlainObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 const text = (max) => (v) => unless(typeof v === 'string' && v.trim() !== '' && v.length <= max, `must be text of 1 to ${max} characters`);
+/** Safe as the display name of an email From line: nothing that would split or extend the address list. */
+const displayName = (max) => (v) => text(max)(v)
+  ?? unless(!/["\\,;:<>@\u0000-\u001f\u007f]/.test(v), 'must not contain quotes, commas, semicolons, colons, angle brackets, @, backslashes or line breaks');
 const email = (v) => unless(isEmail(v), 'must be an email address');
 const emailOrEmpty = (v) => unless(v === '' || isEmail(v), 'must be an email address, or empty');
 const flag = (v) => unless(typeof v === 'boolean', 'must be true or false');
@@ -59,7 +63,7 @@ export const SETTINGS_SCHEMA = deepFreeze({
     description: 'Publisher name shown in the email header, subject line and footer.',
   },
   sender_name: {
-    default: 'BookLeaf Author Relations', check: text(80),
+    default: 'BookLeaf Author Relations', check: displayName(80),
     description: 'Name in the From line of every email and in the default signature.',
   },
   email_from: {
@@ -127,6 +131,18 @@ export const SETTINGS_SCHEMA = deepFreeze({
 });
 
 /**
+ * The validated settings a workflow run uses, keyed as stored.
+ * @typedef {Object} Settings
+ * @property {string} brand_name @property {string} sender_name @property {string} email_from @property {string} support_email
+ * @property {string} default_demo_inbox @property {boolean} allow_drills @property {string} reference_date_default
+ * @property {{model:string, effort:'low'|'medium'|'high', max_tokens:number}} ai_primary
+ * @property {{model:string, max_tokens:number}} ai_fallback @property {number} ai_timeout_ms
+ * @property {Record<string, import('../providers/cost.js').Price>} model_prices @property {number} max_sends_per_hour
+ * @property {number} duplicate_window_minutes @property {number} draft_ttl_hours @property {number} stuck_job_minutes
+ * @property {string} alert_email
+ */
+
+/**
  * @param {string} key @param {unknown} value
  * @returns {string|null} what is wrong with `value` for setting `key` (prefixed with the key), or null when it is fine
  */
@@ -134,4 +150,18 @@ export function settingProblem(key, value) {
   if (!Object.hasOwn(SETTINGS_SCHEMA, key)) return `"${key}" is not a known setting`;
   const problem = SETTINGS_SCHEMA[key].check(value);
   return problem ? `${key} ${problem}` : null;
+}
+
+/**
+ * Checks the "Load Settings" row (every bookleaf_settings row as one object) before a run uses it.
+ * Every known setting must be there and valid; a key this code does not know is ignored, so a newer
+ * migration never breaks older workflows. Problems name the setting, never its value.
+ * @param {unknown} stored @returns {{ok:true, settings:Settings}|import('./errors.js').Failure} INTERNAL (500) when unusable
+ */
+export function readSettings(stored) {
+  if (!isPlainObject(stored)) return failure('INTERNAL', 'The server settings could not be read: bookleaf_settings is empty or missing.');
+  const keys = Object.keys(SETTINGS_SCHEMA);
+  const problems = keys.map((k) => (Object.hasOwn(stored, k) ? settingProblem(k, stored[k]) : `${k} is missing`)).filter(Boolean);
+  if (problems.length) return failure('INTERNAL', `Server settings are invalid: ${problems.join('; ')}.`);
+  return { ok: true, settings: Object.fromEntries(keys.map((k) => [k, stored[k]])) };
 }

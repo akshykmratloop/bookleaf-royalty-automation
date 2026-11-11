@@ -12,7 +12,7 @@ export const ERROR_CODES = Object.freeze({
   AI_UNAVAILABLE: { http: 502, retryable: true, message: 'Neither AI provider returned a usable draft.' },
   AI_FACT_CHECK_FAILED: { http: 422, retryable: true, message: 'The AI draft quoted figures that do not match the data, twice.' },
   EMAIL_FAILED: { http: 502, retryable: true, message: 'The email server did not accept the email.' },
-  TIMEOUT: { http: 504, retryable: true, message: 'The job did not finish within 10 minutes.' },
+  TIMEOUT: { http: 504, retryable: true, message: 'The job did not finish in time (the stuck_job_minutes setting), so the sweeper stopped it.' },
   INTERNAL: { http: 500, retryable: true, message: 'An unexpected error stopped the workflow.' },
 });
 

@@ -8,6 +8,7 @@ describe('public API', () => {
       'formatInr', 'payoutDeadlineFor'])
       expect(typeof api[n], n).toBe('function');
   });
+  it('has no price table of its own: prices are the model_prices setting', () => expect(api).not.toHaveProperty('PRICES'));
   it('has no Bubble Data API or push-callback helpers (n8n never calls Bubble)', () => {
     for (const n of ['authorQuery', 'booksQuery', 'royaltiesQuery', 'bundleFromBubble', 'callbackRequest']) expect(api, n).not.toHaveProperty(n);
   });

@@ -19,9 +19,9 @@ export function detectProvider(json) {
   return null;
 }
 
-/** Usage and cost summed over attempts; cost is null if any attempt's model has no known price. */
-function addUsage(previous, usage, model) {
-  const cost = costUsd(usage, model);
+/** Usage and cost summed over attempts; cost is null if any attempt's model has no price in model_prices. */
+function addUsage(previous, usage, model, prices) {
+  const cost = costUsd(usage, model, prices);
   const prevCost = previous ? previous.cost_usd : 0;
   return {
     input_tokens: (previous?.input_tokens ?? 0) + totalInputTokens(usage),
@@ -51,14 +51,15 @@ function failAi(code, detail, ai, issues = []) {
 export function afterAi({ response, ctx, job, attempt, previous }) {
   const provider = detectProvider(response);
   if (!provider) return failAi('AI_UNAVAILABLE', 'The AI answer was not recognised.', null);
+  const prices = job.settings.model_prices;
   const parsed = PARSERS[provider](response);
   if (!parsed.ok) {
     const detail = `${provider}: ${parsed.error.code} ${parsed.error.message}`;
-    const spent = { provider, model: response.model ?? null, attempts: attempt, ...addUsage(previous, rawUsage(provider, response), response.model) };
+    const spent = { provider, model: response.model ?? null, attempts: attempt, ...addUsage(previous, rawUsage(provider, response), response.model, prices) };
     if (attempt >= 2) return failAi('AI_UNAVAILABLE', detail, spent);
     return regenerate(provider, ctx, job, [{ role: 'user', content: ctx.prompt.user }], spent, [{ code: parsed.error.code, message: detail }]);
   }
-  const ai = { provider, model: parsed.model, sections: parsed.sections, attempts: attempt, ...addUsage(previous, parsed.usage, parsed.model) };
+  const ai = { provider, model: parsed.model, sections: parsed.sections, attempts: attempt, ...addUsage(previous, parsed.usage, parsed.model, prices) };
   const check = checkDraft(parsed.sections, ctx.facts, ctx.titles, job.length);
   const withCheck = { ...ai, verified_figures: check.verifiedFigures, words: check.words, warnings: check.issues.filter((i) => i.severity !== 'BLOCK') };
   if (check.passed) return { route: AI_ROUTES.PASS, outcome: 'PASS', ai: withCheck, issues: check.issues };

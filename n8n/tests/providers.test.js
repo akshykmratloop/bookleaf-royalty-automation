@@ -3,7 +3,11 @@ import * as anthropic from '../src/providers/anthropic.js';
 import * as openai from '../src/providers/openai.js';
 import { getProvider, PROVIDER_NAMES } from '../src/providers/registry.js';
 import { sectionsSchema, strictSectionsSchema } from '../src/providers/schema.js';
-import { costUsd, PRICES } from '../src/providers/cost.js';
+import { costUsd } from '../src/providers/cost.js';
+import { SETTINGS_SCHEMA } from '../src/pipeline/settings.js';
+
+/** The seeded model_prices setting. */
+const PRICES = SETTINGS_SCHEMA.model_prices.default;
 
 const sections = {
   subject: 'Your royalty summary',
@@ -120,14 +124,15 @@ describe('registry', () => {
 describe('costUsd', () => {
   it('prices Sonnet 5.5 at $2 / $10 per million', () => {
     expect(PRICES['claude-sonnet-5-5']).toMatchObject({ inputPerMTok: 2, outputPerMTok: 10, cacheReadMultiplier: 0.1 });
-    expect(costUsd({ inputTokens: 1_000_000, outputTokens: 1_000_000 }, 'claude-sonnet-5-5')).toBe(12);
-    expect(costUsd({ inputTokens: 900, outputTokens: 300 }, 'claude-sonnet-5-5')).toBeCloseTo(0.0048, 6);
+    expect(costUsd({ inputTokens: 1_000_000, outputTokens: 1_000_000 }, 'claude-sonnet-5-5', PRICES)).toBe(12);
+    expect(costUsd({ inputTokens: 900, outputTokens: 300 }, 'claude-sonnet-5-5', PRICES)).toBeCloseTo(0.0048, 6);
   });
   it('matches dated model ids by prefix', () => {
-    expect(costUsd({ inputTokens: 1_000_000, outputTokens: 0 }, 'gpt-4.1-mini-2025-04-14')).toBeGreaterThan(0);
+    expect(costUsd({ inputTokens: 1_000_000, outputTokens: 0 }, 'gpt-4.1-mini-2025-04-14', PRICES)).toBe(0.4);
   });
   it('returns null for an unknown model rather than guessing', () => {
-    expect(costUsd({ inputTokens: 10, outputTokens: 10 }, 'mystery')).toBeNull();
+    expect(costUsd({ inputTokens: 10, outputTokens: 10 }, 'mystery', PRICES)).toBeNull();
+    expect(costUsd({ inputTokens: 10, outputTokens: 10 }, 'claude-sonnet-5-5', {})).toBeNull();
   });
 });
 
@@ -152,8 +157,8 @@ describe('cache-aware usage and cost', () => {
   it('anthropic reports cache writes and reads separately and prices them', () => {
     const u = anthropic.usageOf({ usage: { input_tokens: 1000, output_tokens: 500, cache_creation_input_tokens: 2000, cache_read_input_tokens: 0 } });
     expect(u).toEqual({ inputTokens: 1000, outputTokens: 500, cacheWriteTokens: 2000, cacheReadTokens: 0 });
-    expect(costUsd(u, 'claude-sonnet-5-5')).toBe((1000 * 2 + 2000 * 2 * 1.25 + 500 * 10) / 1e6);
-    expect(costUsd({ ...u, cacheWriteTokens: 0, cacheReadTokens: 2000 }, 'claude-sonnet-5-5')).toBe((1000 * 2 + 2000 * 0.2 + 500 * 10) / 1e6);
+    expect(costUsd(u, 'claude-sonnet-5-5', PRICES)).toBe((1000 * 2 + 2000 * 2 * 1.25 + 500 * 10) / 1e6);
+    expect(costUsd({ ...u, cacheWriteTokens: 0, cacheReadTokens: 2000 }, 'claude-sonnet-5-5', PRICES)).toBe((1000 * 2 + 2000 * 0.2 + 500 * 10) / 1e6);
   });
   it('openai cached tokens are carved out of input_tokens', () => {
     const u = openai.usageOf({ usage: { input_tokens: 3000, output_tokens: 100, input_tokens_details: { cached_tokens: 1024 } } });

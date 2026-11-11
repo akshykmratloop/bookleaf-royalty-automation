@@ -2,7 +2,7 @@ import { signatureFor } from '../signature.js';
 import { approveError, approveResponse } from './approve-request.js';
 import { checkEdited, formatIssues, renderEdited } from './edit.js';
 import { failure, MAX_ERROR_LENGTH } from './errors.js';
-import { senderFor } from './finalize.js';
+import { brandOf, senderFor } from './finalize.js';
 import { nodeErrorSummary } from './node-errors.js';
 
 /** Switch outputs after "Decide": answer now, discard the draft, or claim it and send. */
@@ -14,7 +14,7 @@ const SENDING = ['PROCESSING', 'SENT'];
  * @property {string} job_id @property {string} status @property {string} tone @property {string} length
  * @property {string} sign_off @property {string} recipient @property {Object} sections
  * @property {import('../facts-types.js').AuthorFacts} facts @property {string[]} titles
- * @property {{email_down?:boolean}|null} drills @property {boolean} fresh drafted within 24 hours
+ * @property {{email_down?:boolean}|null} drills @property {boolean} fresh drafted within draft_ttl_hours
  */
 
 const respond = (response) => ({ route: APPROVE_ROUTES.RESPOND, http_status: 200, response });
@@ -29,10 +29,10 @@ function statusGate(request, row) {
 }
 
 /** The edited email, checked by the same fact checker and rendered with figures from facts. */
-function checkAndRender(request, row, config) {
+function checkAndRender(request, row, settings) {
   const check = checkEdited({ subject: request.subject, body: request.body, facts: row.facts, titles: row.titles ?? [], length: row.length });
-  const signature = signatureFor(row.tone, row.sign_off);
-  const rendered = renderEdited({ subject: request.subject, parsed: check.parsed, facts: row.facts, brand: config.brand, signature });
+  const signature = signatureFor(row.tone, row.sign_off, settings.sender_name);
+  const rendered = renderEdited({ subject: request.subject, parsed: check.parsed, facts: row.facts, brand: brandOf(settings), signature });
   const summary = {
     job_id: request.job_id, status: row.status, passed: check.passed, issues: formatIssues(check.issues),
     issue_count: check.issues.length, words: check.words, figures_verified: check.verifiedFigures,
@@ -42,18 +42,18 @@ function checkAndRender(request, row, config) {
 
 /**
  * The "Decide" step after the draft row is loaded.
- * @param {{request:import('./approve-request.js').ApproveRequest, row:DraftRow|Object, config:import('./config.js').Config}} input
+ * @param {{request:import('./approve-request.js').ApproveRequest, row:DraftRow|Object, settings:import('./settings.js').Settings}} input
  */
-export function decideApproval({ request, row, config }) {
+export function decideApproval({ request, row, settings }) {
   const gated = statusGate(request, row);
   if (gated) return gated;
   const params = JSON.stringify({ job_id: request.job_id });
   if (request.action === 'discard') return { route: APPROVE_ROUTES.DISCARD, params };
-  if (!row.fresh) return respond(approveError('DRAFT_EXPIRED', request.job_id, row.status));
-  const { check, rendered, summary } = checkAndRender(request, row, config);
+  if (!row.fresh) return respond(approveError('DRAFT_EXPIRED', request.job_id, row.status, {}, { hours: settings.draft_ttl_hours }));
+  const { check, rendered, summary } = checkAndRender(request, row, settings);
   if (request.action === 'check') return respond(approveResponse({ ...summary, ok: true, html: rendered.html }));
   if (!check.passed) return respond(approveError('EDIT_BLOCKED', request.job_id, row.status, summary));
-  const email = { from: senderFor(config), to: row.recipient, subject: rendered.subject, html: rendered.html, text: rendered.text };
+  const email = { from: senderFor(settings), to: row.recipient, subject: rendered.subject, html: rendered.html, text: rendered.text };
   const response = approveResponse({ ...summary, ok: true, status: 'PROCESSING' });
   return { route: APPROVE_ROUTES.CLAIM, params, email, drill: row.drills?.email_down === true, response };
 }
