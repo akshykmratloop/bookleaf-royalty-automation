@@ -132,7 +132,7 @@ job finishes in about 10-20 seconds.
 | `writing` | The AI is writing (Anthropic, or the OpenAI fallback). |
 | `checking` | The draft is being fact-checked. |
 | `rewriting` | The draft failed the check; the AI is rewriting it once with feedback. |
-| `sending` | Handing the email to SMTP (also right after an approved draft is claimed). |
+| `sending` | The finished email is saved on the job and handed to SMTP, once (also right after an approved draft is claimed). |
 | `sent` / `failed` | Final. |
 | `drafted` | Final until approved: a checked draft is waiting (status `DRAFTED`). |
 | `discarded` | The draft was discarded (status `DISCARDED`). |
@@ -166,7 +166,7 @@ a bad key):
 | Action | Result |
 |---|---|
 | `check` | Re-runs the same fact checker on the edited subject + body against the stored facts and returns `passed`, `issues` (one per line, `Blocked (CODE): …` or `Warning (CODE): …`), `issue_count`, `words`, `figures_verified` and the rendered `html` preview. Nothing changes. |
-| `send` | Same check. Blocking issues → `ok:false, error_code:"EDIT_BLOCKED"`, nothing changes. Otherwise the draft is claimed atomically (`DRAFTED` → `PROCESSING`, stage `sending`) and the answer is `ok:true, status:"PROCESSING"` at once; the edited email then goes to the job's demo inbox and the job ends `SENT` (with the final subject, html and text) or `FAILED` (`EMAIL_FAILED`). Poll job-status for the end. A second click gets `ALREADY_SENT`: one draft, one email. The `email_down` drill stored on the job is honoured. |
+| `send` | Same check. Blocking issues → `ok:false, error_code:"EDIT_BLOCKED"`, nothing changes. Otherwise the draft is claimed atomically (`DRAFTED` → `PROCESSING`, stage `sending`) and the answer is `ok:true, status:"PROCESSING"` at once; the edited email then goes to the job's demo inbox (the same delivery step as a direct send) and the job ends `SENT` (with the final subject, html and text) or `FAILED` (`EMAIL_FAILED`). Poll job-status for the end. A second click gets `ALREADY_SENT`: one draft, one email. The `email_down` drill stored on the job is honoured. |
 | `discard` | `DRAFTED` → `DISCARDED` (stage `discarded`): `ok:true, status:"DISCARDED"`. |
 
 | `error_code` | When |
@@ -188,7 +188,7 @@ a bad key):
 | `DATA_UNAVAILABLE` | The author data was withheld (the `data_down` drill). | Yes |
 | `AI_UNAVAILABLE` | Anthropic failed and the OpenAI fallback failed too (or the answer was unusable twice). | Yes |
 | `AI_FACT_CHECK_FAILED` | The draft quoted a figure not in the data, and the one regeneration with feedback did too. Nothing was sent. | Yes |
-| `EMAIL_FAILED` | The SMTP server refused or could not be reached. The draft is kept on the job. | Yes |
+| `EMAIL_FAILED` | The SMTP server refused the email or could not be reached. Sending is tried once (a second try after a lost answer could email the author twice); `error` ends with the server's own message (`… smtp: connect ECONNREFUSED …`). The email is kept on the job. | Yes |
 | `TIMEOUT` | Not finished within `stuck_job_minutes` (sweeper). | Yes |
 | `INTERNAL` | Unexpected workflow error; `error` names the node. | Yes |
 
@@ -219,8 +219,8 @@ written with `n8n/tools/settings-sql.mjs` and never committed. Job status reads 
 | `stuck_job_minutes` | 10 | The sweeper's `TIMEOUT` |
 | `alert_email` | *(per environment)* | Who is told about unexpected errors, once the error handler sends alerts (empty = nobody) |
 
-Retries and the sweeper's schedule are node settings, fixed at build time in
-`n8n/workflows-src/lib/tuning.mjs`.
+Retries (AI requests only: an email is sent once, never retried) and the sweeper's schedule are node
+settings, fixed at build time in `n8n/workflows-src/lib/tuning.mjs`.
 
 ## Upgrade path (paid Bubble plan): push instead of poll
 

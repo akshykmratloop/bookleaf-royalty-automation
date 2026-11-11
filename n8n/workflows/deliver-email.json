@@ -1,0 +1,361 @@
+{
+  "name": "BookLeaf - Deliver Email",
+  "nodes": [
+    {
+      "id": "0911e7a3-1ad8-452c-a7a6-14d72f47f612",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## BookLeaf deliver email\nSends one email for a job and records the result. Called by **Royalty Summary** (a send job, after Render Email) and **Approve Draft** (after a draft is claimed) with `job_id`, `email` {from, to, subject, html, text}, `drill` (the email_down drill) and `record` (more job columns to save: author code, AI usage).\n**Mark Sending** saves the email on the job at stage `sending`, but only while the job is QUEUED/PROCESSING: a job the sweeper has already failed is never emailed, and a failed send keeps its email for the log. **Real SMTP?** is false only for the email_down drill, whose server cannot be reached. **Send Email** tries once. **Mark Sent** / **Mark Failed** (`EMAIL_FAILED` with the server's message) end the job.\nNo error workflow here: a failure fails the caller's Deliver Email node, and the caller's error workflow handles it.",
+        "height": 240,
+        "width": 1480
+      },
+      "position": [
+        -40,
+        -300
+      ]
+    },
+    {
+      "id": "d51fefdd-b90c-4414-ae02-018ce6f3a50b",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "job_id",
+              "type": "string"
+            },
+            {
+              "name": "email",
+              "type": "object"
+            },
+            {
+              "name": "drill",
+              "type": "boolean"
+            },
+            {
+              "name": "record",
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ceafc5f7-bbfa-42dd-a51a-2203711c73f2",
+      "name": "Mark Sending",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE royalty_jobs AS j SET\n  status = COALESCE(p.status, j.status),\n  stage = COALESCE(p.stage, CASE p.status WHEN 'SENT' THEN 'sent' WHEN 'FAILED' THEN 'failed' WHEN 'DRAFTED' THEN 'drafted' END, j.stage),\n  stage_at = CASE WHEN p.stage IS NOT NULL OR p.status IS NOT NULL THEN now() ELSE j.stage_at END,\n  error_code = COALESCE(p.error_code, j.error_code),\n  error = COALESCE(p.error, j.error),\n  author_code = COALESCE(p.author_code, j.author_code),\n  subject = COALESCE(p.subject, j.subject),\n  html = COALESCE(p.html, j.html),\n  text_body = COALESCE(p.text_body, j.text_body),\n  sent_to = COALESCE(p.sent_to, j.sent_to),\n  figures_verified = COALESCE(p.figures_verified, j.figures_verified),\n  ai_attempts = COALESCE(p.ai_attempts, j.ai_attempts),\n  provider = COALESCE(p.provider, j.provider),\n  model = COALESCE(p.model, j.model),\n  input_tokens = COALESCE(p.input_tokens, j.input_tokens),\n  output_tokens = COALESCE(p.output_tokens, j.output_tokens),\n  cost_usd = COALESCE(p.cost_usd, j.cost_usd),\n  sections = COALESCE(p.sections, j.sections),\n  facts = COALESCE(p.facts, j.facts),\n  titles = COALESCE(p.titles, j.titles),\n  edit_text = COALESCE(p.edit_text, j.edit_text),\n  issues = COALESCE(p.issues, j.issues),\n  drafted_at = CASE WHEN p.status = 'DRAFTED' THEN now() ELSE j.drafted_at END,\n  completed_at = CASE WHEN p.status IN ('SENT', 'FAILED') THEN now() ELSE j.completed_at END,\n  updated_at = now()\nFROM jsonb_to_record($1::jsonb) AS p(\n  job_id uuid, status text, stage text, error_code text, error text, author_code text, subject text, html text, text_body text,\n  sent_to text, figures_verified int, ai_attempts int, provider text, model text, input_tokens int, output_tokens int,\n  cost_usd numeric, sections jsonb, facts jsonb, titles jsonb, edit_text text, issues text)\nWHERE j.job_id = p.job_id AND j.status IN ('QUEUED', 'PROCESSING')\nRETURNING j.job_id::text AS job_id, j.status, j.stage, j.error_code",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify(Object.assign({}, $json.record, { job_id: $json.job_id, stage: 'sending', subject: $json.email.subject, html: $json.email.html, text_body: $json.email.text })) }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "__CREDENTIAL_postgres__",
+          "name": "BookLeaf Postgres (bookleaf db)"
+        }
+      },
+      "alwaysOutputData": true,
+      "notes": "Saves email; stage sending",
+      "notesInFlow": true,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "id": "957af344-08a6-4892-a019-eee572157bc3",
+      "name": "Still Running?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ce67933d-0bd4-418e-acb7-f5de4ac53a1e",
+              "leftValue": "={{ $json.job_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "false: job already ended",
+      "notesInFlow": true,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "id": "03c43901-e37d-459e-a55e-8cb64585835f",
+      "name": "Real SMTP?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fe2fa055-0bf9-4e6b-a68e-87b37b8b0cae",
+              "leftValue": "={{ $('When Called').first().json.drill }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "notes": "false: the email_down drill",
+      "notesInFlow": true,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "id": "eb388b1d-915c-47ac-a9eb-60b555513065",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "={{ $('When Called').first().json.email.from }}",
+        "toEmail": "={{ $('When Called').first().json.email.to }}",
+        "subject": "={{ $('When Called').first().json.email.subject }}",
+        "emailFormat": "both",
+        "text": "={{ $('When Called').first().json.email.text }}",
+        "html": "={{ $('When Called').first().json.email.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "__CREDENTIAL_smtp__",
+          "name": "BookLeaf SMTP"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": false,
+      "notes": "One try, never retried",
+      "notesInFlow": true,
+      "position": [
+        1040,
+        0
+      ]
+    },
+    {
+      "id": "30724cf7-1684-421e-aa64-029330526fcf",
+      "name": "Send Email (drill: SMTP down)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "={{ $('When Called').first().json.email.from }}",
+        "toEmail": "={{ $('When Called').first().json.email.to }}",
+        "subject": "={{ $('When Called').first().json.email.subject }}",
+        "emailFormat": "both",
+        "text": "={{ $('When Called').first().json.email.text }}",
+        "html": "={{ $('When Called').first().json.email.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "__CREDENTIAL_smtpDrill__",
+          "name": "BookLeaf SMTP (drill: unreachable server)"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": false,
+      "notes": "Unreachable server: fails",
+      "notesInFlow": true,
+      "position": [
+        1040,
+        180
+      ]
+    },
+    {
+      "id": "35e30818-0617-4355-a06c-c2d0e5d0eb4b",
+      "name": "Mark Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE royalty_jobs SET status = 'SENT', stage = 'sent', stage_at = now(), sent_to = $1::jsonb->>'sent_to',\n  completed_at = now(), updated_at = now()\nWHERE job_id = ($1::jsonb->>'job_id')::uuid AND status IN ('QUEUED', 'PROCESSING')\nRETURNING job_id::text AS job_id, status, stage",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify({ job_id: $('When Called').first().json.job_id, sent_to: $('When Called').first().json.email.to }) }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "__CREDENTIAL_postgres__",
+          "name": "BookLeaf Postgres (bookleaf db)"
+        }
+      },
+      "position": [
+        1300,
+        0
+      ]
+    },
+    {
+      "id": "7da7fc09-f63a-4001-a5f3-92fbd3368648",
+      "name": "Mark Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE royalty_jobs SET status = 'FAILED', stage = 'failed', stage_at = now(), error_code = 'EMAIL_FAILED',\n  error = 'The email server did not accept the email. ' || left('smtp: ' ||\n    coalesce(nullif(btrim(regexp_replace($1::jsonb->>'error', '\\s+', ' ', 'g')), ''), 'unknown error'), 300),\n  completed_at = now(), updated_at = now()\nWHERE job_id = ($1::jsonb->>'job_id')::uuid AND status IN ('QUEUED', 'PROCESSING')\nRETURNING job_id::text AS job_id, status, stage, error_code",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify({ job_id: $('When Called').first().json.job_id, error: $json.error }) }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "__CREDENTIAL_postgres__",
+          "name": "BookLeaf Postgres (bookleaf db)"
+        }
+      },
+      "notes": "EMAIL_FAILED + server reply",
+      "notesInFlow": true,
+      "position": [
+        1300,
+        180
+      ]
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Mark Sending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Sending": {
+      "main": [
+        [
+          {
+            "node": "Still Running?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still Running?": {
+      "main": [
+        [
+          {
+            "node": "Real SMTP?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Real SMTP?": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Email (drill: SMTP down)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Mark Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email (drill: SMTP down)": {
+      "main": [
+        [
+          {
+            "node": "Mark Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

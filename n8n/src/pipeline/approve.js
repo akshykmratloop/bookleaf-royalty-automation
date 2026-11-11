@@ -1,9 +1,7 @@
 import { signatureFor } from '../signature.js';
 import { approveError, approveResponse } from './approve-request.js';
 import { checkEdited, formatIssues, renderEdited } from './edit.js';
-import { failure, MAX_ERROR_LENGTH } from './errors.js';
 import { brandOf, senderFor } from './finalize.js';
-import { nodeErrorSummary } from './node-errors.js';
 
 /** Switch outputs after "Decide": answer now, discard the draft, or claim it and send. */
 export const APPROVE_ROUTES = Object.freeze({ RESPOND: 0, DISCARD: 1, CLAIM: 2 });
@@ -41,7 +39,9 @@ function checkAndRender(request, row, settings) {
 }
 
 /**
- * The "Decide" step after the draft row is loaded.
+ * The "Decide" step after the draft row is loaded. A clean send is claimed (route CLAIM), then
+ * `deliver` goes to the Deliver Email sub-workflow: the edited email for the job's stored demo inbox,
+ * with the drill stored on the job and nothing else to record.
  * @param {{request:import('./approve-request.js').ApproveRequest, row:DraftRow|Object, settings:import('./settings.js').Settings}} input
  */
 export function decideApproval({ request, row, settings }) {
@@ -54,8 +54,10 @@ export function decideApproval({ request, row, settings }) {
   if (request.action === 'check') return respond(approveResponse({ ...summary, ok: true, html: rendered.html }));
   if (!check.passed) return respond(approveError('EDIT_BLOCKED', request.job_id, row.status, summary));
   const email = { from: senderFor(settings), to: row.recipient, subject: rendered.subject, html: rendered.html, text: rendered.text };
+  /** @type {import('./finalize.js').Delivery} */
+  const deliver = { job_id: request.job_id, email, drill: row.drills?.email_down === true, record: {} };
   const response = approveResponse({ ...summary, ok: true, status: 'PROCESSING' });
-  return { route: APPROVE_ROUTES.CLAIM, params, email, drill: row.drills?.email_down === true, response };
+  return { route: APPROVE_ROUTES.CLAIM, params, deliver, response };
 }
 
 /**
@@ -72,18 +74,4 @@ export function claimOutcome({ row, decided }) {
 export function discardOutcome({ row, jobId }) {
   if (row && row.job_id) return respond(approveResponse({ ok: true, job_id: jobId, status: 'DISCARDED' }));
   return respond(approveError('NOT_A_DRAFT', jobId, ''));
-}
-
-/** @param {string} jobId @param {{to:string, subject:string, html:string, text:string}} email */
-export const approvedSentUpdate = (jobId, email) => ({
-  job_id: jobId, status: 'SENT', stage: 'sent', subject: email.subject, html: email.html, text_body: email.text, sent_to: email.to,
-});
-
-/** The edited email is kept for the log; nothing reached the author. */
-export function approvedFailedUpdate(jobId, email, error) {
-  const f = failure('EMAIL_FAILED', nodeErrorSummary(error, 'smtp'));
-  return {
-    job_id: jobId, status: 'FAILED', stage: 'failed', error_code: f.code, error: f.message.slice(0, MAX_ERROR_LENGTH),
-    subject: email.subject, html: email.html, text_body: email.text,
-  };
 }

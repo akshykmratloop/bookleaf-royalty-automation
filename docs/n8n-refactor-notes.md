@@ -247,3 +247,80 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   commit 023b5b2) and "BookLeaf Bubble API (bearer)" (step 3a) stay on an instance until deleted by
   hand in n8n, after the rollback window. Rollback: the previous tag's workflows check the key in a
   Code node again (same `webhook.env`).
+
+## Step 5 — Deliver Email sub-workflow
+
+- **Changed:** new workflow **BookLeaf - Deliver Email** (`workflows-src/deliver-email.mjs`), the one
+  place an email is sent: **When Called** (Execute Workflow Trigger 1.1; inputs `job_id` string, `email`
+  object {from, to, subject, html, text}, `drill` boolean, `record` object) → **Mark Sending**
+  (`UPDATE_JOB`, alwaysOutputData: the caller's `record` columns, then job id, stage `sending` and the
+  email, so a record can never change those) → **Still Running?** (IF 2.2, `job_id` not empty; false =
+  the job already ended, e.g. the sweeper failed it, and nothing is sent) → **Real SMTP?** (IF 2.2,
+  `drill` is false: true = **Send Email** on the main row, false = **Send Email (drill: SMTP down)**
+  below; each tries once: `retryOnFail: false`, error output) →
+  **Mark Sent** (`MARK_SENT`: SENT, stage sent, `sent_to`, completed) / **Mark Failed**
+  (`MARK_EMAIL_FAILED`: FAILED, `EMAIL_FAILED`, "<standard message> smtp: <server message>" on one line,
+  at most 300 characters after the standard message). Both end queries only touch a QUEUED/PROCESSING
+  job. No error workflow on it: a failure fails the caller's node and the caller's error workflow
+  handles it (with the caller's execution id). Callers: royalty-summary (`Draft?` send → **Deliver
+  Email**; removed Stage: Sending, Email Drill?, both Send Email nodes, Mark Sent, Email Failed) and
+  approve-draft (Respond Sending → **Deliver Email**; removed Email Drill?, both Send Email nodes, Mark
+  Sent, Email Failed, Update Job). The call is Execute Workflow 1.2 (database source, run once, waits),
+  built by `executeWorkflow()` from the sub-workflow's exported `DELIVER_EMAIL` {name, inputs}, so the
+  mapping and the trigger come from one list. `WORKFLOW_SOURCES` (deploy order) is now error-handler,
+  deliver-email, royalty-summary, job-status, sweeper, approve-draft. Pipeline: `deliveryFor()`
+  (finalize.js) gives a send job's inputs (record = author code + AI columns); `decideApproval` puts
+  `deliver` (record `{}`) on the claim route. Deleted `renderForSend`, `sentUpdate`,
+  `approvedSentUpdate`, `approvedFailedUpdate` and the Code entries `markSent`, `emailFailed`,
+  `approvedSent`, `approvedFailed`; `TUNING` lost the email tries. New builders in `lib/nodes.mjs`:
+  `ifTrue` (+ `IS_FALSE`, `NOT_EMPTY`), `subWorkflowTrigger`, `executeWorkflow`, `withNote`
+  (notesInFlow), `stableUuid` (build.mjs node ids now use it, same ids), `workflowPlaceholder`;
+  `note()` takes an optional position and width.
+- **Behaviour changes (Bubble sees only the first):** the `EMAIL_FAILED` text now carries the SMTP
+  server's message; before, it always said `smtp: unknown error` (Send Email's error output gives
+  `error` as a string, which `nodeErrorSummary` did not read). Send Email tries once (it was 2 tries,
+  2 s apart). A job that has already ended is never emailed (Stage: Sending used to let the send go
+  ahead). The email and the AI columns are on the job before the send, so a crash after it leaves them.
+- **Tests:** `n8n/tests/deliver-email.test.js` (sub-workflow inputs, deploy order, wiring, the three
+  queries' parameters evaluated like n8n, IF 2.2 shape, node notes of at most 28 characters in every
+  workflow, the happy path on one row; no Send Email outside it and none retries), `n8n/tests/deliver-callers.test.js` (each caller maps exactly the trigger's names and types;
+  the mapping expressions evaluated on the real Render Email / Decide Code nodes give values of those
+  types), SQL pins, `tests/db/deliver.test.js` (10, real Postgres: Mark Sending on a running and an
+  ended job, Mark Sent, Mark Failed text: one line, `unknown error`, 300-character cap, never on an
+  ended job). Contract 02 asserts the email-down drill's error ends with `smtp: …ECONNREFUSED`. Shared
+  build-test helpers moved to `n8n/tests/built.js`. npm test 444, test:db 28.
+- **Live checks (local):** deploy created and published Deliver Email before its callers (local id
+  `wzHQZwU5rqqe6pDK`); contracts 36/36; 7 sub-executions for the run's 6 sends and the email-down drill,
+  all successful. The drill's error went from `smtp: unknown error` (baseline run) to `smtp: connect
+  ECONNREFUSED 127.0.0.1:9`. Guard: a throwaway caller (deleted afterwards, with its test row) called
+  Deliver Email with drill=true for a job the sweeper had failed: it stopped at Still Running? (false
+  branch), no send node ran, the row was unchanged, and the caller's execution ended successfully (no
+  error workflow). With trigger 1.1 the IF's false item comes back to the caller's node on a second
+  output that node does not have, so that node shows no output item; harmless, as nothing follows it.
+  Canvas (local n8n editor, screenshot): the happy path When Called → Mark Sent reads left to right on
+  one row; the drill send and Mark Failed sit below; every node note shows whole. One crossing stays
+  (both sends feed both end nodes). After the canvas changes: redeployed, contracts 36/36 again.
+- **Sizes:** 71 → **69** working nodes (royalty-summary 35 → 30, approve-draft 21 → 16, deliver-email 8);
+  Code 19 → **15** nodes, 214.0 → **204.6 KB** (budget lowered 250 → 215 KB); Switch 15 → 13; IF 0 → 2.
+- **Deviations:** `record` holds only the extra columns: the email travels once, in `email`, and Mark
+  Sending builds the row with `Object.assign`. Send Email has `retryOnFail: false` and no `maxTries`
+  (the design says maxTries 1; n8n reads maxTries only when retries are on, and the editor's field starts
+  at 2). Mark Failed builds the error text in SQL (no Code node in the sub-workflow), shaped like
+  `nodeErrorSummary`'s, without its API-key redaction (an SMTP error never carries one). The false
+  branch of Still Running? is left unconnected. The drill question is asked as **Real SMTP?** (`drill` is
+  false) rather than "Email Drill?", so IF 2.2's top output (true) is the main row and the edges do not
+  cross; n8n tests `!drill`, so a missing flag would use the real server (both callers always pass a
+  boolean). Node notes stay within 28 characters: the canvas shows one line of about 30. The About note
+  sits above the row at a fixed position; the callers' sticky notes keep their size and place (step 9
+  sizes notes from bounding boxes). Node versions as designed (Execute Workflow 1.2, trigger 1.1, IF 2.2).
+- **Next builder:** steps 6/7 rewire around the **Deliver Email** nodes (royalty-summary takes
+  `$json.deliver` from Render Email through `Draft?`; approve-draft takes `$('Decide').first().json.deliver`).
+  The sub-workflow never writes `execution_id`: step 8's Fail Job matches the caller's execution id
+  (the error workflow gets the caller's), and Mark Sending's stage `sending` is the marker for
+  `EMAIL_UNCERTAIN`. Mark Sent never overwrites an ended job: if the sweeper fails a job while its
+  email is in flight (only possible with a send slower than `stuck_job_minutes`), the job stays failed
+  although the email went out; step 8's `EMAIL_UNCERTAIN` is the honest label for that case.
+- **Release engineer:** no migration, no new credential. The deploy creates "BookLeaf - Deliver Email"
+  and publishes it before the callers (an unpublished sub-workflow fails every send with "Workflow is
+  not active"). A rollback to the previous tag leaves it published but unused; archive it by hand if
+  wanted. Its executions are saved separately; each caller's Deliver Email node links to its run.

@@ -11,6 +11,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildWorkflow, WORKFLOW_SOURCES } from './build.mjs';
 import { CREDENTIALS, placeholderId } from './workflows-src/lib/credentials.mjs';
+import { workflowPlaceholder } from './workflows-src/lib/nodes.mjs';
 import { readEnvFile, requireKeys } from './tools/env-file.mjs';
 import { n8nApi } from './tools/n8n-api.mjs';
 import { aiKeys, credentialData, databaseSettings, smtpSettings, webhookKey } from './tools/secrets.mjs';
@@ -43,7 +44,7 @@ async function upsertCredentials(api, data) {
 function resolvePlaceholders(wf, credIds, workflowIds) {
   let text = JSON.stringify(wf);
   for (const [key, id] of Object.entries(credIds)) text = text.split(placeholderId(key)).join(id);
-  for (const [name, id] of Object.entries(workflowIds)) text = text.split(`__WORKFLOW_${name}__`).join(id);
+  for (const [name, id] of Object.entries(workflowIds)) text = text.split(workflowPlaceholder(name)).join(id);
   const left = text.match(/__(CREDENTIAL|WORKFLOW)_[^"]*__/);
   if (left) throw new Error(`Unresolved placeholder ${left[0]} in ${wf.name}`);
   return JSON.parse(text);

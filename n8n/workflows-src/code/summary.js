@@ -6,7 +6,7 @@ import { afterAi, AI_ROUTES } from '../../src/pipeline/after-ai.js';
 import { classifyInsert } from '../../src/pipeline/classify.js';
 import { buildContext } from '../../src/pipeline/context.js';
 import { errorBody, failure } from '../../src/pipeline/errors.js';
-import { aiColumns, draftUpdate, failedUpdate, renderForSend, sentUpdate } from '../../src/pipeline/finalize.js';
+import { aiColumns, deliveryFor, draftUpdate, failedUpdate } from '../../src/pipeline/finalize.js';
 import { nodeErrorSummary } from '../../src/pipeline/node-errors.js';
 import { insertParams, prepareJob } from '../../src/pipeline/prepare.js';
 
@@ -59,18 +59,10 @@ export function regenerationFailed({ job, error, previous }) {
 }
 
 /**
- * route 0 = send (`drill` true = the email-down drill's unreachable SMTP server),
+ * route 0 = send: `deliver` holds the Deliver Email sub-workflow's inputs (it saves, sends and records);
  * 1 = delivery=draft: save the checked, rendered draft for an admin to approve; nothing is sent.
  */
 export function render({ ctx, job, ai }) {
   if (job.delivery === 'draft') return item({ route: 1, update: draftUpdate({ ctx, job, ai }) });
-  const r = renderForSend({ ctx, job, ai });
-  return item({ route: 0, drill: job.drills.email_down, email: r.email, update: r.update });
-}
-
-export const markSent = ({ rendered }) => item({ update: sentUpdate(rendered.update) });
-
-export function emailFailed({ job, rendered, error }) {
-  const { sent_to: _notSent, ...kept } = rendered.update;
-  return failItem(job, failure('EMAIL_FAILED', nodeErrorSummary(error, 'smtp')), kept);
+  return item({ route: 0, deliver: deliveryFor({ ctx, job, ai }) });
 }

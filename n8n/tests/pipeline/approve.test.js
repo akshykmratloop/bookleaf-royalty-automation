@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { afterAi } from '../../src/pipeline/after-ai.js';
-import {
-  APPROVE_ROUTES, approvedFailedUpdate, approvedSentUpdate, claimOutcome, decideApproval, discardOutcome,
-} from '../../src/pipeline/approve.js';
+import { APPROVE_ROUTES, claimOutcome, decideApproval, discardOutcome } from '../../src/pipeline/approve.js';
 import { approveResponse, validateApprove } from '../../src/pipeline/approve-request.js';
 import { buildContext } from '../../src/pipeline/context.js';
 import { draftUpdate } from '../../src/pipeline/finalize.js';
@@ -90,23 +88,25 @@ describe('decideApproval', () => {
     expect(r.route).toBe(APPROVE_ROUTES.RESPOND);
     expect(r.response).toMatchObject({ ok: false, error_code: 'EDIT_BLOCKED', passed: false, html: '' });
   });
-  it('send: a clean edit is claimed, with the email to the stored demo inbox', () => {
+  it('send: a clean edit is claimed, then handed to Deliver Email for the stored demo inbox', () => {
     const r = decide({ action: 'send', subject: 'Edited subject' });
     expect(r.route).toBe(APPROVE_ROUTES.CLAIM);
     expect(JSON.parse(r.params)).toEqual({ job_id: ID });
-    expect(r.email).toMatchObject({ to: 'demo@inbox.test', subject: 'Edited subject', from: 'BookLeaf Author Relations <sender@bookleaf.test>' });
-    expect(r.email.text).toMatch(/Warm regards,\nAnita Rao$/);
-    expect(r.drill).toBe(false);
+    expect(Object.keys(r.deliver)).toEqual(['job_id', 'email', 'drill', 'record']);
+    expect(r.deliver).toMatchObject({ job_id: ID, drill: false, record: {} });
+    expect(r.deliver.email).toMatchObject({ to: 'demo@inbox.test', subject: 'Edited subject', from: 'BookLeaf Author Relations <sender@bookleaf.test>' });
+    expect(r.deliver.email.text).toMatch(/Warm regards,\nAnita Rao$/);
+    expect(r.deliver.email.html).toContain('₹13,024');
     expect(r.response).toMatchObject({ ok: true, status: 'PROCESSING', passed: true, html: '' });
   });
   it('send: sender, brand and default signature come from the settings', () => {
-    const r = decide({ action: 'send' }, row({ sign_off: '' }), { ...SETTINGS, sender_name: 'Royalty Desk', brand_name: 'Leaf Co' });
-    expect(r.email.from).toBe('Royalty Desk <sender@bookleaf.test>');
-    expect(r.email.text).toMatch(/Warm regards,\nRoyalty Desk$/);
-    expect(r.email.html).toContain('Leaf Co');
+    const { email } = decide({ action: 'send' }, row({ sign_off: '' }), { ...SETTINGS, sender_name: 'Royalty Desk', brand_name: 'Leaf Co' }).deliver;
+    expect(email.from).toBe('Royalty Desk <sender@bookleaf.test>');
+    expect(email.text).toMatch(/Warm regards,\nRoyalty Desk$/);
+    expect(email.html).toContain('Leaf Co');
   });
   it('send: the email-down drill stored on the job is honoured', () => {
-    expect(decide({ action: 'send' }, row({ drills: { email_down: true } })).drill).toBe(true);
+    expect(decide({ action: 'send' }, row({ drills: { email_down: true } })).deliver.drill).toBe(true);
   });
   it('discard: routes to the discard update (even for an expired draft)', () => {
     expect(decide({ action: 'discard' }, row({ fresh: false })).route).toBe(APPROVE_ROUTES.DISCARD);
@@ -122,12 +122,5 @@ describe('claim and discard outcomes', () => {
   it('discard: DISCARDED, or NOT_A_DRAFT when it changed meanwhile', () => {
     expect(discardOutcome({ row: { job_id: ID, status: 'DISCARDED' }, jobId: ID }).response).toMatchObject({ ok: true, status: 'DISCARDED' });
     expect(discardOutcome({ row: {}, jobId: ID }).response).toMatchObject({ ok: false, error_code: 'NOT_A_DRAFT' });
-  });
-  it('final updates: SENT with the edited email, or FAILED keeping it for the log', () => {
-    expect(approvedSentUpdate(ID, decided.email)).toMatchObject({ job_id: ID, status: 'SENT', stage: 'sent', subject: decided.email.subject, sent_to: 'demo@inbox.test' });
-    const f = approvedFailedUpdate(ID, decided.email, { error: { message: 'connect ECONNREFUSED 127.0.0.1:9' } });
-    expect(f).toMatchObject({ job_id: ID, status: 'FAILED', error_code: 'EMAIL_FAILED', html: decided.email.html });
-    expect(f.error).toContain('smtp: connect ECONNREFUSED');
-    expect(f).not.toHaveProperty('sent_to');
   });
 });

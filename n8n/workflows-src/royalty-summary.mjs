@@ -1,7 +1,8 @@
 import { ANTHROPIC_VERSION, FALLBACK_BETA, URL as ANTHROPIC_URL } from '../src/providers/anthropic.js';
 import { URL as OPENAI_URL } from '../src/providers/openai.js';
 import { INSERT_JOB, LOAD_SETTINGS, MARK_PROCESSING, SET_STAGE, UPDATE_JOB } from '../src/pipeline/sql.js';
-import { code, http, note, pg, respond, route, sendEmail, webhook } from './lib/nodes.mjs';
+import { DELIVER_EMAIL } from './deliver-email.mjs';
+import { code, executeWorkflow, http, note, pg, respond, route, webhook, withNote } from './lib/nodes.mjs';
 import { TUNING } from './lib/tuning.mjs';
 
 /**
@@ -21,12 +22,11 @@ const openaiCall = (name, body) => http(name, { method: 'POST', url: OPENAI_URL,
 /** Live progress for job-status. alwaysOutputData: a job already finished elsewhere just continues to its end. */
 const setStage = (name, stage) => pg(name, SET_STAGE, `JSON.stringify({ job_id: ${JOB}.job_id, stage: '${stage}' })`, { alwaysOutputData: true });
 const CHECK = "$('Check Draft').first().json";
-const RENDERED = "$('Render Email').first().json";
 /** The first answer came from OpenAI when Anthropic failed and the fallback ran. */
 const FIRST_ANSWER = "$('Call OpenAI (fallback)').isExecuted ? $('Call OpenAI (fallback)').first().json : $('Call Anthropic').first().json";
 
 const nodes = [
-  note('About', '## BookLeaf royalty summary\nPOST /webhook/royalty-summary with header X-BookLeaf-Key (n8n Header Auth: a missing or wrong key gets 403 before the workflow starts).\nServer settings come from the bookleaf_settings table (Load Settings). Answers 202 {job_id} at once, then writes, fact-checks and sends the email (or saves a DRAFTED job for approval when delivery=draft) and records the result in royalty_jobs, with a live `stage`. Every failure branch ends in **Update Job**. Code nodes are generated from n8n/src by n8n/build.mjs.', 260),
+  note('About', '## BookLeaf royalty summary\nPOST /webhook/royalty-summary with header X-BookLeaf-Key (n8n Header Auth: a missing or wrong key gets 403 before the workflow starts).\nServer settings come from the bookleaf_settings table (Load Settings). Answers 202 {job_id} at once, then writes and fact-checks the email; the **Deliver Email** sub-workflow sends it and records SENT or EMAIL_FAILED (delivery=draft saves a DRAFTED job for approval instead), with a live `stage` in royalty_jobs. Every other failure branch ends in **Update Job**. Code nodes are generated from n8n/src by n8n/build.mjs.', 260),
   webhook('Royalty Summary Webhook', 'POST', 'royalty-summary'),
   pg('Load Settings', LOAD_SETTINGS, null),
   code('Prepare Job', 'prepare', `return main({ body: ${WEBHOOK}.body, settings: $json.settings, now: Date.now() });`),
@@ -55,12 +55,7 @@ const nodes = [
   route('Retry OK?', 2, '$json.route'),
   code('Render Email', 'render', `return main({ ctx: ${CTX}, job: ${JOB}, ai: $json.ai });`),
   route('Draft?', 2, '$json.route'),
-  setStage('Stage: Sending', 'sending'),
-  route('Email Drill?', 2, `${RENDERED}.drill ? 1 : 0`),
-  sendEmail('Send Email', 'smtp', `${RENDERED}.email`),
-  sendEmail('Send Email (drill: SMTP down)', 'smtpDrill', `${RENDERED}.email`),
-  code('Mark Sent', 'markSent', `return main({ rendered: ${RENDERED} });`),
-  code('Email Failed', 'emailFailed', `return main({ job: ${JOB}, rendered: ${RENDERED}, error: $json });`),
+  withNote(executeWorkflow('Deliver Email', DELIVER_EMAIL, '$json.deliver'), 'Saves, sends once, records'),
   pg('Update Job', UPDATE_JOB, 'JSON.stringify($json.update)'),
 ];
 
@@ -79,11 +74,7 @@ const edges = [
   ['Regenerate (OpenAI)', 'Check Draft (retry)', 0], ['Regenerate (OpenAI)', 'Regeneration Failed', 1],
   ['Regeneration Failed', 'Update Job'],
   ['Check Draft (retry)', 'Retry OK?'], ['Retry OK?', 'Render Email', 0], ['Retry OK?', 'Update Job', 1],
-  ['Render Email', 'Draft?'], ['Draft?', 'Stage: Sending', 0], ['Draft?', 'Update Job', 1], ['Stage: Sending', 'Email Drill?'],
-  ['Email Drill?', 'Send Email', 0], ['Email Drill?', 'Send Email (drill: SMTP down)', 1],
-  ['Send Email', 'Mark Sent', 0], ['Send Email', 'Email Failed', 1],
-  ['Send Email (drill: SMTP down)', 'Mark Sent', 0], ['Send Email (drill: SMTP down)', 'Email Failed', 1],
-  ['Mark Sent', 'Update Job'], ['Email Failed', 'Update Job'],
+  ['Render Email', 'Draft?'], ['Draft?', 'Deliver Email', 0], ['Draft?', 'Update Job', 1],
 ];
 
 export default { name: 'BookLeaf - Royalty Summary', nodes, edges, errorWorkflow: 'BookLeaf - Error Handler' };

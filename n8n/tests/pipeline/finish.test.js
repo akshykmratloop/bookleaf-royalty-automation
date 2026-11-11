@@ -4,7 +4,7 @@ import { classifyInsert, INSERT_ROUTES } from '../../src/pipeline/classify.js';
 import { buildContext } from '../../src/pipeline/context.js';
 import { errorBody, failure } from '../../src/pipeline/errors.js';
 import { internalFailureUpdate, jobIdFromExecution } from '../../src/pipeline/error-handler.js';
-import { failedUpdate, renderForSend, sentUpdate } from '../../src/pipeline/finalize.js';
+import { deliveryFor, failedUpdate } from '../../src/pipeline/finalize.js';
 import { nodeErrorSummary } from '../../src/pipeline/node-errors.js';
 import { prepareJob } from '../../src/pipeline/prepare.js';
 import { parseStatusQuery, shapeJobs } from '../../src/pipeline/status.js';
@@ -34,21 +34,27 @@ describe('classifyInsert', () => {
   });
 });
 
-describe('renderForSend / updates', () => {
-  it('renders an email to the demo inbox with figures from data', () => {
-    const { email, update } = renderForSend({ ctx, job, ai });
+describe('deliveryFor / updates', () => {
+  it('renders an email to the demo inbox with figures from data: the Deliver Email inputs', () => {
+    const { job_id, email, drill, record } = deliveryFor({ ctx, job, ai });
+    expect(job_id).toBe(job.job_id);
     expect(email).toMatchObject({ to: 'demo@inbox.test', from: 'BookLeaf Author Relations <sender@bookleaf.test>', subject: 'Your BookLeaf royalty summary' });
     expect(email.html).toContain('₹13,024');
     expect(email.text).toContain('Warm regards,\nBookLeaf Author Relations');
-    expect(update).toMatchObject({ job_id: job.job_id, author_code: 'AUTH002', sent_to: 'demo@inbox.test', provider: 'anthropic', ai_attempts: 1 });
-    expect(update.figures_verified).toBe(ai.verified_figures);
+    expect(drill).toBe(false);
+    expect(record).toEqual({
+      author_code: 'AUTH002', provider: 'anthropic', model: ai.model, ai_attempts: 1, input_tokens: ai.input_tokens,
+      output_tokens: ai.output_tokens, cost_usd: ai.cost_usd, figures_verified: ai.verified_figures,
+    });
   });
-  it('sentUpdate marks SENT; failedUpdate marks FAILED with a capped message', () => {
-    const { update } = renderForSend({ ctx, job, ai });
-    expect(sentUpdate(update)).toMatchObject({ status: 'SENT' });
-    const f = failedUpdate(job, failure('EMAIL_FAILED', 'x'.repeat(5000)));
-    expect(f).toMatchObject({ job_id: job.job_id, status: 'FAILED', error_code: 'EMAIL_FAILED' });
-    for (const u of [sentUpdate(update), f]) expect(u).not.toHaveProperty('callback_status');
+  it('deliveryFor passes the email_down drill on', () => {
+    const drilled = { ...job, drills: { ...job.drills, email_down: true } };
+    expect(deliveryFor({ ctx, job: drilled, ai }).drill).toBe(true);
+  });
+  it('failedUpdate marks FAILED with a capped message', () => {
+    const f = failedUpdate(job, failure('AI_UNAVAILABLE', 'x'.repeat(5000)));
+    expect(f).toMatchObject({ job_id: job.job_id, status: 'FAILED', error_code: 'AI_UNAVAILABLE' });
+    expect(f).not.toHaveProperty('callback_status');
     expect(f.error.length).toBeLessThanOrEqual(1000);
   });
   it('errorBody carries code, message and field errors', () => {
@@ -108,7 +114,7 @@ describe('nodeErrorSummary for HTTP errors', () => {
 describe('sender, brand and plain-text table details', () => {
   it('the From line and default signature use sender_name; header and footer use brand_name and support_email', () => {
     const settings = { ...SETTINGS, sender_name: 'Royalty Desk', brand_name: 'Leaf & Co', support_email: 'help@bookleaf.test' };
-    const { email } = renderForSend({ ctx, job: { ...job, settings }, ai });
+    const { email } = deliveryFor({ ctx, job: { ...job, settings }, ai });
     expect(email.from).toBe('Royalty Desk <sender@bookleaf.test>');
     expect(email.text).toMatch(/Warm regards,\nRoyalty Desk$/);
     expect(email.html).toContain('Leaf &amp; Co &middot; help@bookleaf.test');
@@ -116,7 +122,7 @@ describe('sender, brand and plain-text table details', () => {
   it('a book never paid reads "no payout yet" in the text table', async () => {
     const kavita = prepareJob(payloadFor('AUTH009'), SETTINGS, NOW, fixedRandom).job;
     const kctx = buildContext(kavita).ctx;
-    const { email } = renderForSend({ ctx: kctx, job: kavita, ai: { ...ai, sections: { ...ai.sections, bookParagraphs: [] } } });
+    const { email } = deliveryFor({ ctx: kctx, job: kavita, ai: { ...ai, sections: { ...ai.sections, bookParagraphs: [] } } });
     expect(email.text).toContain('pending ₹850 | no payout yet | Overdue');
   });
 });

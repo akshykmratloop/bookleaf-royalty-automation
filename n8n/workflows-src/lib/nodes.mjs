@@ -1,5 +1,5 @@
+import { sha256Hex } from '../../src/pipeline/sha256.js';
 import { credentialRef } from './credentials.mjs';
-import { TUNING } from './tuning.mjs';
 
 /**
  * Small constructors for the n8n nodes used by the BookLeaf workflows (n8n 2.x node types and
@@ -8,12 +8,47 @@ import { TUNING } from './tuning.mjs';
  */
 const node = (name, type, typeVersion, parameters, extra = {}) => ({ name, type: `n8n-nodes-base.${type}`, typeVersion, parameters, ...extra });
 
+/** A UUID-shaped id that is the same on every build (n8n wants ids; a reproducible build wants no randomness). */
+export function stableUuid(text) {
+  const h = sha256Hex(text);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
+/** What deploy.mjs swaps for a workflow's id on the instance (build.mjs WORKFLOW_SOURCES deploys it first). */
+export const workflowPlaceholder = (name) => `__WORKFLOW_${name}__`;
+
+/**
+ * Shows `text` under the node on the canvas (n8n "Display Note in Flow"), for anything a reader would ask
+ * about. The canvas shows one line of about 30 characters, so keep it short.
+ */
+export const withNote = (n, text) => ({ ...n, notes: text, notesInFlow: true });
+
 /** @param {string} name @param {string} entry export of workflows-src/code/entries.js @param {string} body JS run in the node */
 export const code = (name, entry, body) => node(name, 'code', 2, { mode: 'runOnceForAllItems', language: 'javaScript' }, { entry, body });
 
 /** Switch in expression mode: `output` evaluates to the output index. */
 export const route = (name, outputs, expression) =>
   node(name, 'switch', 3.2, { mode: 'expression', numberOutputs: outputs, output: `={{ ${expression} }}` });
+
+/** Filter options as the n8n 2.45 editor writes them for IF 2.2; without `version`, n8n would run the filter as version 1. */
+const FILTER_OPTIONS = Object.freeze({ caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 });
+/** n8n tests `!value`: true for false and for a missing value (null, undefined). */
+export const IS_FALSE = Object.freeze({ type: 'boolean', operation: 'false', singleValue: true });
+/** False for '', null and undefined too (an empty item from alwaysOutputData). */
+export const NOT_EMPTY = Object.freeze({ type: 'string', operation: 'notEmpty', singleValue: true });
+
+/**
+ * IF 2.2 with one condition: output 0 = true (drawn on top: make it the happy path), 1 = false.
+ * @param {string} name @param {string} left expression tested @param {Object} operator IS_FALSE or NOT_EMPTY
+ */
+export const ifTrue = (name, left, operator) => node(name, 'if', 2.2, {
+  conditions: {
+    options: { ...FILTER_OPTIONS },
+    conditions: [{ id: stableUuid(`${name}/condition`), leftValue: `={{ ${left} }}`, rightValue: '', operator: { ...operator } }],
+    combinator: 'and',
+  },
+  options: {},
+});
 
 /**
  * Webhook answered by a Respond node. n8n checks the X-BookLeaf-Key header itself (Header Auth with
@@ -51,23 +86,57 @@ export function http(name, o) {
 }
 
 /**
- * Send Email (SMTP) with both HTML and text, errors to the second output. The From line comes from the
- * settings (sender_name <email_from>).
+ * Send Email (SMTP) with both HTML and text; a failure goes to the second output as the input item
+ * plus `error` (the server's message). One try, never retried: when the server's answer is lost, a
+ * second try could email the author twice.
  * @param {string} name @param {string} credential @param {string} [src] expression for the {from,to,subject,html,text} object
  */
 export const sendEmail = (name, credential, src = '$json.email') => node(name, 'emailSend', 2.1, {
   resource: 'email', operation: 'send', fromEmail: `={{ ${src}.from }}`, toEmail: `={{ ${src}.to }}`,
   subject: `={{ ${src}.subject }}`, emailFormat: 'both', text: `={{ ${src}.text }}`, html: `={{ ${src}.html }}`,
   options: { appendAttribution: false },
-}, {
-  credentials: credentialRef(credential), onError: 'continueErrorOutput',
-  retryOnFail: TUNING.emailTries > 1, maxTries: TUNING.emailTries, waitBetweenTries: TUNING.emailRetryWaitMs,
+}, { credentials: credentialRef(credential), onError: 'continueErrorOutput', retryOnFail: false });
+
+/**
+ * Execute Workflow Trigger ("When Executed by Another Workflow") with typed inputs. The caller's
+ * Execute Workflow node checks the types; fields that are not declared never reach the workflow.
+ * @param {{name:string, type:'string'|'number'|'boolean'|'array'|'object'}[]} inputs
+ */
+export const subWorkflowTrigger = (name, inputs) => node(name, 'executeWorkflowTrigger', 1.1, {
+  inputSource: 'workflowInputs', workflowInputs: { values: inputs.map((i) => ({ name: i.name, type: i.type })) },
 });
+
+/** One sub-workflow input in an Execute Workflow node's mapping, as the n8n editor writes it. */
+const inputColumn = ({ name, type }) => ({ id: name, displayName: name, required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type });
+
+/**
+ * Execute Workflow: runs a published sub-workflow once with this item and waits for it. A failure in
+ * the sub-workflow fails this node, so the calling workflow's error workflow handles it.
+ * @param {string} name @param {{name:string, inputs:{name:string, type:string}[]}} target the sub-workflow's name and inputs
+ * @param {string} src expression for an object holding every input
+ */
+export function executeWorkflow(name, target, src) {
+  const id = workflowPlaceholder(target.name);
+  return node(name, 'executeWorkflow', 1.2, {
+    source: 'database',
+    workflowId: { __rl: true, mode: 'list', value: id, cachedResultName: target.name, cachedResultUrl: `/workflow/${id}` },
+    workflowInputs: {
+      mappingMode: 'defineBelow', value: Object.fromEntries(target.inputs.map((i) => [i.name, `={{ ${src}.${i.name} }}`])),
+      matchingColumns: [], schema: target.inputs.map(inputColumn), attemptToConvertTypes: false, convertFieldsToString: true,
+    },
+    mode: 'once', options: { waitForSubWorkflow: true },
+  });
+}
 
 export const schedule = (name, minutes) => node(name, 'scheduleTrigger', 1.2, { rule: { interval: [{ field: 'minutes', minutesInterval: minutes }] } });
 
 export const errorTrigger = (name) => node(name, 'errorTrigger', 1, {});
 
-export const note = (name, content, height = 200) => ({
-  name, type: 'n8n-nodes-base.stickyNote', typeVersion: 1, parameters: { content, height, width: 420 },
+/**
+ * Sticky note. Without `at.position` it is laid out like a node (graph.mjs); with it, it stays put.
+ * @param {{position?:[number, number], width?:number}} [at]
+ */
+export const note = (name, content, height = 200, at = {}) => ({
+  name, type: 'n8n-nodes-base.stickyNote', typeVersion: 1, parameters: { content, height, width: at.width ?? 420 },
+  ...(at.position ? { position: at.position } : {}),
 });

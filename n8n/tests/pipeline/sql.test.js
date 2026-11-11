@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { ERROR_CODES, MAX_ERROR_LENGTH } from '../../src/pipeline/errors.js';
+import { MAX_SUMMARY_LENGTH } from '../../src/pipeline/node-errors.js';
 import { CLAIM_DRAFT, DISCARD_DRAFT, SELECT_DRAFT } from '../../src/pipeline/sql-approve.js';
-import { INSERT_JOB, LOAD_SETTINGS, MARK_PROCESSING, SELECT_JOBS, SET_STAGE, SWEEP_STUCK, UPDATE_JOB } from '../../src/pipeline/sql.js';
+import {
+  INSERT_JOB, LOAD_SETTINGS, MARK_EMAIL_FAILED, MARK_PROCESSING, MARK_SENT, SELECT_JOBS, SET_STAGE, SWEEP_STUCK, UPDATE_JOB,
+} from '../../src/pipeline/sql.js';
 import { shapeJobs } from '../../src/pipeline/status.js';
 
 /** The SQL is exercised live by the contract suite; these pin the guards that keep it safe. */
@@ -42,6 +46,23 @@ describe('job ledger SQL guards', () => {
     expect(DISCARD_DRAFT).toMatch(/SET status = 'DISCARDED', stage = 'discarded'/);
     expect(DISCARD_DRAFT).toMatch(/AND status = 'DRAFTED'/);
     expect(SELECT_DRAFT).toMatch(/AS fresh/);
+  });
+  it('Deliver Email records the end only for a job still running; the email itself was saved by Mark Sending', () => {
+    for (const sql of [MARK_SENT, MARK_EMAIL_FAILED]) {
+      expect(sql).toMatch(/WHERE job_id = \(\$1::jsonb->>'job_id'\)::uuid AND status IN \('QUEUED', 'PROCESSING'\)/);
+      expect(sql).toContain('completed_at = now()');
+      expect(sql).not.toMatch(/\bsubject\b|\bhtml\b|text_body|callback_status/);
+    }
+    expect(MARK_SENT).toMatch(/SET status = 'SENT', stage = 'sent', stage_at = now\(\), sent_to = \$1::jsonb->>'sent_to'/);
+    expect(MARK_EMAIL_FAILED).toMatch(/SET status = 'FAILED', stage = 'failed', stage_at = now\(\), error_code = 'EMAIL_FAILED'/);
+    expect(MARK_EMAIL_FAILED).not.toContain('sent_to');
+  });
+  it('an EMAIL_FAILED error reads like the other failures: the standard message, then "smtp: " and the server\'s own', () => {
+    expect(MARK_EMAIL_FAILED).toContain(`'${ERROR_CODES.EMAIL_FAILED.message} ' || left('smtp: ' ||`);
+    expect(MARK_EMAIL_FAILED).toContain(`, ${MAX_SUMMARY_LENGTH})`);
+    expect(MARK_EMAIL_FAILED).toContain("'unknown error'");
+    // So the whole text always fits the error column's cap without cutting the server's message.
+    expect(ERROR_CODES.EMAIL_FAILED.message.length + 1 + MAX_SUMMARY_LENGTH).toBeLessThanOrEqual(MAX_ERROR_LENGTH);
   });
   it('job status returns the new fields', () => {
     for (const col of ['stage', 'delivery', 'tone', 'length', 'edit_text', 'issues', 'drafted_at']) expect(SELECT_JOBS).toContain(col);

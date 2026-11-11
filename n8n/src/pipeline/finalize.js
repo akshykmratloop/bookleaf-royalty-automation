@@ -4,11 +4,12 @@ import { formatIssues, toEditText } from './edit.js';
 import { MAX_ERROR_LENGTH } from './errors.js';
 
 /**
- * @typedef {Object} JobUpdate fields for sql.UPDATE_JOB (absent fields keep their value)
- * @property {string} job_id @property {'SENT'|'FAILED'} [status] @property {string} [error_code] @property {string} [error]
+ * @typedef {Object} JobUpdate fields for sql.UPDATE_JOB (absent fields keep their value); a sent job is
+ * recorded by the Deliver Email sub-workflow instead
+ * @property {string} job_id @property {'FAILED'|'DRAFTED'} [status] @property {string} [error_code] @property {string} [error]
  */
 
-/** AI bookkeeping columns shared by the SENT and FAILED rows. */
+/** AI bookkeeping columns, written with a job's email, draft or failure. */
 export function aiColumns(ai) {
   if (!ai) return {};
   return {
@@ -18,18 +19,26 @@ export function aiColumns(ai) {
 }
 
 /**
- * Renders the email (prose from AI, every figure from data) and the row written once it is sent.
- * @param {{ctx:import('./context.js').Context, job:import('./prepare.js').Job, ai:Object}} input
- * @returns {{email:{from:string, to:string, subject:string, html:string, text:string}, update:JobUpdate}}
+ * @typedef {{from:string, to:string, subject:string, html:string, text:string}} Email
+ * @typedef {Object} Delivery the inputs of the "BookLeaf - Deliver Email" sub-workflow
+ * @property {string} job_id @property {Email} email @property {boolean} drill the email_down drill
+ * @property {Object} record more job columns saved with the email (never status, stage, sent_to or the email)
  */
-export function renderForSend({ ctx, job, ai }) {
+
+/**
+ * A send job's email, rendered (prose from AI, every figure from data), for Deliver Email: it saves the
+ * email with the author code and the AI bookkeeping, then sends it to the job's demo inbox.
+ * @param {{ctx:import('./context.js').Context, job:import('./prepare.js').Job, ai:Object}} input
+ * @returns {Delivery}
+ */
+export function deliveryFor({ ctx, job, ai }) {
   const r = renderFor({ ctx, job, ai });
-  const email = { from: senderFor(job.settings), to: job.recipient, subject: r.subject, html: r.html, text: r.text };
-  const update = {
-    job_id: job.job_id, author_code: ctx.bundle.author.code, subject: r.subject, html: r.html, text_body: r.text,
-    sent_to: job.recipient, ...aiColumns(ai),
+  return {
+    job_id: job.job_id,
+    email: { from: senderFor(job.settings), to: job.recipient, subject: r.subject, html: r.html, text: r.text },
+    drill: job.drills.email_down === true,
+    record: { author_code: ctx.bundle.author.code, ...aiColumns(ai) },
   };
-  return { email, update };
 }
 
 /** @param {import('./settings.js').Settings} settings @returns {string} the From line: sender_name <email_from> */
@@ -58,9 +67,6 @@ export function draftUpdate({ ctx, job, ai }) {
     issues: formatIssues(ai.warnings) || null,
   };
 }
-
-/** @param {JobUpdate} update from renderForSend @returns {JobUpdate} */
-export const sentUpdate = (update) => ({ ...update, status: 'SENT' });
 
 /**
  * @param {import('./prepare.js').Job} job @param {import('./errors.js').Failure} f

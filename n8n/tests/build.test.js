@@ -1,25 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { buildWorkflow, WORKFLOW_SOURCES } from '../build.mjs';
+import { WORKFLOW_SOURCES } from '../build.mjs';
 import { CREDENTIALS, credentialRef, placeholderId } from '../workflows-src/lib/credentials.mjs';
 import { LOAD_SETTINGS } from '../src/pipeline/sql.js';
 import { TUNING } from '../workflows-src/lib/tuning.mjs';
 import { payloadFor } from '../../tests/fixtures/payloads.js';
 import { SETTINGS } from './pipeline/settings-fixture.js';
+import { built, nodeOf, ofType, outputsOf, runCode } from './built.js';
 
-const built = Object.fromEntries(await Promise.all(WORKFLOW_SOURCES.map(async (n) => [n, await buildWorkflow(n)])));
-const nodeOf = (wf, name) => built[wf].nodes.find((n) => n.name === name);
-
-/** Runs a built Code node the way n8n does: user code inside a function, n8n globals as parameters. */
-function runCode(node, globals) {
-  const names = Object.keys(globals);
-  // eslint-disable-next-line no-new-func
-  return new Function(...names, node.parameters.jsCode)(...names.map((k) => globals[k]));
-}
-const webhooksOf = (wf) => built[wf].nodes.filter((n) => n.type === 'n8n-nodes-base.webhook');
-const ofType = (wf, type) => built[wf].nodes.filter((n) => n.type === `n8n-nodes-base.${type}`);
-/** `$('Node')` as n8n gives it to a Code node: that node's first item. */
-const outputsOf = (outputs) => (name) => ({ first: () => ({ json: outputs[name] }) });
+const webhooksOf = (wf) => ofType(wf, 'webhook');
 
 describe('built workflows', () => {
   it('are committed and up to date', () => {
@@ -78,9 +67,9 @@ describe('built workflows', () => {
     }
   });
   it('Send Email takes the From line from the settings; no deploy-time sender placeholder is left', () => {
-    for (const wf of ['royalty-summary', 'approve-draft']) {
-      for (const n of ofType(wf, 'emailSend')) expect(n.parameters.fromEmail, n.name).toMatch(/^=\{\{ [^|]+\.email\.from \}\}$/);
-    }
+    const sends = WORKFLOW_SOURCES.flatMap((wf) => ofType(wf, 'emailSend'));
+    expect(sends.length).toBeGreaterThan(0);
+    for (const n of sends) expect(n.parameters.fromEmail, n.name).toMatch(/^=\{\{ [^|]+\.email\.from \}\}$/);
     expect(JSON.stringify(built)).not.toContain('__SMTP_FROM__');
   });
   it('the sweeper runs every minute and saves only failed runs', () => {

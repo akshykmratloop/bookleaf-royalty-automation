@@ -1,5 +1,5 @@
 /** Entry points for the approve-draft workflow's Code nodes. All logic lives in n8n/src/pipeline. */
-import { approvedFailedUpdate, approvedSentUpdate, claimOutcome, decideApproval, discardOutcome } from '../../src/pipeline/approve.js';
+import { claimOutcome, decideApproval, discardOutcome } from '../../src/pipeline/approve.js';
 import { validateApprove } from '../../src/pipeline/approve-request.js';
 import { errorBody } from '../../src/pipeline/errors.js';
 import { readSettings } from '../../src/pipeline/settings.js';
@@ -16,14 +16,10 @@ export function parseApprove({ body, settings }) {
   return item({ route: 1, job_id: r.value.job_id, request: r.value, settings: read.settings, params: JSON.stringify({ job_id: r.value.job_id }) });
 }
 
-/** routes: 0 answer now, 1 discard, 2 claim and send (approve.js APPROVE_ROUTES). */
+/** routes: 0 answer now, 1 discard, 2 claim, then send through Deliver Email (approve.js APPROVE_ROUTES). */
 export const decide = ({ request, row, settings }) => item(decideApproval({ request, row, settings }));
 
 export const discarded = ({ row, jobId }) => item(discardOutcome({ row, jobId }));
 
 /** route 0 = nothing claimed (another click won), 1 = claimed: answer, then send. */
 export const claimed = ({ row, decided }) => item(claimOutcome({ row, decided }));
-
-export const approvedSent = ({ jobId, email }) => item({ update: approvedSentUpdate(jobId, email) });
-
-export const approvedFailed = ({ jobId, email, error }) => item({ update: approvedFailedUpdate(jobId, email, error) });

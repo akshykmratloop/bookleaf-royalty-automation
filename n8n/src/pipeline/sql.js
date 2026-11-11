@@ -1,8 +1,15 @@
+import { ERROR_CODES } from './errors.js';
+import { MAX_SUMMARY_LENGTH } from './node-errors.js';
+
 /**
  * Every query takes ONE parameter: a JSON object ($1::jsonb). n8n's Postgres node binds a single
  * expression as a single value, so text with commas (HTML, error messages) never splits.
  */
 const P = '$1::jsonb';
+/** @param {string} text @returns {string} a SQL string literal */
+const literal = (text) => `'${text.replaceAll("'", "''")}'`;
+/** Only a job that is still running may end here: a finished one (SENT, FAILED, DRAFTED, DISCARDED) keeps its verdict. */
+const RUNNING_JOB = `WHERE job_id = (${P}->>'job_id')::uuid AND status IN ('QUEUED', 'PROCESSING')`;
 
 /** The "Load Settings" nodes: every bookleaf_settings row as one JSON object (checked by settings.readSettings). */
 export const LOAD_SETTINGS = 'SELECT jsonb_object_agg(key, value) AS settings FROM bookleaf_settings';
@@ -73,6 +80,28 @@ FROM jsonb_to_record(${P}) AS p(
   cost_usd numeric, sections jsonb, facts jsonb, titles jsonb, edit_text text, issues text)
 WHERE j.job_id = p.job_id AND j.status IN ('QUEUED', 'PROCESSING')
 RETURNING j.job_id::text AS job_id, j.status, j.stage, j.error_code`;
+
+/**
+ * Deliver Email, after the SMTP server took the email ({job_id, sent_to}). The email itself was saved
+ * by Mark Sending (UPDATE_JOB at stage sending) before the send.
+ */
+export const MARK_SENT = `UPDATE royalty_jobs SET status = 'SENT', stage = 'sent', stage_at = now(), sent_to = ${P}->>'sent_to',
+  completed_at = now(), updated_at = now()
+${RUNNING_JOB}
+RETURNING job_id::text AS job_id, status, stage`;
+
+/**
+ * Deliver Email, when the SMTP server refused the email or could not be reached ({job_id, error}:
+ * the Send Email node's message). The error reads like nodeErrorSummary's: the standard message, then
+ * "smtp: " and the server's own text on one line, at most MAX_SUMMARY_LENGTH characters. The saved
+ * email stays for the log; sent_to stays empty.
+ */
+export const MARK_EMAIL_FAILED = `UPDATE royalty_jobs SET status = 'FAILED', stage = 'failed', stage_at = now(), error_code = 'EMAIL_FAILED',
+  error = ${literal(`${ERROR_CODES.EMAIL_FAILED.message} `)} || left('smtp: ' ||
+    coalesce(nullif(btrim(regexp_replace(${P}->>'error', '\\s+', ' ', 'g')), ''), 'unknown error'), ${MAX_SUMMARY_LENGTH}),
+  completed_at = now(), updated_at = now()
+${RUNNING_JOB}
+RETURNING job_id::text AS job_id, status, stage, error_code`;
 
 export const SELECT_JOBS = `SELECT job_id::text AS job_id, log_id, batch_id, author_id, author_code, mode, status, error_code, error,
   subject, sent_to, figures_verified, ai_attempts, provider, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd,

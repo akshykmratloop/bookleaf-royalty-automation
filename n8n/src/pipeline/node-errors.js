@@ -1,5 +1,6 @@
 const SECRET_LIKE = /\b(sk-[A-Za-z0-9_-]{8,}|sk-ant-[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._-]{8,})/g;
-const MAX = 300;
+/** Longest one-line summary of a node error (label included). */
+export const MAX_SUMMARY_LENGTH = 300;
 
 /** @param {string} s @returns {unknown} parsed JSON, or undefined when s is not JSON (a normal case, not an error) */
 function parseJsonOrUndefined(s) {
@@ -32,5 +33,5 @@ export function nodeErrorSummary(item, label) {
   const code = e.httpCode && !message.startsWith(String(e.httpCode)) ? String(e.httpCode) : '';
   const parts = [code, message, e.description].filter((p) => typeof p === 'string' && p.trim());
   const text = parts.join(' - ').replace(SECRET_LIKE, '[redacted]').replace(/\s+/g, ' ').trim();
-  return `${label}: ${text || 'unknown error'}`.slice(0, MAX);
+  return `${label}: ${text || 'unknown error'}`.slice(0, MAX_SUMMARY_LENGTH);
 }
