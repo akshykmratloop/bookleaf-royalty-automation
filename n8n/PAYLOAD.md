@@ -13,9 +13,12 @@ wrong!` (not JSON) before the workflow starts: no execution, no database work.
 **The key.** One key, `BOOKLEAF_WEBHOOK_KEY` in `.secrets/webhook.env` (generated on the first
 deploy; 32–256 printable characters, no spaces). `n8n/deploy.mjs` writes it into the n8n credential
 **BookLeaf Webhook Key** (Header Auth on `X-BookLeaf-Key`, usable by no HTTP Request node). n8n
-compares it as a plain string (not constant-time). The request headers, key included, stay in the
-saved execution data of royalty-summary and approve-draft, and of failed job-status runs (job-status
-keeps no successful run). Only n8n users can open them, and n8n deletes executions after 14 days
+compares it as a plain string (not constant-time). The three webhook workflows keep no successful
+run (`saveDataSuccessExecution: none`), because a saved run holds the request headers, key included.
+Failed runs are still saved, because the error handler and the person fixing the failure need them:
+**the key stays in the saved data of a failed royalty-summary, approve-draft or job-status run**. The
+sub-workflows Write Draft and Deliver Email get no headers and keep their successful runs. Only n8n
+users can open saved runs, and n8n deletes executions after 14 days
 (`EXECUTIONS_DATA_MAX_AGE` 336 hours in both compose files). n8n's own execution-data redaction (the
 workflow setting `redactionPolicy`) needs an Enterprise licence: a Community instance drops the
 setting when the workflow is saved, so the header cannot be redacted there.

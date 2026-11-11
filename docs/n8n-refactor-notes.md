@@ -935,3 +935,28 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
 - **Deviation:** the refusal is synchronous (422, no job), the same path as `NO_RECIPIENT`, not a job that ends FAILED:
   the recipient is decided in Validate Body before a job exists, so refusing there means no job row, no AI call and no
   email at all.
+
+## Security fix 2 — no webhook workflow saves a successful run (MEDIUM: the key was kept in execution data)
+
+- **Changed:** Royalty Summary and Approve Draft now have `saveDataSuccessExecution: 'none'`, like Job Status since
+  step 9a. A saved run holds the webhook's request headers, `X-BookLeaf-Key` included, so none of the three webhook
+  workflows keeps a successful run any more. Failed runs are still saved (`saveDataErrorExecution: 'all'`): the
+  error handler and the person fixing a failure need them.
+- **Sub-workflows checked:** Write Draft gets `job` (Build Context's job, made from the body), `ctx`, `request` (the
+  AI request bodies), `attempt` and `previous`; Deliver Email gets `job_id`, `email`, `drill` and `record`. No input
+  comes from the webhook node or its headers (a sub-workflow run holds only its own inputs), so both keep saving
+  their successful runs: each AI call and each send stays visible in n8n.
+- **Remaining exposure (documented in `n8n/PAYLOAD.md` and `docs/integration.md`):** the key is still in the saved
+  data of a failed webhook run (for example the crash drill, or a bug after the 202). Only n8n users can open it, and
+  n8n deletes executions after 14 days. n8n's redaction needs an Enterprise licence (step 9a).
+- **Tests (written first, RED):** build tests: the three webhook workflows save only failed runs; Write Draft and
+  Deliver Email save both; the four Execute Workflow nodes (Write Draft, Rewrite Draft, both Deliver Email) pass no
+  `headers` and nothing from a webhook node. Contract 01: with the right key, a royalty-summary and an approve-draft
+  probe (both 400) leave no saved run with the probe's marker. On the old deploy it failed as expected (executions
+  5847 and 5848 held the marker); after the deploy it passed. Contract 01's old "control" (an approve-draft success
+  was found) no longer applies; the search is now shown to work in contract 06, which finds the saved failed
+  Royalty Summary run of its crash drill by the request's note.
+- **Gates:** npm test 587/587, build --check clean, test:db 50/50, contracts 44/44.
+- **Sizes:** unchanged (80 working nodes, 13 Code nodes, 165.1 KB).
+- **Release engineer:** nothing extra; the setting travels with the workflows. In production a successful Bubble
+  request no longer appears in n8n's executions list (look up the job in `royalty_jobs` and its sub-workflow runs).

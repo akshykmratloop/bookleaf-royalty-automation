@@ -23,16 +23,22 @@ describe('webhook authentication (n8n Header Auth: a missing or wrong key → 40
       expect(await executionsMentioning(marker, before)).toEqual([]);
     });
   }
-  it('control: with the right key the same probe runs the workflow and its execution is found', async () => {
-    const marker = `auth-probe-${randomUUID()}`;
-    const before = await newestExecutionId();
-    expect((await approve({ job_id: marker, action: 'discard' })).status).toBe(400);
-    await settle();
-    expect(await executionsMentioning(marker, before)).toHaveLength(1);
-  });
 });
 
+/**
+ * A successful run of a webhook workflow would keep the request headers (the key included) in n8n's saved
+ * executions, so none of the three keeps one. The search itself is shown to work in contract 06, which
+ * finds the saved failed run of a crash drill (failed runs are still saved, for the error handler).
+ */
 describe('saved executions', () => {
+  it('with the right key royalty-summary and approve-draft run (400 answers) and keep no successful run', async () => {
+    const marker = `save-probe-${randomUUID()}`;
+    const before = await newestExecutionId();
+    expect((await enqueue({ marker })).status).toBe(400);
+    expect((await approve({ job_id: marker, action: 'discard' })).status).toBe(400);
+    await settle();
+    expect(await executionsMentioning(marker, before)).toEqual([]);
+  });
   it('job-status keeps no successful run (Bubble polls it every few seconds; each run would hold the request headers)', async () => {
     const marker = `poll-probe-${randomUUID()}`;
     const before = await newestExecutionId();

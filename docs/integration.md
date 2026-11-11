@@ -111,9 +111,11 @@ Each author is a separate job. One failure never stops the others.
 so rotate when no one is sending.
 
 The key is compared as a plain string, not in constant time. It does not appear in n8n's logs at
-the default log level. The request headers (key included) are kept in the saved executions of
-royalty-summary and approve-draft (job-status saves no successful run), which only n8n users can
-open and n8n deletes after 14 days. n8n's execution-data redaction needs an Enterprise licence.
+the default log level. The three webhook workflows save no successful run, because a saved run
+holds the request headers (key included). Failed runs are still saved for the error handler, so the
+key remains in a failed run's data, which only n8n users can open and n8n deletes after 14 days.
+n8n's execution-data redaction needs an Enterprise licence. Write Draft and Deliver Email get no
+headers and keep their successful runs, so each AI call and each send stays visible in n8n.
 
 ## Idempotency (a double click must not send two emails)
 

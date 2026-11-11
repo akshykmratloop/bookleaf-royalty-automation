@@ -110,7 +110,11 @@ const sections = [
   { title: 'Record', text: 'Drafts and every failure end here.', nodes: ['Record Result'] },
 ];
 
+/**
+ * Only failed runs are saved (the error handler needs them): a saved run holds the webhook's request
+ * headers, X-BookLeaf-Key included. Write Draft and Deliver Email get no headers and keep their runs.
+ */
 export default {
   name: 'BookLeaf - Royalty Summary', nodes, edges, grid, sections, about: ABOUT, errorWorkflow: 'BookLeaf - Error Handler',
-  settings: { executionTimeout: TUNING.runTimeoutSeconds },
+  settings: { executionTimeout: TUNING.runTimeoutSeconds, saveDataSuccessExecution: 'none' },
 };

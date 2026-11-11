@@ -1387,7 +1387,7 @@
   "settings": {
     "saveManualExecutions": true,
     "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
+    "saveDataSuccessExecution": "none",
     "errorWorkflow": "5xCSXfteGFFG7fL8",
     "executionOrder": "v1",
     "callerPolicy": "workflowsFromSameOwner",

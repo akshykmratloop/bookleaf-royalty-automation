@@ -76,7 +76,19 @@ describe('built workflows', () => {
     expect(TUNING.sweepEveryMinutes).toBe(1);
     expect(trigger.parameters.rule.interval).toEqual([{ field: 'minutes', minutesInterval: TUNING.sweepEveryMinutes }]);
     expect(built.sweeper.settings).toMatchObject({ saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all' });
-    expect(built['royalty-summary'].settings.saveDataSuccessExecution).toBe('all');
+  });
+  it('the webhook workflows save only failed runs: a successful run would keep the request headers, X-BookLeaf-Key included', () => {
+    for (const wf of ['royalty-summary', 'approve-draft', 'job-status'])
+      expect(built[wf].settings, wf).toMatchObject({ saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all' });
+  });
+  it('the sub-workflows get no request headers, so they keep saving their successful runs (visible per call)', () => {
+    for (const wf of ['write-draft', 'deliver-email'])
+      expect(built[wf].settings, wf).toMatchObject({ saveDataSuccessExecution: 'all', saveDataErrorExecution: 'all' });
+    const calls = Object.keys(built).flatMap((wf) => ofType(wf, 'executeWorkflow').map((n) => [`${wf} / ${n.name}`, JSON.stringify(n.parameters)]));
+    expect(calls.map(([where]) => where).sort()).toEqual([
+      'approve-draft / Deliver Email', 'royalty-summary / Deliver Email', 'royalty-summary / Rewrite Draft', 'royalty-summary / Write Draft',
+    ]);
+    for (const [where, params] of calls) expect(params, where).not.toMatch(/headers|Webhook/);
   });
   it('job-status (polled every few seconds) saves only failed runs, so its successful polls and their headers are not kept', () => {
     expect(built['job-status'].settings).toMatchObject({ saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all' });

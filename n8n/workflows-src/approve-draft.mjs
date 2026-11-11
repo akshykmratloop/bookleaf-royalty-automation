@@ -78,4 +78,8 @@ const sections = [
   { title: 'Discard or check', text: 'Closes the draft, or answers a preview.', nodes: ['Discard Draft', 'Respond Discard', 'Respond Answer', 'Respond 500'] },
 ];
 
-export default { name: 'BookLeaf - Approve Draft', nodes, edges, grid, sections, about: ABOUT, errorWorkflow: 'BookLeaf - Error Handler' };
+/** Only failed runs are saved: a saved run holds the request headers, X-BookLeaf-Key included (as in Royalty Summary). */
+export default {
+  name: 'BookLeaf - Approve Draft', nodes, edges, grid, sections, about: ABOUT, errorWorkflow: 'BookLeaf - Error Handler',
+  settings: { saveDataSuccessExecution: 'none' },
+};
