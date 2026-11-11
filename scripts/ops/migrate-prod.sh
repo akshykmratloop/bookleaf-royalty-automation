@@ -21,7 +21,7 @@ python3 - "$B64" > "$PARAMS" <<'PY'
 import json, sys
 b64 = sys.argv[1]
 cmds = [
-  "set -euo pipefail", "cd /opt/n8n", "mkdir -p /opt/n8n/backups",
+  "set -eu", "cd /opt/n8n", "mkdir -p /opt/n8n/backups",
   "TS=$(date +%Y%m%d-%H%M%S)",
   "docker compose exec -T postgres pg_dump -U n8n -d bookleaf -Fc > /opt/n8n/backups/bookleaf-$TS.dump",
   "ls -la /opt/n8n/backups | tail -3",
