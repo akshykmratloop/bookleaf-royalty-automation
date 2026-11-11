@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS royalty_jobs (
   author_id         text NOT NULL,        -- Bubble Author unique id
   author_code       text,
   mode              text NOT NULL CHECK (mode IN ('single', 'bulk')),
-  status            text NOT NULL CHECK (status IN ('QUEUED', 'PROCESSING', 'SENT', 'FAILED')),
+  status            text NOT NULL CONSTRAINT royalty_jobs_status_check
+                      CHECK (status IN ('QUEUED', 'PROCESSING', 'SENT', 'FAILED', 'DRAFTED', 'DISCARDED')),
   error_code        text,
   error             text,
   subject           text,
@@ -32,7 +33,23 @@ CREATE TABLE IF NOT EXISTS royalty_jobs (
   created_at        timestamptz NOT NULL DEFAULT now(),
   updated_at        timestamptz NOT NULL DEFAULT now(),
   completed_at      timestamptz,
-  callback_status   text CHECK (callback_status IN ('NOT_NEEDED', 'PENDING', 'DONE', 'FAILED'))
+  callback_status   text CHECK (callback_status IN ('NOT_NEEDED', 'PENDING', 'DONE', 'FAILED')),
+  -- Live progress and drafts (same columns as infra/db/migrations/02-drafts-stages.sql).
+  stage             text,                 -- queued, reading_data, writing, checking, rewriting, sending, sent, drafted, failed, discarded
+  stage_at          timestamptz,
+  delivery          text,                 -- send | draft
+  tone              text,                 -- warm | formal | concise
+  length            text,                 -- short | standard | detailed
+  note              text,                 -- admin style note
+  sign_off          text,                 -- signature name ('' = brand default)
+  recipient         text,                 -- demo inbox chosen at enqueue
+  drills            jsonb,
+  sections          jsonb,                -- AI sections of a draft
+  facts             jsonb,                -- verified facts the draft was checked against
+  titles            jsonb,
+  edit_text         text,                 -- draft prose as editable plain text
+  issues            text,                 -- checker warnings, one per line
+  drafted_at        timestamptz
 );
 
 CREATE INDEX IF NOT EXISTS royalty_jobs_status_idx ON royalty_jobs (status, updated_at);
