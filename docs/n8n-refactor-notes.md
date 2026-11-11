@@ -683,3 +683,28 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   (60): `max_sends_per_hour` is now **300 on the local database only** (one UPDATE of `bookleaf_settings`), so
   repeated local runs pass. Production keeps its own value.
 - **Sizes:** unchanged (78 working nodes, 11 Code nodes, 165.4 KB).
+
+## Fix 5 — the AI worst case is checked against stuck_job_minutes; n8n ends a run itself (MEDIUM)
+
+- **Changed:** new `n8n/src/pipeline/settings-timing.js`: `worstCaseAiMs(settings)` = 4 AI calls (draft and rewrite
+  × two providers) × ((`aiRetries` + 1) × `ai_timeout_ms` + `aiRetries` × the 10 s wait cap) = **400 s** with the
+  defaults. `readSettings` now refuses settings (500 INTERNAL, "Server settings do not fit together: …") unless that
+  worst case plus a 60 s margin fits within both `stuck_job_minutes` and the run timeout. New `TUNING.runTimeoutSeconds`
+  = **600**, set as n8n's `executionTimeout` on Royalty Summary and Write Draft, so n8n stops a run that is still
+  going (and stops paying for AI calls). With the defaults the largest `ai_timeout_ms` that fits is 62 500 ms; the
+  two setting descriptions say so (seed regenerated into 01 and 03; stored rows keep their old description text).
+- **What a timed-out run does (read in n8n 2.45.4's source, not exercised live: it needs a 10-minute run):**
+  `workflow-runner.js` stops the execution at `executionTimeout`; the stop is recorded as the run's error, so
+  `execute-error-workflow.js` starts the Error Handler, which fails the job (`INTERNAL`, or `EMAIL_UNCERTAIN` at stage
+  `sending`). The sweeper remains the safety net.
+- **Tests (written first, RED):** `n8n/tests/pipeline/settings-timing.test.js` (the formula, the defaults fit, a
+  120 s AI timeout refused with stuck 10 and with stuck 60 because of the run timeout, stuck 5 refused); build test
+  for `executionTimeout` on both workflows.
+- **Gates:** npm test 546/546, build --check clean, contracts 41/41. One run of the suite before that had one
+  failure: the `primary_down` job's OpenAI draft wrote a bare "2025" twice and the fact checker failed it
+  (`AI_FACT_CHECK_FAILED`), an AI-output flake unrelated to this change; the rerun passed.
+- **Deviations:** none from the inspector's fix; the run timeout is build-time (n8n workflow settings cannot be
+  expressions), so raising `ai_timeout_ms` past 62.5 s needs `stuck_job_minutes` and `TUNING.runTimeoutSeconds` raised
+  together (rebuild and redeploy).
+- **Release engineer:** production's stored `ai_timeout_ms` and `stuck_job_minutes` must fit (the defaults do). If
+  production holds other values, check them first: a misfit makes every request answer 500 until fixed.

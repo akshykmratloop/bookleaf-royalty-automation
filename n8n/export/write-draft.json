@@ -532,7 +532,8 @@
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
     "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner"
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 600
   },
   "pinData": {}
 }

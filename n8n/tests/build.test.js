@@ -180,3 +180,10 @@ describe('expressions', () => {
     expect(bad).toEqual([]);
   });
 });
+
+describe('run time limit', () => {
+  it('Royalty Summary and Write Draft end themselves after TUNING.runTimeoutSeconds (n8n executionTimeout)', () => {
+    for (const wf of ['royalty-summary', 'write-draft']) expect(built[wf].settings.executionTimeout, wf).toBe(TUNING.runTimeoutSeconds);
+    expect(TUNING.runTimeoutSeconds).toBe(600);
+  });
+});

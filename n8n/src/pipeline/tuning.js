@@ -18,6 +18,11 @@ export const TUNING = Object.freeze({
    */
   dbRetries: 2,
   dbRetryWaitMs: 1000,
+  /**
+   * n8n's executionTimeout for Royalty Summary and Write Draft, in seconds: n8n ends a run that is still
+   * going, so it stops paying for AI calls. readSettings checks the AI worst case fits inside it.
+   */
+  runTimeoutSeconds: 600,
   /** The sweeper's cadence: every minute, so a stuck job fails close to stuck_job_minutes (lead's decision). */
   sweepEveryMinutes: 1,
 });

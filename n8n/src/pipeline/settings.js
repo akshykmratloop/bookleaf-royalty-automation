@@ -1,6 +1,7 @@
 import { isRealDate } from '../dates.js';
 import { isEmail } from '../validate-fields.js';
 import { failure } from './errors.js';
+import { timingProblem } from './settings-timing.js';
 
 /**
  * The server settings: one row each in the `bookleaf_settings` table of the `bookleaf` database.
@@ -98,7 +99,7 @@ export const SETTINGS_SCHEMA = deepFreeze({
   },
   ai_timeout_ms: {
     default: 45000, check: whole(5000, 120000),
-    description: 'Time limit for one AI request, in milliseconds.',
+    description: 'Time limit for one AI request, in milliseconds. All AI calls of a run at worst (draft and rewrite, two providers, two tries each) plus 60 s must end within stuck_job_minutes and the 600 s run timeout; 62500 is the most that fits.',
   },
   model_prices: {
     default: {
@@ -122,7 +123,7 @@ export const SETTINGS_SCHEMA = deepFreeze({
   },
   stuck_job_minutes: {
     default: 10, check: whole(5, 240),
-    description: 'A job still running after this many minutes is stopped by the sweeper and marked failed.',
+    description: 'A job still running after this many minutes is stopped by the sweeper and marked failed. Must leave room for the AI worst case (see ai_timeout_ms).',
   },
   alert_email: {
     default: '', check: emailOrEmpty, perEnvironment: true,
@@ -155,7 +156,9 @@ export function settingProblem(key, value) {
 /**
  * Checks the "Load Settings" row (every bookleaf_settings row as one object) before a run uses it.
  * Every known setting must be there and valid; a key this code does not know is ignored, so a newer
- * migration never breaks older workflows. Problems name the setting, never its value.
+ * migration never breaks older workflows. Problems name the setting, never its value (the timing check
+ * names the AI timeout and stuck_job_minutes, which are not secret). The AI worst case must fit before
+ * stuck_job_minutes and the run timeout (settings-timing.js).
  * @param {unknown} stored @returns {{ok:true, settings:Settings}|import('./errors.js').Failure} INTERNAL (500) when unusable
  */
 export function readSettings(stored) {
@@ -163,5 +166,8 @@ export function readSettings(stored) {
   const keys = Object.keys(SETTINGS_SCHEMA);
   const problems = keys.map((k) => (Object.hasOwn(stored, k) ? settingProblem(k, stored[k]) : `${k} is missing`)).filter(Boolean);
   if (problems.length) return failure('INTERNAL', `Server settings are invalid: ${problems.join('; ')}.`);
-  return { ok: true, settings: Object.fromEntries(keys.map((k) => [k, stored[k]])) };
+  const settings = Object.fromEntries(keys.map((k) => [k, stored[k]]));
+  const timing = timingProblem(settings);
+  if (timing) return failure('INTERNAL', `Server settings do not fit together: ${timing}.`);
+  return { ok: true, settings };
 }

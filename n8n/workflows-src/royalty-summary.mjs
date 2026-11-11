@@ -1,6 +1,7 @@
 import { AI_OUTCOMES } from '../src/pipeline/after-ai.js';
 import { errorBody, failure } from '../src/pipeline/errors.js';
 import { ENQUEUE_JOB, LOAD_SETTINGS, MARK_PROCESSING, SET_STAGE, UPDATE_JOB } from '../src/pipeline/sql.js';
+import { TUNING } from '../src/pipeline/tuning.js';
 import { DELIVER_EMAIL } from './deliver-email.mjs';
 import { executeWorkflow } from './lib/flow-nodes.mjs';
 import { code, ifTrue, IS_TRUE, pg, respond, respondDatabaseDown, respondFixed, stopAndError, switchRules, webhook, withNote } from './lib/nodes.mjs';
@@ -109,4 +110,7 @@ const sections = [
   { title: 'Record', text: 'Drafts and every failure end here.', nodes: ['Record Result'] },
 ];
 
-export default { name: 'BookLeaf - Royalty Summary', nodes, edges, grid, sections, about: ABOUT, errorWorkflow: 'BookLeaf - Error Handler' };
+export default {
+  name: 'BookLeaf - Royalty Summary', nodes, edges, grid, sections, about: ABOUT, errorWorkflow: 'BookLeaf - Error Handler',
+  settings: { executionTimeout: TUNING.runTimeoutSeconds },
+};

@@ -77,4 +77,4 @@ const sections = [
   { title: 'Record', text: 'Neither provider answered.', nodes: ['AI Failed'] },
 ];
 
-export default { name: WRITE_DRAFT.name, nodes, edges, grid, sections, about: ABOUT };
+export default { name: WRITE_DRAFT.name, nodes, edges, grid, sections, about: ABOUT, settings: { executionTimeout: TUNING.runTimeoutSeconds } };
