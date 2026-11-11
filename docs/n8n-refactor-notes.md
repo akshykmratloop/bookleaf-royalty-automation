@@ -797,3 +797,5 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   matches the local stack, read-only, no contract step and no secrets; `pgCommand` picks docker or direct and
   refuses an unknown value.
 - **Gates:** npm test 564/564, build --check clean, test:db 47/47, contracts 41/41.
+- **First run on GitHub:** green in 1 m 11 s (unit 43 files, ledger SQL 7 files on Postgres 16.15). It warned that
+  `actions/checkout@v4` and `actions/setup-node@v4` run on the deprecated Node 20, so both moved to `@v5`.
