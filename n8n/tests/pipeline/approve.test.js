@@ -1,16 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { afterAi } from '../../src/pipeline/after-ai.js';
-import { APPROVE_ACTIONS, decideApproval } from '../../src/pipeline/approve.js';
+import { APPROVE_ACTIONS, decideApproval, editCheck } from '../../src/pipeline/approve.js';
 import { approveResponse, validateApprove } from '../../src/pipeline/approve-request.js';
 import { buildContext } from '../../src/pipeline/context.js';
 import { draftUpdate } from '../../src/pipeline/finalize.js';
-import { prepareJob } from '../../src/pipeline/prepare.js';
-import { fixedRandom, NOW, SETTINGS } from './settings-fixture.js';
-import { payloadFor } from './fixtures.js';
+import { queuedJob } from './job-fixture.js';
+import { SETTINGS } from './settings-fixture.js';
 import { anthropicOk } from './ai-fixtures.js';
 
 const ID = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
-const job = prepareJob(payloadFor('AUTH002', { delivery: 'draft', sign_off: 'Anita Rao' }), SETTINGS, NOW, fixedRandom).job;
+const job = queuedJob('AUTH002', { delivery: 'draft', sign_off: 'Anita Rao' });
 const ctx = buildContext(job).ctx;
 const ai = afterAi({ response: anthropicOk(), ctx, job, attempt: 1 }).ai;
 const draft = draftUpdate({ ctx, job, ai });
@@ -20,7 +19,21 @@ const row = (over = {}) => ({
   recipient: job.recipient, sections: draft.sections, facts: draft.facts, titles: draft.titles, drills: job.drills, fresh: true, ...over,
 });
 const req = (over = {}) => ({ job_id: ID, action: 'check', subject: draft.subject, body: draft.edit_text, ...over });
-const decide = (r, rw = row(), settings = SETTINGS) => decideApproval({ request: req(r), row: rw, settings, executionId: '512' });
+/** Check Edit, then Decide, as the two nodes run them. */
+const decide = (r, rw = row(), settings = SETTINGS) => {
+  const request = req(r);
+  return decideApproval({ request, row: rw, settings, executionId: '512', check: editCheck({ request, row: rw }) });
+};
+
+describe('editCheck (the Check Edit node)', () => {
+  it('runs the fact checker only for a fresh draft that is checked or sent', () => {
+    expect(editCheck({ request: req(), row: row() })).toMatchObject({ passed: true, words: expect.any(Number), parsed: { marker: true } });
+    expect(editCheck({ request: req({ action: 'send' }), row: row() })).toMatchObject({ passed: true });
+    for (const [r, rw] of [[{ action: 'discard' }, row()], [{}, row({ fresh: false })], [{}, row({ status: 'SENT' })], [{}, {}]]) {
+      expect(editCheck({ request: req(r), row: rw }), JSON.stringify(r)).toBeNull();
+    }
+  });
+});
 
 describe('draftUpdate', () => {
   it('stores a DRAFTED row with sections, facts, titles and editable text', () => {

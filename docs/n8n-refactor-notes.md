@@ -748,3 +748,19 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   165 KB, per node 36 → 35 KB.
 - **Gates:** npm test 555/555, build --check clean, test:db 43/43, contracts 41/41.
 - **Sizes:** 12 Code nodes, 172.7 → **160.6 KB**.
+
+## Fix 7b — Read Answer apart from Check Draft; Check Edit apart from Decide (HIGH, part 3 of 4)
+
+- **Changed:** `afterAi` is now two steps, each its own Code node in Write Draft: **Read Answer** (`readAnswer`: which
+  provider answered, its sections, usage and cost; needs no context; 7.5 KB) and **Check Draft** (`checkAnswer`: the
+  fact check and the pass / rewrite / fail decision; 34.3 → 28.0 KB). `afterAi` stays as their composition for the
+  tests and the callers that hold a whole answer. In Approve Draft, **Check Edit** (`editCheck`: the same fact checker
+  over the edited text, only for a fresh draft that is checked or sent; 20.7 KB) now runs before **Decide** (31.8 →
+  13.4 KB), which only renders and works out the answers. The approve pipeline test used `fixedRandom`, removed in
+  fix 1 (the import came back `undefined`); it now uses `queuedJob`.
+- **Tests (written first, RED):** `readAnswer` + `checkAnswer` equal `afterAi` for a pass, a rewrite and an unreadable
+  answer; Read Answer carries no checker and Check Draft no provider parser; `editCheck` runs only when needed;
+  wiring and node counts; per-node budget 35 → **29 KB**.
+- **Gates:** npm test 559/559, build --check clean, contracts 41/41.
+- **Sizes:** working nodes 79 → 81 (write-draft 10, approve-draft 21); Code 12 → 14 nodes, 164.2 KB. Largest now:
+  Check Draft 28.0, Build Context 27.0, Check Edit 20.7, Validate Body 18.1 KB (was 34.9 / 35.0 / 32.7 / 29.8).

@@ -99,9 +99,11 @@ describe('approve-draft → Deliver Email', () => {
     recipient: draftJob.recipient, sections: draft.sections, facts: draft.facts, titles: draft.titles, drills: draftJob.drills, fresh: true, ...over,
   });
   /** Decide's item for a send, run through the built Code node. */
-  const decided = (r) => runCode(nodeOf('approve-draft', 'Decide'), {
-    $json: r, $execution: { id: '77' }, $: outputsOf({ 'Parse Request': { request: { job_id: ID, action: 'send', subject: 'Edited', body: draft.edit_text }, settings: SETTINGS } }),
-  })[0].json;
+  const decided = (r) => {
+    const $ = outputsOf({ 'Parse Request': { request: { job_id: ID, action: 'send', subject: 'Edited', body: draft.edit_text }, settings: SETTINGS }, 'Load Draft': r });
+    const checked = runCode(nodeOf('approve-draft', 'Check Edit'), { $json: r, $ })[0].json;
+    return runCode(nodeOf('approve-draft', 'Decide'), { $json: checked, $execution: { id: '77' }, $ })[0].json;
+  };
 
   it('runs only after the draft is claimed and the webhook is answered', () => {
     expect(targets('approve-draft', 'Claimed?', 0)).toEqual(['Respond Sending']);

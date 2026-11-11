@@ -32,9 +32,17 @@ describe('Write Draft sub-workflow', () => {
     expect(WRITE_DRAFT.inputs.map((i) => i.name)).toEqual(['job', 'ctx', 'request', 'attempt', 'previous']);
     expect(built[WF].settings).not.toHaveProperty('errorWorkflow');
   });
-  it('has one copy of each AI node and of the fact check', () => {
+  it('has one copy of each AI node, of the answer reader and of the fact check', () => {
     expect(ofType(WF, 'httpRequest').map((n) => n.name)).toEqual(['Call Anthropic', 'Call OpenAI (fallback)']);
-    expect(ofType(WF, 'code').map((n) => n.name)).toEqual(['Check Draft', 'AI Failed']);
+    expect(ofType(WF, 'code').map((n) => n.name)).toEqual(['Read Answer', 'Check Draft', 'AI Failed']);
+  });
+  it('Read Answer understands the providers; Check Draft only checks: neither carries the other\'s code', () => {
+    const js = (name) => nodeOf(WF, name).parameters.jsCode;
+    expect(js('Read Answer')).toMatch(/stop_reason/);
+    expect(js('Read Answer')).not.toMatch(/function checkEmail/);
+    expect(js('Check Draft')).toMatch(/function checkEmail/);
+    expect(js('Check Draft')).not.toMatch(/stop_reason|output_text/);
+    expect(targets(WF, 'Read Answer')).toEqual(['Check Draft']);
   });
   it('the HTTP nodes never retry on their own: they return the full answer, timeouts go to the error output', () => {
     for (const n of ofType(WF, 'httpRequest')) {
@@ -52,8 +60,8 @@ describe('Write Draft sub-workflow', () => {
     for (const [call, answer] of [['Call Anthropic', 'Anthropic Answer'], ['Call OpenAI (fallback)', 'OpenAI Answer']]) {
       expect([targets(WF, call, 0), targets(WF, call, 1)], call).toEqual([[answer], [answer]]);
     }
-    expect([0, 1, 2].map((i) => targets(WF, 'Anthropic Answer', i))).toEqual([['Check Draft'], ['Wait (Anthropic)'], ['Call OpenAI (fallback)']]);
-    expect([0, 1, 2].map((i) => targets(WF, 'OpenAI Answer', i))).toEqual([['Check Draft'], ['Wait (OpenAI)'], ['AI Failed']]);
+    expect([0, 1, 2].map((i) => targets(WF, 'Anthropic Answer', i))).toEqual([['Read Answer'], ['Wait (Anthropic)'], ['Call OpenAI (fallback)']]);
+    expect([0, 1, 2].map((i) => targets(WF, 'OpenAI Answer', i))).toEqual([['Read Answer'], ['Wait (OpenAI)'], ['AI Failed']]);
     expect(targets(WF, 'Wait (Anthropic)')).toEqual(['Call Anthropic']);
     expect(targets(WF, 'Wait (OpenAI)')).toEqual(['Call OpenAI (fallback)']);
   });
@@ -75,12 +83,17 @@ describe('Write Draft sub-workflow', () => {
       expect(waitSeconds(name, { error: { message: 'timeout' } }, 0)).toBe(TUNING.aiRetryBaseSeconds);
     }
   });
-  it('Check Draft fact-checks the body of whichever provider answered, for the draft and for the rewrite', () => {
-    const first = run('Check Draft', full(200, anthropicOk(wrongSections)));
+  it('Read Answer then Check Draft fact-check whichever provider answered, for the draft and for the rewrite', () => {
+    const pipeline = (call, answer) => {
+      const read = runCode(nodeOf(WF, 'Read Answer'), { $json: answer, $: nodes({ 'When Called': [call] }) })[0].json;
+      return runCode(nodeOf(WF, 'Check Draft'), { $json: read, $: nodes({ 'When Called': [call] }) })[0].json;
+    };
+    const first = pipeline(CALL, full(200, anthropicOk(wrongSections)));
     expect(first).toMatchObject({ outcome: AI_OUTCOMES.REWRITE, ok: false, rewrite: { anthropic: { messages: expect.any(Array) } } });
     const rewriteCall = { ...CALL, request: first.rewrite, attempt: 2, previous: first.ai };
-    const second = runCode(nodeOf(WF, 'Check Draft'), { $json: full(200, openaiOk()), $: nodes({ 'When Called': [rewriteCall] }) })[0].json;
-    expect(second).toMatchObject({ outcome: AI_OUTCOMES.PASS, ok: true, ai: { provider: 'openai', attempts: 2 } });
+    expect(pipeline(rewriteCall, full(200, openaiOk()))).toMatchObject({ outcome: AI_OUTCOMES.PASS, ok: true, ai: { provider: 'openai', attempts: 2 } });
+    expect(pipeline(rewriteCall, full(200, { type: 'message', content: [], stop_reason: 'refusal', usage: { input_tokens: 1, output_tokens: 1 } })))
+      .toMatchObject({ outcome: AI_OUTCOMES.FAIL, update: { error_code: 'AI_UNAVAILABLE' } });
   });
   it('AI Failed names both providers\' last answers and returns the FAIL outcome the caller routes on', () => {
     const anthropic = full(404, { type: 'error', error: { type: 'not_found_error', message: 'model: bookleaf-drill-model-does-not-exist' } });

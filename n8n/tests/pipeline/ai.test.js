@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { afterAi, AI_OUTCOMES, aiUnavailable, detectProvider } from '../../src/pipeline/after-ai.js';
+import { afterAi, AI_OUTCOMES, aiUnavailable, checkAnswer, detectProvider, readAnswer } from '../../src/pipeline/after-ai.js';
 import { buildContext, DRILL_MODEL } from '../../src/pipeline/context.js';
 import { prepareJob } from '../../src/pipeline/prepare.js';
 import { fixedRandom, NOW, SETTINGS } from './settings-fixture.js';
@@ -156,5 +156,25 @@ describe('aiUnavailable', () => {
   it('a missing error item still reads as an error', () => {
     expect(aiUnavailable({ rewriting: false, anthropicError: undefined, openaiError: {} }).message)
       .toContain('anthropic: unknown error | openai: unknown error');
+  });
+});
+
+describe('readAnswer and checkAnswer (the Read Answer and Check Draft nodes)', () => {
+  it('together give what afterAi gives, for a pass, a rewrite and an unreadable answer', async () => {
+    const { buildContext } = await import('../../src/pipeline/context.js');
+    const { queuedJob } = await import('./job-fixture.js');
+    const { anthropicOk, wrongSections } = await import('./ai-fixtures.js');
+    const job = queuedJob('AUTH002');
+    const ctx = buildContext(job).ctx;
+    for (const response of [anthropicOk(), anthropicOk(wrongSections), { type: 'message', content: [], stop_reason: 'max_tokens', usage: { input_tokens: 5, output_tokens: 9 } }]) {
+      const read = readAnswer({ response, job, attempt: 1, previous: null });
+      expect(checkAnswer({ read, ctx, job, attempt: 1 })).toEqual(afterAi({ response, ctx, job, attempt: 1 }));
+    }
+  });
+  it('readAnswer needs no context: it only reads the provider\'s answer and prices it', async () => {
+    const { queuedJob } = await import('./job-fixture.js');
+    const { anthropicOk } = await import('./ai-fixtures.js');
+    const read = readAnswer({ response: anthropicOk(), job: queuedJob('AUTH002'), attempt: 1, previous: null });
+    expect(read).toMatchObject({ ok: true, ai: { provider: 'anthropic', model: 'claude-sonnet-5-5', attempts: 1, input_tokens: 3000 } });
   });
 });

@@ -48,23 +48,45 @@ function failAi(code, detail, ai, issues = []) {
 }
 
 /**
- * Reads one provider answer, fact-checks it and decides: pass, rewrite once with feedback, or fail.
- * @param {{response:unknown, ctx:import('./context.js').Context, job:import('./prepare.js').Job, attempt:1|2,
- *   previous?:{input_tokens:number, output_tokens:number, cost_usd:number|null}}} input
+ * @typedef {{ok:true, ai:Object}|{ok:false, ai:Object|null, problem:{code:string, message:string}}} ReadAnswer
+ *   ok: the draft's sections with the provider, model and usage so far; not ok: why the answer cannot be used
+ *   (with the tokens it still cost, when the provider is known)
  */
-export function afterAi({ response, ctx, job, attempt, previous }) {
+
+/**
+ * Read Answer: which provider answered, its sections and what the attempts so far cost. Needs no
+ * context, so this node carries the provider parsers and the fact check node does not.
+ * @param {{response:unknown, job:import('./prepare.js').Job, attempt:1|2,
+ *   previous?:{input_tokens:number, output_tokens:number, cost_usd:number|null}|null}} input
+ * @returns {ReadAnswer}
+ */
+export function readAnswer({ response, job, attempt, previous }) {
   const provider = detectProvider(response);
-  if (!provider) return failAi('AI_UNAVAILABLE', 'The AI answer was not recognised.', null);
+  if (!provider) return { ok: false, ai: null, problem: { code: 'UNRECOGNISED', message: 'The AI answer was not recognised.' } };
   const prices = job.settings.model_prices;
   const parsed = PARSERS[provider](response);
   if (!parsed.ok) {
-    const detail = `${provider}: ${parsed.error.code} ${parsed.error.message}`;
     const spent = { provider, model: response.model ?? null, attempts: attempt, ...addUsage(previous, rawUsage(provider, response), response.model, prices) };
-    if (attempt >= 2) return failAi('AI_UNAVAILABLE', detail, spent);
-    return rewrite(ctx, job, [{ role: 'user', content: ctx.prompt.user }], spent, [{ code: parsed.error.code, message: detail }]);
+    return { ok: false, ai: spent, problem: { code: parsed.error.code, message: `${provider}: ${parsed.error.code} ${parsed.error.message}` } };
   }
-  const ai = { provider, model: parsed.model, sections: parsed.sections, attempts: attempt, ...addUsage(previous, parsed.usage, parsed.model, prices) };
-  const check = checkDraft(parsed.sections, ctx.facts, ctx.titles, job.length);
+  return { ok: true, ai: { provider, model: parsed.model, sections: parsed.sections, attempts: attempt, ...addUsage(previous, parsed.usage, parsed.model, prices) } };
+}
+
+/** An unusable answer: the rewrite step asks again with the same prompt; a second one fails the job. */
+function unusable(read, ctx, job, attempt) {
+  if (read.ai === null) return failAi('AI_UNAVAILABLE', read.problem.message, null);
+  if (attempt >= 2) return failAi('AI_UNAVAILABLE', read.problem.message, read.ai);
+  return rewrite(ctx, job, [{ role: 'user', content: ctx.prompt.user }], read.ai, [read.problem]);
+}
+
+/**
+ * Check Draft: fact-checks a readable answer and decides: pass, rewrite once with the checker's notes, or fail.
+ * @param {{read:ReadAnswer, ctx:import('./context.js').Context, job:import('./prepare.js').Job, attempt:1|2}} input
+ */
+export function checkAnswer({ read, ctx, job, attempt }) {
+  if (!read.ok) return unusable(read, ctx, job, attempt);
+  const { ai } = read;
+  const check = checkDraft(ai.sections, ctx.facts, ctx.titles, job.length);
   const withCheck = { ...ai, verified_figures: check.verifiedFigures, words: check.words, warnings: check.issues.filter((i) => i.severity !== 'BLOCK') };
   if (check.passed) return { outcome: AI_OUTCOMES.PASS, ai: withCheck, issues: check.issues };
   if (attempt >= 2) {
@@ -73,11 +95,18 @@ export function afterAi({ response, ctx, job, attempt, previous }) {
   }
   const messages = [
     { role: 'user', content: ctx.prompt.user },
-    { role: 'assistant', content: JSON.stringify(parsed.sections) },
+    { role: 'assistant', content: JSON.stringify(ai.sections) },
     { role: 'user', content: feedbackMessage(check.blocking) },
   ];
   return rewrite(ctx, job, messages, withCheck, check.issues);
 }
+
+/**
+ * Both steps in one call, as the two nodes run them (the tests and callers that hold a whole answer use it).
+ * @param {{response:unknown, ctx:import('./context.js').Context, job:import('./prepare.js').Job, attempt:1|2,
+ *   previous?:{input_tokens:number, output_tokens:number, cost_usd:number|null}}} input
+ */
+export const afterAi = ({ response, ctx, job, attempt, previous }) => checkAnswer({ read: readAnswer({ response, job, attempt, previous }), ctx, job, attempt });
 
 /**
  * Neither provider answered (the "AI Failed" node, after both HTTP nodes of the first draft or of the rewrite).

@@ -36,7 +36,8 @@ const ABOUT = [
   'Called by **Royalty Summary** with `job`, `ctx`, `request` (both providers\' bodies), `attempt` (1 draft, 2 rewrite) and `previous`.',
   '**Call Anthropic** writes; its answer Switch sends a 2xx to **Check Draft**, retries a 429, 5xx or timeout after a short wait '
   + `(${TUNING.aiRetries} extra try, Retry-After honoured, at most ${TUNING.aiRetryMaxWaitSeconds} s), and hands anything else to `
-  + '**Call OpenAI (fallback)**, which works the same way and ends in **AI Failed**. Check Draft checks every figure: PASS, REWRITE '
+  + '**Call OpenAI (fallback)**, which works the same way and ends in **AI Failed**. **Read Answer** reads and prices the answer; '
+  + '**Check Draft** checks every figure: PASS, REWRITE '
   + '(with both providers\' rewrite bodies) or FAIL. No error workflow here: a crash fails the caller\'s node.',
 ].join('\n');
 
@@ -51,29 +52,30 @@ const nodes = [
   http('Call OpenAI (fallback)', { ...AI, url: OPENAI_URL, credential: 'openai', authType: 'httpBearerAuth', body: `JSON.stringify(${CALL}.request.openai)` }),
   withNote(answer('OpenAI Answer', 'Give up'), 'Retry 429/5xx; else fail'),
   withNote(wait('Wait (OpenAI)', BACKOFF), 'Growing wait; Retry-After'),
-  withNote(code('Check Draft', 'checkDraft', `return main({ response: $json.body, ctx: ${CALL}.ctx, job: ${CALL}.job, attempt: ${CALL}.attempt, previous: ${PREVIOUS} });`), 'Checks every figure'),
+  withNote(code('Read Answer', 'readDraft', `return main({ response: $json.body, job: ${CALL}.job, attempt: ${CALL}.attempt, previous: ${PREVIOUS} });`), 'Sections, usage and cost'),
+  withNote(code('Check Draft', 'checkDraft', `return main({ read: $json, ctx: ${CALL}.ctx, job: ${CALL}.job, attempt: ${CALL}.attempt });`), 'Checks every figure'),
   withNote(code('AI Failed', 'aiFailed', `return main({ job: ${CALL}.job, rewriting: ${CALL}.attempt > 1, anthropicError: $('Anthropic Answer').first(2).json, openaiError: $json, previous: ${PREVIOUS} });`), 'Both providers failed'),
 ];
 
 const edges = [
   ['When Called', 'Call Anthropic'], ['Call Anthropic', 'Anthropic Answer'], ['Call Anthropic', 'Anthropic Answer', 'error'],
-  ['Anthropic Answer', 'Check Draft', 'Answer'], ['Anthropic Answer', 'Wait (Anthropic)', 'Retry'], ['Anthropic Answer', 'Call OpenAI (fallback)', 'Fallback'],
+  ['Anthropic Answer', 'Read Answer', 'Answer'], ['Anthropic Answer', 'Wait (Anthropic)', 'Retry'], ['Anthropic Answer', 'Call OpenAI (fallback)', 'Fallback'],
   ['Wait (Anthropic)', 'Call Anthropic'],
   ['Call OpenAI (fallback)', 'OpenAI Answer'], ['Call OpenAI (fallback)', 'OpenAI Answer', 'error'],
-  ['OpenAI Answer', 'Check Draft', 'Answer'], ['OpenAI Answer', 'Wait (OpenAI)', 'Retry'], ['OpenAI Answer', 'AI Failed', 'Give up'],
-  ['Wait (OpenAI)', 'Call OpenAI (fallback)'],
+  ['OpenAI Answer', 'Read Answer', 'Answer'], ['OpenAI Answer', 'Wait (OpenAI)', 'Retry'], ['OpenAI Answer', 'AI Failed', 'Give up'],
+  ['Wait (OpenAI)', 'Call OpenAI (fallback)'], ['Read Answer', 'Check Draft'],
 ];
 
 /** The Anthropic answer reads left to right on row 0; the OpenAI fallback sits below it, AI Failed below Check Draft. */
 const grid = {
   'When Called': [0, 0], 'Call Anthropic': [1, 0], 'Anthropic Answer': [2, 0], 'Wait (Anthropic)': [2, 1],
   'Call OpenAI (fallback)': [3, 2], 'OpenAI Answer': [4, 2], 'Wait (OpenAI)': [4, 3],
-  'Check Draft': [6, 0], 'AI Failed': [6, 3],
+  'Read Answer': [6, 0], 'Check Draft': [7, 0], 'AI Failed': [6, 3],
 };
 const sections = [
   { title: 'AI writer', text: 'Anthropic writes; OpenAI if it fails. Only a 429, 5xx or timeout is tried again.',
     nodes: ['When Called', 'Call Anthropic', 'Anthropic Answer', 'Wait (Anthropic)', 'Call OpenAI (fallback)', 'OpenAI Answer', 'Wait (OpenAI)'] },
-  { title: 'Fact check', text: 'Every figure against the data.', nodes: ['Check Draft'] },
+  { title: 'Fact check', text: 'The answer read and priced, then every figure checked against the data.', nodes: ['Read Answer', 'Check Draft'] },
   { title: 'Record', text: 'Neither provider answered.', nodes: ['AI Failed'] },
 ];
 

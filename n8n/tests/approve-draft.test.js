@@ -17,10 +17,10 @@ function answer(name, $json) {
 }
 
 describe('approve-draft shape', () => {
-  it('has 20 working nodes: 3 Code, 3 IF, 1 Switch, 4 Postgres, 7 Respond, Deliver Email and the webhook', () => {
-    expect(working).toHaveLength(20);
+  it('has 21 working nodes: 4 Code, 3 IF, 1 Switch, 4 Postgres, 7 Respond, Deliver Email and the webhook', () => {
+    expect(working).toHaveLength(21);
     const counts = working.reduce((acc, n) => ({ ...acc, [short(n)]: (acc[short(n)] ?? 0) + 1 }), {});
-    expect(counts).toEqual({ webhook: 1, postgres: 4, code: 3, if: 3, switch: 1, respondToWebhook: 7, executeWorkflow: 1 });
+    expect(counts).toEqual({ webhook: 1, postgres: 4, code: 4, if: 3, switch: 1, respondToWebhook: 7, executeWorkflow: 1 });
   });
   it('Action is a Rules-mode Switch with the outputs Send (top: the main row), Discard and Answer', () => {
     const action = nodeOf(WF, 'Action');
@@ -50,7 +50,10 @@ describe('approve-draft wiring', () => {
   it('a valid request loads the draft and Decide picks the action; a bad one is answered by Respond Rejected', () => {
     expect(targets(WF, 'Parse Request')).toEqual(['Request Valid?']);
     expect([targets(WF, 'Request Valid?', 0), targets(WF, 'Request Valid?', 1)]).toEqual([['Load Draft'], ['Respond Rejected']]);
-    expect(targets(WF, 'Load Draft')).toEqual(['Decide']);
+    expect(targets(WF, 'Load Draft')).toEqual(['Check Edit']);
+    expect(targets(WF, 'Check Edit')).toEqual(['Decide']);
+    expect(nodeOf(WF, 'Check Edit').parameters.jsCode).toMatch(/function checkEmail/);
+    expect(nodeOf(WF, 'Decide').parameters.jsCode).not.toMatch(/function checkEmail/);
     expect(nodeOf(WF, 'Load Draft')).toMatchObject({ alwaysOutputData: true, parameters: { query: SELECT_DRAFT } });
     expect(targets(WF, 'Decide')).toEqual(['Action']);
     expect([0, 1, 2, 3].map((i) => targets(WF, 'Action', i))).toEqual([['Claim Draft'], ['Discard Draft'], ['Respond Answer'], ['Respond 500']]);
@@ -87,7 +90,7 @@ describe('approve-draft wiring', () => {
 describe('approve-draft canvas', () => {
   it('reads left to right: the send path on one row, the other answers below it', () => {
     const y = (name) => nodeOf(WF, name).position[1];
-    const happy = ['Approve Webhook', 'Load Settings', 'Check Settings', 'Settings OK?', 'Parse Request', 'Request Valid?', 'Load Draft', 'Decide', 'Action',
+    const happy = ['Approve Webhook', 'Load Settings', 'Check Settings', 'Settings OK?', 'Parse Request', 'Request Valid?', 'Load Draft', 'Check Edit', 'Decide', 'Action',
       'Claim Draft', 'Claimed?', 'Respond Sending', 'Deliver Email'];
     expect(happy.map(y)).toEqual(happy.map(() => 0));
     const x = happy.map((name) => nodeOf(WF, name).position[0]);
@@ -97,7 +100,7 @@ describe('approve-draft canvas', () => {
     expect(about.position[1] + about.parameters.height, 'the About note ends above the nodes').toBeLessThan(0);
   });
   it('explains the non-obvious nodes with a note on the canvas', () => {
-    for (const name of ['Decide', 'Discard Draft', 'Claim Draft', 'Claimed?', 'Deliver Email']) {
+    for (const name of ['Check Edit', 'Decide', 'Discard Draft', 'Claim Draft', 'Claimed?', 'Deliver Email']) {
       expect(nodeOf(WF, name), name).toMatchObject({ notesInFlow: true, notes: expect.stringMatching(/\w/) });
     }
   });

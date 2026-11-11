@@ -19,7 +19,7 @@ const UNEXPECTED_ACTION = errorBody(failure('INTERNAL', 'Decide gave an unexpect
 const ABOUT = [
   '## BookLeaf approve draft',
   'POST /webhook/royalty-summary/approve with header X-BookLeaf-Key (n8n Header Auth). Every business answer is HTTP 200 with the same fields.',
-  '**Decide** re-runs the fact check on the edited subject/body and works out every answer: **check** returns a preview at once; '
+  '**Check Edit** re-runs the fact check on the edited subject/body; **Decide** works out every answer: **check** returns a preview at once; '
   + '**discard** closes the draft; **send** claims it atomically for this execution (one email per draft, however many clicks), '
   + 'answers at once, then hands the email to the **Deliver Email** sub-workflow. Code nodes are generated from n8n/src by n8n/build.mjs.',
 ].join('\n');
@@ -33,7 +33,8 @@ const nodes = [
   ifTrue('Request Valid?', '$json.ok', IS_TRUE),
   respond('Respond Rejected'),
   pg('Load Draft', SELECT_DRAFT, `${PARSED}.params`, { alwaysOutputData: true, errorOutput: true, retry: true }),
-  withNote(code('Decide', 'decide', `return main({ request: ${PARSED}.request, row: $json, settings: ${PARSED}.settings, executionId: $execution.id });`), 'Checks the edit; all answers'),
+  withNote(code('Check Edit', 'checkEdit', `return main({ request: ${PARSED}.request, row: $json });`), 'Same fact checker as the AI'),
+  withNote(code('Decide', 'decide', `return main({ request: ${PARSED}.request, row: $('Load Draft').first().json, settings: ${PARSED}.settings, executionId: $execution.id, check: $json.check });`), 'Works out every answer'),
   switchRules('Action', '$json.action', [
     { output: 'Send', equals: APPROVE_ACTIONS.SEND }, { output: 'Discard', equals: APPROVE_ACTIONS.DISCARD }, { output: 'Answer', equals: APPROVE_ACTIONS.ANSWER },
   ], 'Unexpected'),
@@ -53,7 +54,7 @@ const edges = [
   ['Approve Webhook', 'Load Settings'], ['Load Settings', 'Check Settings'], ['Load Settings', 'Respond 503', 'error'], ['Check Settings', 'Settings OK?'],
   ['Settings OK?', 'Parse Request', 'true'], ['Settings OK?', 'Respond Rejected', 'false'], ['Parse Request', 'Request Valid?'],
   ['Request Valid?', 'Load Draft', 'true'], ['Request Valid?', 'Respond Rejected', 'false'],
-  ['Load Draft', 'Decide'], ['Load Draft', 'Respond 503', 'error'], ['Decide', 'Action'],
+  ['Load Draft', 'Check Edit'], ['Check Edit', 'Decide'], ['Load Draft', 'Respond 503', 'error'], ['Decide', 'Action'],
   ['Action', 'Claim Draft', 'Send'], ['Action', 'Discard Draft', 'Discard'], ['Action', 'Respond Answer', 'Answer'],
   ['Action', 'Respond 500', 'Unexpected'],
   ['Discard Draft', 'Respond Discard'], ['Discard Draft', 'Respond 503', 'error'],
@@ -65,14 +66,14 @@ const edges = [
 const grid = {
   'Approve Webhook': [0, 0], 'Load Settings': [1, 0], 'Check Settings': [2, 0], 'Settings OK?': [3, 0], 'Parse Request': [4, 0],
   'Request Valid?': [5, 0], 'Respond Rejected': [6, 1], 'Respond 503': [6, 2],
-  'Load Draft': [7, 0], Decide: [8, 0], Action: [9, 0],
-  'Claim Draft': [10, 0], 'Claimed?': [11, 0], 'Respond Sending': [12, 0], 'Deliver Email': [13, 0], 'Respond Already Sent': [12, 1],
-  'Discard Draft': [10, 3], 'Respond Discard': [11, 3], 'Respond Answer': [10, 4], 'Respond 500': [10, 5],
+  'Load Draft': [7, 0], 'Check Edit': [8, 0], Decide: [9, 0], Action: [10, 0],
+  'Claim Draft': [11, 0], 'Claimed?': [12, 0], 'Respond Sending': [13, 0], 'Deliver Email': [14, 0], 'Respond Already Sent': [13, 1],
+  'Discard Draft': [11, 3], 'Respond Discard': [12, 3], 'Respond Answer': [11, 4], 'Respond 500': [11, 5],
 };
 const sections = [
   { title: 'Intake', text: 'The settings (bad: 500), then the body (bad: 400). Database down before the answer: 503.',
     nodes: ['Approve Webhook', 'Load Settings', 'Check Settings', 'Settings OK?', 'Parse Request', 'Request Valid?', 'Respond Rejected', 'Respond 503'] },
-  { title: 'Load & decide', text: 'Re-checks the edit and works out every answer.', nodes: ['Load Draft', 'Decide', 'Action'] },
+  { title: 'Load & decide', text: 'Re-checks the edit and works out every answer.', nodes: ['Load Draft', 'Check Edit', 'Decide', 'Action'] },
   { title: 'Send', text: 'One click wins the draft; the email goes out once.', nodes: ['Claim Draft', 'Claimed?', 'Respond Sending', 'Deliver Email', 'Respond Already Sent'] },
   { title: 'Discard or check', text: 'Closes the draft, or answers a preview.', nodes: ['Discard Draft', 'Respond Discard', 'Respond Answer', 'Respond 500'] },
 ];

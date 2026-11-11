@@ -26,16 +26,26 @@ function statusGate(request, row) {
   return null;
 }
 
-/** The edited email, checked by the same fact checker and rendered with figures from facts. */
-function checkAndRender(request, row, settings) {
-  const check = checkEdited({ subject: request.subject, body: request.body, facts: row.facts, titles: row.titles ?? [], length: row.length });
+/**
+ * Check Edit: the edited subject and prose through the same fact checker as the AI draft, when the
+ * answer depends on it (a fresh draft that is checked or sent); null otherwise, so Decide answers alone.
+ * @param {{request:import('./approve-request.js').ApproveRequest, row:DraftRow|Object}} input
+ * @returns {ReturnType<typeof checkEdited>|null}
+ */
+export function editCheck({ request, row }) {
+  if (request.action === 'discard' || statusGate(request, row) || !row.fresh) return null;
+  return checkEdited({ subject: request.subject, body: request.body, facts: row.facts, titles: row.titles ?? [], length: row.length });
+}
+
+/** The edited email, rendered with figures from facts, and its check summary. */
+function renderChecked(request, row, settings, check) {
   const signature = signatureFor(row.tone, row.sign_off, settings.sender_name);
   const rendered = renderEdited({ subject: request.subject, parsed: check.parsed, facts: row.facts, brand: brandOf(settings), signature });
   const summary = {
     job_id: request.job_id, status: row.status, passed: check.passed, issues: formatIssues(check.issues),
     issue_count: check.issues.length, words: check.words, figures_verified: check.verifiedFigures,
   };
-  return { check, rendered, summary };
+  return { rendered, summary };
 }
 
 /**
@@ -44,10 +54,11 @@ function checkAndRender(request, row, settings) {
  * it does not (the draft changed meanwhile, or another click claimed it). A clean send is claimed by
  * this execution, then `deliver` goes to the Deliver Email sub-workflow: the edited email for the job's
  * stored demo inbox, with the drill stored on the job and nothing else to record.
+ * `check` is Check Edit's result (editCheck), present whenever the answer needs it.
  * @param {{request:import('./approve-request.js').ApproveRequest, row:DraftRow|Object,
- *   settings:import('./settings.js').Settings, executionId:string}} input
+ *   settings:import('./settings.js').Settings, executionId:string, check:ReturnType<typeof editCheck>}} input
  */
-export function decideApproval({ request, row, settings, executionId }) {
+export function decideApproval({ request, row, settings, executionId, check }) {
   const gated = statusGate(request, row);
   if (gated) return gated;
   const id = request.job_id;
@@ -56,7 +67,7 @@ export function decideApproval({ request, row, settings, executionId }) {
     return { action: APPROVE_ACTIONS.DISCARD, params: JSON.stringify({ job_id: id }), response, fallback: approveError('NOT_A_DRAFT', id, '') };
   }
   if (!row.fresh) return respond(approveError('DRAFT_EXPIRED', id, row.status, {}, { hours: settings.draft_ttl_hours }));
-  const { check, rendered, summary } = checkAndRender(request, row, settings);
+  const { rendered, summary } = renderChecked(request, row, settings, check);
   if (request.action === 'check') return respond(approveResponse({ ...summary, ok: true, html: rendered.html }));
   if (!check.passed) return respond(approveError('EDIT_BLOCKED', id, row.status, summary));
   const email = { from: senderFor(settings), to: row.recipient, subject: rendered.subject, html: rendered.html, text: rendered.text };

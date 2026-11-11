@@ -8,7 +8,7 @@ import { buildWorkflow, WORKFLOW_SOURCES } from '../build.mjs';
  * Lower these numbers as the refactor removes code; raising one needs a reason in the commit.
  */
 const TOTAL_BUDGET_KB = 165;
-const NODE_BUDGET_KB = 35;
+const NODE_BUDGET_KB = 29;
 
 const workflows = await Promise.all(WORKFLOW_SOURCES.map(buildWorkflow));
 const codeNodes = workflows.flatMap((wf) => wf.nodes

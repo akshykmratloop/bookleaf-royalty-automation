@@ -3,7 +3,7 @@
  * passes $json and earlier nodes' output) and returns n8n items. All logic lives in n8n/src.
  * The IF nodes after them read a boolean (`ok`, `send`); "Draft OK?" reads `outcome`.
  */
-import { afterAi, AI_OUTCOMES, aiUnavailable } from '../../src/pipeline/after-ai.js';
+import { AI_OUTCOMES, aiUnavailable, checkAnswer, readAnswer } from '../../src/pipeline/after-ai.js';
 import { buildContext } from '../../src/pipeline/context.js';
 import { errorBody } from '../../src/pipeline/errors.js';
 import { aiColumns, deliveryFor, draftUpdate, failedUpdate } from '../../src/pipeline/finalize.js';
@@ -41,12 +41,15 @@ export function aiFailed({ job, rewriting, anthropicError, openaiError, previous
   return item({ outcome: AI_OUTCOMES.FAIL, ok: false, update });
 }
 
+/** Write Draft's Read Answer: the provider's answer read and priced (no context needed). */
+export const readDraft = ({ response, job, attempt, previous }) => item(readAnswer({ response, job, attempt, previous }));
+
 /**
- * Fact-check a draft (attempt 1) or its rewrite (attempt 2): Write Draft's Check Draft. outcome PASS
+ * Write Draft's Check Draft: the draft (attempt 1) or its rewrite (attempt 2) fact-checked. outcome PASS
  * (ok), REWRITE (`rewrite` holds both providers' bodies) or FAIL (`update` fails the job).
  */
-export function checkDraft({ response, ctx, job, attempt, previous }) {
-  const r = afterAi({ response, ctx, job, attempt, previous });
+export function checkDraft({ read, ctx, job, attempt }) {
+  const r = checkAnswer({ read, ctx, job, attempt });
   const out = { outcome: r.outcome, ok: r.outcome === AI_OUTCOMES.PASS, ai: r.ai, issues: r.issues };
   if (r.outcome === AI_OUTCOMES.FAIL) return item({ ...out, update: failedUpdate(job, r.failure, aiColumns(r.ai)) });
   if (r.outcome === AI_OUTCOMES.REWRITE) return item({ ...out, rewrite: r.rewrite });

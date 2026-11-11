@@ -1,5 +1,5 @@
 /** Entry points for the approve-draft workflow's Code nodes. All logic lives in n8n/src/pipeline. */
-import { decideApproval } from '../../src/pipeline/approve.js';
+import { decideApproval, editCheck } from '../../src/pipeline/approve.js';
 import { validateApprove } from '../../src/pipeline/approve-request.js';
 import { errorBody } from '../../src/pipeline/errors.js';
 
@@ -13,5 +13,8 @@ export function parseApprove({ body, settings }) {
   return item({ ok: true, job_id: r.value.job_id, request: r.value, settings, params: JSON.stringify({ job_id: r.value.job_id }) });
 }
 
+/** Check Edit: the edited text fact-checked, or null when the answer does not depend on it. */
+export const checkEdit = ({ request, row }) => item({ check: editCheck({ request, row }) });
+
 /** `action`: answer now, discard, or claim (by this execution) and send (approve.js APPROVE_ACTIONS). */
-export const decide = ({ request, row, settings, executionId }) => item(decideApproval({ request, row, settings, executionId }));
+export const decide = ({ request, row, settings, executionId, check }) => item(decideApproval({ request, row, settings, executionId, check }));
