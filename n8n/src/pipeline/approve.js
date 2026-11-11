@@ -1,5 +1,6 @@
 import { signatureFor } from '../signature.js';
 import { approveError, approveResponse } from './approve-request.js';
+import { ownAddresses } from './draft-check.js';
 import { checkEdited, formatIssues, renderEdited } from './edit.js';
 import { brandOf, senderFor } from './finalize.js';
 
@@ -29,12 +30,17 @@ function statusGate(request, row) {
 /**
  * Check Edit: the edited subject and prose through the same fact checker as the AI draft, when the
  * answer depends on it (a fresh draft that is checked or sent); null otherwise, so Decide answers alone.
- * @param {{request:import('./approve-request.js').ApproveRequest, row:DraftRow|Object}} input
+ * The edit may name only BookLeaf's own addresses (support_email, email_from), like the AI's draft.
+ * @param {{request:import('./approve-request.js').ApproveRequest, row:DraftRow|Object,
+ *   settings?:import('./settings.js').Settings}} input
  * @returns {ReturnType<typeof checkEdited>|null}
  */
-export function editCheck({ request, row }) {
+export function editCheck({ request, row, settings }) {
   if (request.action === 'discard' || statusGate(request, row) || !row.fresh) return null;
-  return checkEdited({ subject: request.subject, body: request.body, facts: row.facts, titles: row.titles ?? [], length: row.length });
+  return checkEdited({
+    subject: request.subject, body: request.body, facts: row.facts, titles: row.titles ?? [], length: row.length,
+    allowedEmails: ownAddresses(settings),
+  });
 }
 
 /** The edited email, rendered with figures from facts, and its check summary. */

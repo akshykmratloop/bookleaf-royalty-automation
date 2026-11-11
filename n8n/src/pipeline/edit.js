@@ -41,14 +41,16 @@ export function parseEditText(text) {
 }
 
 /**
- * Runs the SAME fact checker as the AI draft over the edited subject and prose.
- * @param {{subject:string, body:string, facts:import('../facts-types.js').AuthorFacts, titles:string[], length?:string}} input
+ * Runs the SAME fact checker as the AI draft over the edited subject and prose (links, phone numbers and
+ * addresses other than `allowedEmails` included).
+ * @param {{subject:string, body:string, facts:import('../facts-types.js').AuthorFacts, titles:string[], length?:string,
+ *   allowedEmails?:readonly string[]}} input
  * @returns {{passed:boolean, issues:Object[], blocking:Object[], words:number, verifiedFigures:number, parsed:ReturnType<typeof parseEditText>}}
  */
-export function checkEdited({ subject, body, facts, titles, length }) {
+export function checkEdited({ subject, body, facts, titles, length, allowedEmails = [] }) {
   const parsed = parseEditText(body);
   const text = [subject, ...parsed.before, ...parsed.after].join('\n\n');
-  const r = checkEmail({ text, facts: facts.facts, titles });
+  const r = checkEmail({ text, facts: facts.facts, titles, allowedEmails });
   const words = countWords(text);
   const issues = [...r.issues, ...lengthIssues(words, length)];
   return { passed: r.passed, issues, blocking: issues.filter((i) => i.severity === 'BLOCK'), words, verifiedFigures: r.verifiedFigures, parsed };

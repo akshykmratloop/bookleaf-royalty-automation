@@ -1,4 +1,5 @@
 import { allowedValues } from './allowed.js';
+import { contactIssues } from './contact.js';
 import {
   findCopyCounts, findDates, findDurations, findMoney, findPercents, findPlaceholders, stripExclusions,
 } from './extract.js';
@@ -79,15 +80,18 @@ function shapeIssues(text) {
 /**
  * Independent of the model: scans the text itself, so a draft cannot pass by omitting claims.
  * Number words ("ten thousand rupees") are read as digits. Book titles are exempted from scanning.
- * @param {{text: string, facts: readonly import('../facts-types.js').Fact[], titles?: readonly string[]}} input
+ * Links, phone numbers and email addresses other than `allowedEmails` block (contact.js).
+ * @param {{text: string, facts: readonly import('../facts-types.js').Fact[], titles?: readonly string[],
+ *   allowedEmails?: readonly string[]}} input
  * @returns {CheckResult}
  */
-export function checkEmail({ text, facts, titles = [] }) {
+export function checkEmail({ text, facts, titles = [], allowedEmails = [] }) {
   const withoutPlaceholders = text.replace(/\[CONFIRM:[^\]]*\]/gi, ' ').replace(TEMPLATE_PLACEHOLDER, ' ');
-  const scanText = wordsToDigits(stripExclusions(withoutPlaceholders, [...titles]));
-  const figures = figureResults(scanText, allowedValues(facts));
+  const prose = stripExclusions(withoutPlaceholders, [...titles]);
+  const figures = figureResults(wordsToDigits(prose), allowedValues(facts));
   const issues = [
-    ...placeholderIssues(text), ...figures.issues, ...phraseIssues(withoutPlaceholders), ...shapeIssues(text),
+    ...placeholderIssues(text), ...figures.issues, ...phraseIssues(withoutPlaceholders), ...contactIssues(prose, allowedEmails),
+    ...shapeIssues(text),
   ];
   return { passed: !issues.some((i) => i.severity === 'BLOCK'), issues, verifiedFigures: figures.verified };
 }

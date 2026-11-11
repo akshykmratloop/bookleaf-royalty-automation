@@ -7,8 +7,8 @@ import { buildWorkflow, WORKFLOW_SOURCES } from '../build.mjs';
  * root package.json); without that, every Code node carries ~12 KB of library code it never calls.
  * Lower these numbers as the refactor removes code; raising one needs a reason in the commit.
  */
-const TOTAL_BUDGET_KB = 166;
-const NODE_BUDGET_KB = 29;
+const TOTAL_BUDGET_KB = 171;
+const NODE_BUDGET_KB = 31;
 
 const workflows = await Promise.all(WORKFLOW_SOURCES.map(buildWorkflow));
 const codeNodes = workflows.flatMap((wf) => wf.nodes

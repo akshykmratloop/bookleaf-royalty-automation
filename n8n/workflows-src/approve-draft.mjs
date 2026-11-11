@@ -33,7 +33,7 @@ const nodes = [
   ifTrue('Request Valid?', '$json.ok', IS_TRUE),
   respond('Respond Rejected'),
   pg('Load Draft', SELECT_DRAFT, `${PARSED}.params`, { alwaysOutputData: true, errorOutput: true, retry: true }),
-  withNote(code('Check Edit', 'checkEdit', `return main({ request: ${PARSED}.request, row: $json });`), 'Same fact checker as the AI'),
+  withNote(code('Check Edit', 'checkEdit', `return main({ request: ${PARSED}.request, row: $json, settings: ${PARSED}.settings });`), 'Same fact checker as the AI'),
   withNote(code('Decide', 'decide', `return main({ request: ${PARSED}.request, row: $('Load Draft').first().json, settings: ${PARSED}.settings, executionId: $execution.id, check: $json.check });`), 'Works out every answer'),
   switchRules('Action', '$json.action', [
     { output: 'Send', equals: APPROVE_ACTIONS.SEND }, { output: 'Discard', equals: APPROVE_ACTIONS.DISCARD }, { output: 'Answer', equals: APPROVE_ACTIONS.ANSWER },

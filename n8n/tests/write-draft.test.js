@@ -41,6 +41,7 @@ describe('Write Draft sub-workflow', () => {
     expect(js('Read Answer')).toMatch(/stop_reason/);
     expect(js('Read Answer')).not.toMatch(/function checkEmail/);
     expect(js('Check Draft')).toMatch(/function checkEmail/);
+    expect(js('Check Draft')).toMatch(/function contactIssues/);
     expect(js('Check Draft')).not.toMatch(/stop_reason|output_text/);
     expect(targets(WF, 'Read Answer')).toEqual(['Check Draft']);
   });

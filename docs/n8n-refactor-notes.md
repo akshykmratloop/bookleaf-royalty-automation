@@ -960,3 +960,50 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
 - **Sizes:** unchanged (80 working nodes, 13 Code nodes, 165.1 KB).
 - **Release engineer:** nothing extra; the setting travels with the workflows. In production a successful Bubble
   request no longer appears in n8n's executions list (look up the job in `royalty_jobs` and its sub-workflow runs).
+
+## Security fix 3 — the checker blocks links, phone numbers and outside email addresses (MEDIUM: prompt injection to phishing)
+
+- **Changed:** new `n8n/src/checker/contact.js` (`contactIssues(text, allowedEmails)`), called by `checkEmail`, so the AI
+  draft and its rewrite (Check Draft in Write Draft) and an admin's edit (Check Edit in Approve Draft) get the same rule.
+  Each find is a BLOCK issue: `LINK` (`http(s)://…`, `www.…`, a domain with a path such as `x.com/abc` or `bit.ly/…`, or
+  a bare domain with a common top-level domain written in lower case, such as `bookleaf-pay.com`), `EMAIL_ADDRESS` (any
+  address except `support_email` and `email_from`, compared without case) and `PHONE_NUMBER` (an optional `+country`
+  code and `(area code)`, then digit groups joined by one space, dot or hyphen, 10 digits or more, 8 with a `+`; or
+  10-13 digits in one block). It uses the existing failure path: the first draft gets one rewrite with the checker's
+  notes (the AI sees what it wrote), a second failure ends `AI_FACT_CHECK_FAILED` with the excerpt, and an edit is
+  `EDIT_BLOCKED`. Nothing is silent and nothing is sent. `ownAddresses(settings)` (draft-check.js) gives the allowed
+  addresses: Check Draft reads them from `job.settings`; Check Edit now also receives Parse Request's `settings`.
+- **No false positives on figures:** commas never join a phone run, so Indian-grouped amounts (`1,23,456`,
+  `₹12,34,567`) stay amounts; dates (`14 February 2026`, `2026-02-14`, `14/02/2026`) have too few digits; an ISBN
+  (13 digits starting 978/979) is not a phone number, and `checkEmail` removes ISBNs and book titles before the scan, so
+  a title like "Love.com" passes. A capitalised "top-level domain" (`Mumbai.In`) and abbreviations (`e.g.`, `a.m.`) do
+  not match. Checked on real output: the rendered text of the last 300 local jobs and the AI prose of the 75 that kept
+  their sections gave no hit; the contract run's live AI drafts all passed.
+- **Tests (written first, RED for the expected reasons):** `n8n/tests/checker-contact.test.js` (7 links, outside and
+  allowed addresses, an allowed address not read as a domain, 6 phone shapes, 8 passing texts with amounts, dates,
+  years, `a.m.`, `e.g.`, an ISBN and plain prose; `checkEmail` end to end with a link, with the support address and with
+  a domain-like title); `afterAi`: a link asks for a rewrite naming it, a second one fails `AI_FACT_CHECK_FAILED`; a
+  phone number or an outside address asks for a rewrite, `support_email`/`email_from` pass; `editCheck`: a link or an
+  outside address blocks (`EDIT_BLOCKED` on send), our own address passes; build tests: both Code nodes carry
+  `contactIssues`, Check Edit passes `settings`. Contract 04: approve `check` with a link and a phone number appended
+  answers `passed: false` with `Blocked (LINK)` and `Blocked (PHONE_NUMBER)`; it failed on the old deploy, passed after.
+- **Gates:** npm test 616/616, build --check clean, test:db 50/50, contracts 45/45.
+- **Sizes:** working nodes unchanged (80). Code 13 nodes, 165.1 → **170.3 KB**: Check Draft 28.2 → **30.7 KB**, Check
+  Edit 20.7 → **23.4 KB** (the contact rules are needed in both). Budgets raised: total 166 → **171 KB** (+5 KB), per
+  node 29 → **31 KB** (+2 KB).
+- **Release engineer:** no migration, setting or credential. If production sets `support_email`, the AI may name it;
+  any other address in a draft now fails it. The system prompt is unchanged (`PROMPT_VERSION` stays), so a model that
+  adds contact details is corrected by the rewrite, at the cost of one extra AI call.
+
+## Summary of the security review fixes (commits 3650d35, 5bfee44 and the fix 3 commit)
+
+- **HIGH:** emails go only to `default_demo_inbox` or `allowed_demo_inboxes`; any other `demo_inbox` is 422
+  `RECIPIENT_NOT_ALLOWED` with no job.
+- **MEDIUM:** the three webhook workflows keep no successful run, so the key is no longer saved for normal traffic (it
+  stays in failed runs, documented). The checker blocks links, phone numbers and outside email addresses in AI prose
+  and admin edits.
+- **Gates at the end:** npm test 616/616, build --check clean, test:db 50/50, contracts 45/45 on the local n8n.
+- **Release engineer (production), added to the order above:** in the env file for `settings-sql.mjs`, set
+  `DEFAULT_DEMO_INBOX` to the inbox Bubble's Settings "Demo inbox" holds, and `ALLOWED_DEMO_INBOXES` (comma-separated)
+  only if Bubble may send another one. Migration 03 seeds `allowed_demo_inboxes = []`; the workflows refuse to run
+  without that row.

@@ -3,7 +3,7 @@ import { parseResponse as parseAnthropic, usageOf as anthropicUsage } from '../p
 import { parseResponse as parseOpenai, usageOf as openaiUsage } from '../providers/openai.js';
 import { costUsd, totalInputTokens } from '../providers/cost.js';
 import { providerRequests } from './context.js';
-import { checkDraft } from './draft-check.js';
+import { checkDraft, ownAddresses } from './draft-check.js';
 import { failure } from './errors.js';
 import { nodeErrorSummary } from './node-errors.js';
 
@@ -86,7 +86,7 @@ function unusable(read, ctx, job, attempt) {
 export function checkAnswer({ read, ctx, job, attempt }) {
   if (!read.ok) return unusable(read, ctx, job, attempt);
   const { ai } = read;
-  const check = checkDraft(ai.sections, ctx.facts, ctx.titles, job.length);
+  const check = checkDraft(ai.sections, ctx.facts, ctx.titles, job.length, ownAddresses(job.settings));
   const withCheck = { ...ai, verified_figures: check.verifiedFigures, words: check.words, warnings: check.issues.filter((i) => i.severity !== 'BLOCK') };
   if (check.passed) return { outcome: AI_OUTCOMES.PASS, ai: withCheck, issues: check.issues };
   if (attempt >= 2) {

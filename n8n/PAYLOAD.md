@@ -76,7 +76,7 @@ Bubble date (ISO instant, read in India time), or empty.
 | `delivery` | Optional. `send` (default): write, check and send. `draft`: write, check and render, then stop as `DRAFTED` for an admin to approve (see the approve endpoint). |
 | `tone` | Optional. `warm` (default, BookLeaf's usual tone), `formal` or `concise`. |
 | `length` | Optional. `short` (about 80-180 words of prose), `standard` (default, 150-300) or `detailed` (250-450). The prompt and the word-count warning follow it. |
-| `note` | Optional admin style guidance, 0-300 characters after trimming; control characters (line breaks included) become spaces. It goes into the AI's user message in a fenced block and may change wording and style only: it can never change or add figures, dates or policy, and the fact check still blocks any figure that is not in the data. |
+| `note` | Optional admin style guidance, 0-300 characters after trimming; control characters (line breaks included) become spaces. It goes into the AI's user message in a fenced block and may change wording and style only: it can never change or add figures, dates or policy, and the fact check still blocks any figure that is not in the data, and any link, phone number or email address other than `support_email` / `email_from`. |
 | `sign_off` | Optional signature name, 0-60 characters: letters, spaces and `. , ' & ( ) -` (no digits). Empty = the `sender_name` setting (`BookLeaf Author Relations`). The signature is rendered from data (escaped), never written by the AI: `Warm regards,` / `Kind regards,` (formal) / `Best regards,` (concise), then the name. |
 | `author` | Required: `code`, `name` (first word = greeting name), `email`, `city`. n8n never reads Bubble's data itself. |
 | `books[]` | Required, up to 50. `status` is the status text; anything starting with "In Production" is treated as in production and its stage (e.g. "Cover Design") is used in the email. `platforms` may be a list or comma-separated text. |
@@ -187,7 +187,7 @@ a bad key):
 | `NOT_A_DRAFT` | The job is not `DRAFTED` (its `status` is in the answer). |
 | `ALREADY_SENT` | `send` on a job already `PROCESSING`/`SENT`, or a second concurrent click. |
 | `DRAFT_EXPIRED` | The draft is older than the `draft_ttl_hours` setting (24; check/send; discard still works). |
-| `EDIT_BLOCKED` | `send` with an edit that fails the fact check. |
+| `EDIT_BLOCKED` | `send` with an edit that fails the fact check (a figure not in the data, or a link, phone number or outside email address). |
 
 ## Error codes (`error_code`)
 
@@ -200,7 +200,7 @@ a bad key):
 | `INTEGRITY` | Figures do not add up (earned ≠ copies × royalty, paid + pending ≠ earned, payout in the future). No email is written. | No, fix the data |
 | `DATA_UNAVAILABLE` | The author data was withheld (the `data_down` drill). | Yes |
 | `AI_UNAVAILABLE` | Anthropic failed and the OpenAI fallback failed too, for the first draft or for the rewrite (`error` names both providers' errors and says when it was the rewrite), or the answer was unusable twice. | Yes |
-| `AI_FACT_CHECK_FAILED` | The draft quoted a figure not in the data, and the one rewrite with the checker's notes did too. Nothing was sent. | Yes |
+| `AI_FACT_CHECK_FAILED` | The draft quoted a figure not in the data (or carried a link, a phone number or an email address other than `support_email` / `email_from`), and the one rewrite with the checker's notes did too. Nothing was sent. | Yes |
 | `EMAIL_FAILED` | The SMTP server refused the email or could not be reached. Sending is tried once (a second try after a lost answer could email the author twice); `error` ends with the server's own message (`… smtp: connect ECONNREFUSED …`). The email is kept on the job. | Yes |
 | `TIMEOUT` | Not finished within `stuck_job_minutes` (sweeper). | Yes |
 | `EMAIL_UNCERTAIN` | The run stopped while the email was being sent (stage `sending`), so it may or may not have arrived: the SMTP server may have taken it before the stop. Set by the error workflow, or by the sweeper when a job sat at stage `sending` for `stuck_job_minutes`. | Check the inbox first |

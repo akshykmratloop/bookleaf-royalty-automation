@@ -13,8 +13,8 @@ export function parseApprove({ body, settings }) {
   return item({ ok: true, job_id: r.value.job_id, request: r.value, settings, params: JSON.stringify({ job_id: r.value.job_id }) });
 }
 
-/** Check Edit: the edited text fact-checked, or null when the answer does not depend on it. */
-export const checkEdit = ({ request, row }) => item({ check: editCheck({ request, row }) });
+/** Check Edit: the edited text fact-checked (only BookLeaf's own addresses allowed), or null when the answer does not depend on it. */
+export const checkEdit = ({ request, row, settings }) => item({ check: editCheck({ request, row, settings }) });
 
 /** `action`: answer now, discard, or claim (by this execution) and send (approve.js APPROVE_ACTIONS). */
 export const decide = ({ request, row, settings, executionId, check }) => item(decideApproval({ request, row, settings, executionId, check }));

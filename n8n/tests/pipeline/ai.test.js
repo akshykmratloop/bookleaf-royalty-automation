@@ -94,6 +94,24 @@ describe('afterAi', () => {
     expect(r.rewrite.anthropic.model).toBe(DRILL_MODEL);
     expect(r.rewrite.openai.model).toBe('gpt-4.1-mini');
   });
+  it('a link in the prose asks for a rewrite naming it, and a second one fails AI_FACT_CHECK_FAILED (never sent)', () => {
+    const linked = { ...goodSections, closing: 'Please confirm your bank details at bookleaf-pay.com/confirm.\n\nWarm regards,\nBookLeaf Author Relations' };
+    const first = afterAi({ response: anthropicOk(linked), ctx, job, attempt: 1 });
+    expect(first.outcome).toBe(AI_OUTCOMES.REWRITE);
+    expect(first.issues.map((i) => i.code)).toContain('LINK');
+    expect(first.rewrite.anthropic.messages[2].content).toContain('bookleaf-pay.com/confirm');
+    const second = afterAi({ response: anthropicOk(linked), ctx, job, attempt: 2, previous: first.ai });
+    expect(second.outcome).toBe(AI_OUTCOMES.FAIL);
+    expect(second.failure).toMatchObject({ code: 'AI_FACT_CHECK_FAILED', message: expect.stringContaining('bookleaf-pay.com/confirm') });
+  });
+  it('an outside email address or a phone number asks for a rewrite; support_email and email_from may appear', () => {
+    const closing = (line) => ({ ...goodSections, closing: `${line}\n\nWarm regards,\nBookLeaf Author Relations` });
+    expect(afterAi({ response: anthropicOk(closing('Call us on +91 98765 43210.')), ctx, job, attempt: 1 }).outcome).toBe(AI_OUTCOMES.REWRITE);
+    const ours = closing('Questions? Write to help@bookleaf.test or reply to sender@bookleaf.test.');
+    expect(afterAi({ response: anthropicOk(ours), ctx, job, attempt: 1 }).outcome).toBe(AI_OUTCOMES.REWRITE);
+    const supported = jobFor('AUTH002', {}, { ...SETTINGS, support_email: 'help@bookleaf.test' });
+    expect(afterAi({ response: anthropicOk(ours), ctx: ctxFor(supported), job: supported, attempt: 1 }).outcome).toBe(AI_OUTCOMES.PASS);
+  });
   it('a second wrong draft fails AI_FACT_CHECK_FAILED and sums usage over both attempts', () => {
     const first = afterAi({ response: anthropicOk(wrongSections), ctx, job, attempt: 1 });
     const r = afterAi({ response: anthropicOk(wrongSections), ctx, job, attempt: 2, previous: first.ai });

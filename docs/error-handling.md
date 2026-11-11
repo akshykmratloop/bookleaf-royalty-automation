@@ -24,7 +24,7 @@ listed in [`n8n/PAYLOAD.md`](../n8n/PAYLOAD.md#error-codes-error_code).
 | Author data withheld | The `data_down` drill | FAILED `DATA_UNAVAILABLE` |
 | AI down, timeout (`ai_timeout_ms`, 45 s) or API error | The provider's status, read by the answer Switch in Write Draft | Only a 429, a 5xx or no answer (timeout) is tried once more, after 2 s (or the provider's Retry-After, at most 10 s); a 4xx (bad key, unknown model) goes straight to the OpenAI fallback, which works the same way; if both fail, FAILED `AI_UNAVAILABLE` naming both providers' last answers |
 | AI refusal, truncated, empty or malformed answer | Stop reason, parser and shape check | One more try (Rewrite Draft: the same sub-workflow, Anthropic then OpenAI); unusable twice: FAILED `AI_UNAVAILABLE` |
-| Fact-check failure (wrong figure, banned phrase, placeholder) | Checker on the finished text | One rewrite with the checker's notes (Anthropic, then OpenAI). If still blocked: FAILED `AI_FACT_CHECK_FAILED`. Nothing is sent. |
+| Fact-check failure (wrong figure, banned phrase, placeholder, a link, a phone number, or an email address other than `support_email` / `email_from`) | Checker on the finished text | One rewrite with the checker's notes (Anthropic, then OpenAI). If still blocked: FAILED `AI_FACT_CHECK_FAILED`. Nothing is sent. |
 | SMTP refused or unreachable | Send Email's error output | FAILED `EMAIL_FAILED`, ending with the server's own message. Tried once, never retried. The email stays on the job. |
 | Unexpected error in a run (a bug, a database or SMTP outage) | n8n runs the Error Handler workflow | The job owned by that execution becomes FAILED `INTERNAL` (naming the node and message), or `EMAIL_UNCERTAIN` if it stopped while sending. `alert_email` gets an email. |
 | Job stuck (n8n restarted mid-run) | The sweeper, every minute, reads the ledger | After `stuck_job_minutes` (10): FAILED `TIMEOUT`, or `EMAIL_UNCERTAIN` if it was at stage `sending` |
@@ -35,7 +35,11 @@ listed in [`n8n/PAYLOAD.md`](../n8n/PAYLOAD.md#error-codes-error_code).
 
 **Fact-check failure.** This is the safety net. The checker can block, the AI gets one more try with
 the exact list of problems, and if it still fails the email is not sent. The author never sees a
-number that was not in the data.
+number that was not in the data. The same checker also blocks contact details the data never gives: a
+link (`https://…`, `www.…`, `x.com/…` or a bare domain such as `bookleaf-pay.com`), a phone number,
+or an email address other than the `support_email` and `email_from` settings. So a `note` that steers
+the AI towards "confirm your bank details at …" ends as a rewrite, then `AI_FACT_CHECK_FAILED`, never
+as a sent email. An admin's edit in approve-draft gets the same check (`EDIT_BLOCKED`).
 
 **Email sent at most once.** Deliver Email saves the finished email on the job (stage `sending`)
 before the send, sends once, and records SENT or EMAIL_FAILED. It never sends for a job that has

@@ -22,7 +22,7 @@ const req = (over = {}) => ({ job_id: ID, action: 'check', subject: draft.subjec
 /** Check Edit, then Decide, as the two nodes run them. */
 const decide = (r, rw = row(), settings = SETTINGS) => {
   const request = req(r);
-  return decideApproval({ request, row: rw, settings, executionId: '512', check: editCheck({ request, row: rw }) });
+  return decideApproval({ request, row: rw, settings, executionId: '512', check: editCheck({ request, row: rw, settings }) });
 };
 
 describe('editCheck (the Check Edit node)', () => {
@@ -32,6 +32,17 @@ describe('editCheck (the Check Edit node)', () => {
     for (const [r, rw] of [[{ action: 'discard' }, row()], [{}, row({ fresh: false })], [{}, row({ status: 'SENT' })], [{}, {}]]) {
       expect(editCheck({ request: req(r), row: rw }), JSON.stringify(r)).toBeNull();
     }
+  });
+  it('blocks an edit with a link or an outside email address like a wrong figure; the configured addresses pass', () => {
+    const linked = `${draft.edit_text}\n\nConfirm your details at www.bookleaf-pay.com.`;
+    const check = editCheck({ request: req({ action: 'send', body: linked }), row: row(), settings: SETTINGS });
+    expect(check.passed).toBe(false);
+    expect(check.blocking.map((i) => i.code)).toEqual(['LINK']);
+    expect(decide({ action: 'send', body: linked }).response).toMatchObject({ ok: false, error_code: 'EDIT_BLOCKED' });
+    const outside = editCheck({ request: req({ body: `${draft.edit_text}\n\nWrite to payouts@elsewhere.test.` }), row: row(), settings: SETTINGS });
+    expect(outside.blocking.map((i) => i.code)).toEqual(['EMAIL_ADDRESS']);
+    const ours = editCheck({ request: req({ body: `${draft.edit_text}\n\nWrite to sender@bookleaf.test.` }), row: row(), settings: SETTINGS });
+    expect(ours.passed).toBe(true);
   });
 });
 

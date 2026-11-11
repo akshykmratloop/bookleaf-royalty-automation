@@ -53,6 +53,8 @@ describe('approve-draft wiring', () => {
     expect(targets(WF, 'Load Draft')).toEqual(['Check Edit']);
     expect(targets(WF, 'Check Edit')).toEqual(['Decide']);
     expect(nodeOf(WF, 'Check Edit').parameters.jsCode).toMatch(/function checkEmail/);
+    expect(nodeOf(WF, 'Check Edit').parameters.jsCode).toMatch(/function contactIssues/);
+    expect(nodeOf(WF, 'Check Edit').parameters.jsCode).toContain("return main({ request: $('Parse Request').first().json.request, row: $json, settings: $('Parse Request').first().json.settings });");
     expect(nodeOf(WF, 'Decide').parameters.jsCode).not.toMatch(/function checkEmail/);
     expect(nodeOf(WF, 'Load Draft')).toMatchObject({ alwaysOutputData: true, parameters: { query: SELECT_DRAFT } });
     expect(targets(WF, 'Decide')).toEqual(['Action']);
