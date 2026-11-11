@@ -296,7 +296,8 @@
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "none",
     "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner"
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "5xCSXfteGFFG7fL8"
   },
   "pinData": {}
 }

@@ -29,8 +29,10 @@ describe('an unexpected failure ends the job by its execution id and sends an al
   });
   it('the error handler found the job without the n8n API and sent the alert', () => {
     expect(handler.status).toBe('success');
-    expect(ranNodes(handler)).toEqual(['Error Trigger', 'Fail Job', 'Alert Set?', 'Send Alert']);
+    expect(ranNodes(handler)).toEqual(['Error Trigger', 'Fail Job', 'Alert Address', 'Alert Set?', 'Send Alert']);
     const [row] = handler.data.resultData.runData['Fail Job'][0].data.main[0];
     expect(row.json).toMatchObject({ job_id: job.job_id, error_code: 'INTERNAL', alert_to: expect.stringContaining('@') });
+    const [address] = handler.data.resultData.runData['Alert Address'][0].data.main[0];
+    expect(address.json).toMatchObject({ job_id: job.job_id, alert_to: row.json.alert_to, db_error: null });
   });
 });

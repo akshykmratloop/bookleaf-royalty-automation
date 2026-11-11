@@ -17,6 +17,7 @@ const ABOUT = [
 
 export default {
   name: 'BookLeaf - Stuck Job Sweeper', nodes, edges: [[every, 'Sweep Stuck Jobs']], settings: { saveDataSuccessExecution: 'none' },
+  errorWorkflow: 'BookLeaf - Error Handler',
   grid: { [every]: [0, 0], 'Sweep Stuck Jobs': [1, 0] },
   sections: [{ title: 'Sweep', text: 'Every minute; a sweep that finds nothing changes nothing.', nodes: [every, 'Sweep Stuck Jobs'] }],
   about: ABOUT,

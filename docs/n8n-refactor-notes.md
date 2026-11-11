@@ -708,3 +708,29 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   together (rebuild and redeploy).
 - **Release engineer:** production's stored `ai_timeout_ms` and `stuck_job_minutes` must fit (the defaults do). If
   production holds other values, check them first: a misfit makes every request answer 500 until fixed.
+
+## Fix 6 — the alert reaches someone when the database is down; the sweeper and job-status have an error workflow (MEDIUM)
+
+- **Changed:** error-handler is Error Trigger → Fail Job (3 tries, error output) → **Alert Address** (new Code node,
+  2.6 KB) → Alert Set? → Send Alert; Fail Job's error output also goes to Alert Address. Alert Address
+  (`n8n/src/pipeline/alert-cache.js`) keeps `alert_to`/`alert_from` of every answered Fail Job in the workflow's
+  static data (`$getWorkflowStaticData('global')`, which n8n saves after each non-manual run); when Fail Job could not
+  reach the database it alerts that last known address, with a line saying the database was down, at most once every
+  `TUNING.dbDownAlertEveryMinutes` = **15** minutes. Job Status and the Stuck Job Sweeper now name the Error Handler as
+  their error workflow (the two sub-workflows still have none, by design).
+- **Deviation from the immutability rule:** `alertAddress` changes the static-data object in place; that is n8n's
+  API for it (a new object would not be saved). Documented on the function.
+- **Tests (written first, RED):** error-handler wiring, Fail Job's error output and retry, Alert Address remembering,
+  using and throttling the address, no address before any was seen, the alert text for a database outage, the error
+  workflow of every top-level workflow; contract 06 expects Alert Address in the path with the remembered address.
+- **Live checks (local):** after a crash-drill run the Error Handler's static data held `alert_to`/`alert_from`
+  (read through the n8n API, values not printed) and survived the next deploy. Outage: `royalty_jobs` renamed for
+  85 s on the local `bookleaf` database: the sweeper's run failed (`relation "royalty_jobs" does not exist`), the
+  Error Handler ran (Fail Job 3 tries, 6.0 s) and Alert Address sent the alert to the remembered address. That run
+  showed n8n's real error-item shape (`{message, error:{…}}`, the message beside the error object), so the message
+  read "unknown database error"; fixed and pinned with that shape in the unit test. Table renamed back (455 rows).
+  Contracts 41/41.
+- **Sizes:** working nodes 78 → 79 (error-handler 5). Code 11 → 12 nodes, 172.7 KB (Check Settings also grew by the
+  timing check of fix 5).
+- **Release engineer:** after the first successful Error Handler run on an instance the address is remembered; until
+  then a database outage alerts nobody. Static data survives a redeploy through the public API (seen locally).

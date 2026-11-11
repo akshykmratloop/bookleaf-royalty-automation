@@ -23,6 +23,8 @@ export const TUNING = Object.freeze({
    * going, so it stops paying for AI calls. readSettings checks the AI worst case fits inside it.
    */
   runTimeoutSeconds: 600,
+  /** With the database down every run fails: the error handler alerts about it at most this often. */
+  dbDownAlertEveryMinutes: 15,
   /** The sweeper's cadence: every minute, so a stuck job fails close to stuck_job_minutes (lead's decision). */
   sweepEveryMinutes: 1,
 });

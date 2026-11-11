@@ -42,12 +42,17 @@ already ended (for example one the sweeper failed). If a run stops between the s
 nobody can tell whether the email went out: the job is labelled `EMAIL_UNCERTAIN`, and the alert
 and the message say to check the inbox before sending again.
 
-**Error workflow.** "BookLeaf - Error Handler" is the error workflow of Royalty Summary and Approve
-Draft. n8n gives it the failed execution's id, last node and error. Fail Job ends the job whose
-`execution_id` is that id, only while it is still QUEUED/PROCESSING, and always returns the
-`alert_email` setting; Send Alert emails that address (empty = no alert). A duplicate request's run
-owns no job, so it can never fail the earlier one. It needs no n8n API key. If the alert itself
-fails, the Error Handler's run fails and shows in n8n's executions list.
+**Error workflow.** "BookLeaf - Error Handler" is the error workflow of Royalty Summary, Approve
+Draft, Job Status and the Stuck Job Sweeper (the two sub-workflows have none: their caller's node
+fails instead). n8n gives it the failed execution's id, last node and error. Fail Job (3 tries) ends
+the job whose `execution_id` is that id, only while it is still QUEUED/PROCESSING, and always returns
+the `alert_email` setting. Alert Address remembers that address in the workflow's static data; when
+Fail Job cannot reach the database, it alerts the last remembered address instead, saying the
+database was down, at most once every 15 minutes (`TUNING.dbDownAlertEveryMinutes`: an outage fails
+the sweeper every minute). Send Alert emails the address (empty = no alert; with the database down
+before any address was remembered, nobody can be told). A duplicate request's run owns no job, so it
+can never fail the earlier one. It needs no n8n API key. If the alert itself fails, the Error
+Handler's run fails and shows in n8n's executions list.
 
 **Stuck job.** Any step can die silently (a restart, out of memory). The sweeper is a separate
 scheduled workflow that looks at the ledger, not at n8n executions, so it catches jobs that no

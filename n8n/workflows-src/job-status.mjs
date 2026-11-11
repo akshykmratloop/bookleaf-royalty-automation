@@ -35,4 +35,7 @@ const sections = [
   { title: 'Answer', text: 'The jobs, in the order asked; 503 if the database is down.', nodes: ['Select Jobs', 'Shape Jobs', 'Respond Jobs', 'Respond 503'] },
 ];
 
-export default { name: 'BookLeaf - Job Status', nodes, edges, grid, sections, about: ABOUT, settings: { saveDataSuccessExecution: 'none' } };
+export default {
+  name: 'BookLeaf - Job Status', nodes, edges, grid, sections, about: ABOUT, settings: { saveDataSuccessExecution: 'none' },
+  errorWorkflow: 'BookLeaf - Error Handler',
+};

@@ -93,6 +93,7 @@
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "none",
     "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "__WORKFLOW_BookLeaf - Error Handler__"
   }
 }

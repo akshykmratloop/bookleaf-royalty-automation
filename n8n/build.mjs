@@ -19,7 +19,7 @@ import { stableUuid } from './workflows-src/lib/nodes.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, 'workflows');
-const ENTRY_FILES = ['code/settings.js', 'code/summary.js', 'code/status.js', 'code/approve.js'].map((f) => join(HERE, 'workflows-src', f));
+const ENTRY_FILES = ['code/settings.js', 'code/summary.js', 'code/status.js', 'code/approve.js', 'code/handler.js'].map((f) => join(HERE, 'workflows-src', f));
 /**
  * Build and deploy order. A workflow another one names (error workflow, sub-workflow) comes first, so
  * deploy.mjs knows its id, and it is published before anything can call it.

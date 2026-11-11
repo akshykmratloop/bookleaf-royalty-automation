@@ -148,7 +148,7 @@ Server settings (sender, limits, models, prices, timeouts) live next to it in `b
 | BookLeaf - Deliver Email | The one place an email is sent: saves it on the job (stage `sending`), sends once, records SENT or EMAIL_FAILED. Called by Royalty Summary and Approve Draft. |
 | BookLeaf - Job Status | The polled `GET /jobs`. Reads no settings and saves no successful run. |
 | BookLeaf - Approve Draft | Check, send or discard a draft. |
-| BookLeaf - Error Handler | Error workflow of Royalty Summary and Approve Draft: fails the job by its execution id and emails `alert_email`. |
+| BookLeaf - Error Handler | Error workflow of Royalty Summary, Approve Draft, Job Status and the sweeper: fails the job by its execution id and emails `alert_email` (the last known address when the database is down). |
 | BookLeaf - Stuck Job Sweeper | Every minute: fails jobs not finished `stuck_job_minutes` after they started. |
 
 The workflows are generated from `n8n/workflows-src` by `n8n/build.mjs` and deployed with
