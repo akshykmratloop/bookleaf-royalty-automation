@@ -837,3 +837,13 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   workflow has a palette colour and About is blue; the AI and error-handler sections. The export test confirms n8n
   kept the colours after the deploy.
 - **Gates:** npm test 574/574, build --check clean, test:db 49/49, contracts 41/41.
+
+## Fix 12 — EMAIL_UNCERTAIN exercised end to end (LOW)
+
+- **Added:** `tests/contract/08-stuck-jobs.test.js` (local stack only, like contract 07). It writes two PROCESSING
+  jobs, last moved 30 minutes ago, straight into the local `bookleaf` database: one at stage `sending`, one at
+  `writing`. The live Stuck Job Sweeper fails them on its next run and job-status shows what Bubble would see:
+  `EMAIL_UNCERTAIN` ("… may or may not have arrived … It was still sending 10 minutes after it started …") and
+  `TIMEOUT`. It passed on the first run (13 s): this covers behaviour that was already right but only unit- and
+  SQL-tested. The jobs are FAILED with no AI attempt, so they do not take hourly-cap slots.
+- **Gates:** npm test 574/574, build --check clean, contracts **42/42**.
