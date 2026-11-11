@@ -780,7 +780,7 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   build test: one Code node, Respond Jobs answers `$json.response` with 200. The `shapeJobs` unit tests are removed
   with the function.
 - **Gates:** npm test 557/557, build --check clean, test:db 47/47, contracts 41/41 (job-status contracts unchanged).
-- **Sizes:** working nodes 81 → **80** (job-status 6); Code 14 → **13** nodes, 164.2 → **162.7 KB**; total budget
+- **Sizes:** working nodes 81 → **80** (job-status 7); Code 14 → **13** nodes, 164.2 → **162.7 KB**; total budget
   165 → 163 KB.
 
 ## Fix 8 — CI (MEDIUM "no CI")
@@ -847,3 +847,47 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   `TIMEOUT`. It passed on the first run (13 s): this covers behaviour that was already right but only unit- and
   SQL-tested. The jobs are FAILED with no AI attempt, so they do not take hourly-cap slots.
 - **Gates:** npm test 574/574, build --check clean, contracts **42/42**.
+
+## Not fixed on purpose (inspection 2)
+
+- **Per-node Code budget is 29 KB, not the suggested ~20 KB.** Three nodes are over 20 KB: Check Draft 28.0 KB
+  (Write Draft), Build Context 27.0 KB (Royalty Summary) and Check Edit 20.7 KB (Approve Draft). Each is one piece of
+  domain logic with nothing left to move out: Check Draft and Check Edit are the fact checker (every figure in the
+  email matched to the data, words to numbers, Indian grouping, dates), and Build Context holds the system prompt and
+  the facts it is built from. Splitting the checker over two Code nodes would pass half-checked state between them and
+  make a failure harder to read. Minifying was also rejected: whitespace and names are only about 20% of the size,
+  and a minified node cannot be read in the n8n editor, which is where an operator looks when a job fails. The budget
+  test keeps the numbers from growing (total 163 KB, per node 29 KB).
+- **Approve Draft's claim sets stage `sending` before Deliver Email's Mark Sending does.** The stage names are part
+  of the Bubble contract (queued … discarded) and there is no "approved" stage to use instead. The claim runs
+  directly before the Deliver Email call, so the window is milliseconds. If the run dies in that window, the sweeper
+  labels the job `EMAIL_UNCERTAIN` ("check the inbox"), which is the safe answer: it never claims an email was sent.
+- **Some values are still written in code:** `MAX_IDS` = 50 (job-status), the one-hour window of
+  `max_sends_per_hour`, and the brand colours of the email. The first two are part of the API Bubble calls (the
+  limit is documented in `n8n/PAYLOAD.md`; "per hour" is in the setting's name), so making them settings would let an
+  environment silently break the contract. The colours are the email's design, changed with the template and its
+  tests, not per environment.
+
+## Summary of inspection 2 (271f145 … this commit)
+
+- **HIGH (Code-node size):** fixes 1, 7a, 7b, 7c. The id and fingerprint moved into Postgres; Prepare Job, After AI and
+  Decide were split; the settings descriptions and unread constants left the bundles; Shape Jobs became SQL. Code:
+  10 nodes / 196.3 KB at the start of inspection 2 → **13 nodes / 162.7 KB**, largest 34.9 → **28.0 KB**; a poll of
+  job-status runs one Code node.
+- **MEDIUM:** one Write Draft sub-workflow (fix 2), a shaped 503 (fix 3), database retries (fix 4), the AI worst case
+  checked against `stuck_job_minutes` plus a 600 s `executionTimeout` (fix 5), an alert that works with the database
+  down and error workflows on the sweeper and job-status (fix 6), AI retries only for 429 / 5xx / timeouts (fix 2),
+  CI on GitHub Actions (fix 8, green on its first run).
+- **LOW:** named fallback outputs on every Switch (fix 2), one Code node per poll (fix 7c), failed jobs that reached
+  the AI count toward the cap (fix 9), Mark Sending writes only the email and usage (fix 10), coloured sticky notes
+  (fix 11), EMAIL_UNCERTAIN exercised end to end (fix 12). Not fixed, with reasons above: the claim stage and the
+  hardcoded values.
+- **Workflows:** 80 working nodes: royalty-summary 27 (4 Code), approve-draft 21 (4), write-draft 10 (3),
+  deliver-email 8 (0), job-status 7 (1), error-handler 5 (1), sweeper 2 (0).
+- **Bubble contract:** unchanged. Same webhook paths, `X-BookLeaf-Key`, 202 / 200 duplicate / 429 bodies, job-status
+  fields, approve answers and stage names. New, additive: a 503 `DB_UNAVAILABLE` body when the database is down.
+- **Gates at the end:** npm test 574/574, build --check clean, test:db 49/49, contracts 42/42 on the local n8n,
+  GitHub Actions green.
+- **Release engineer:** migration 03 (edited in place; not yet in production) and the workflows go out together.
+  After the first Error Handler run on an instance the alert address is remembered for database outages. The local
+  `max_sends_per_hour` is 300 (local database only).
