@@ -16,7 +16,7 @@ const head = () => row('ad_d_head', [
   flexCell('ad_dh_subj', 'SUBJECT', { look: 'micro' }),
   cell('ad_dh_style', 'STYLE', 130, { look: 'micro' }),
   cell('ad_dh_fig', 'CHECKED', 110, { look: 'micro' }),
-  cell('ad_dh_act', '', 236, { look: 'micro' }),
+  cell('ad_dh_act', '', 292, { look: 'micro' }),
 ], { gap: 8, props: { ...fill(T.panel2), ...sideBorder('bottom'), ...pad(12, 16) } });
 
 function draftRow() {
@@ -33,7 +33,7 @@ function draftRow() {
       button('ad_d_review', 'Review & edit', 'soft', pad(7, 12)),
       button('ad_d_approve', 'Approve', 'primary', pad(7, 12)),
       button('ad_d_discard', 'Discard', 'ghost', pad(7, 10)),
-    ], { gap: 6, props: { width: 236, single_width: true, min_width_css: '236px' } }),
+    ], { gap: 6, props: { width: 292, single_width: true, min_width_css: '292px', vert_alignment: 'center' } }),
   ], { layout: 'row', gap: 8, props: { ...sideBorder('bottom'), ...pad(12, 16), vert_alignment: 'center' } });
   return hover(r, fill(T.panel2));
 }
