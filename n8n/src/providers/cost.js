@@ -4,12 +4,15 @@
  * 5-minute cache writes 1.25x.
  */
 export const SONNET_5_5_PRICE = Object.freeze({ inputPerMTok: 2, outputPerMTok: 10, cacheWriteMultiplier: 1.25, cacheReadMultiplier: 0.1 });
-/** PLACEHOLDER rates for a gpt-4.1-mini-class model (cached input 0.25x): verify against OpenAI pricing before relying on them. */
-export const OPENAI_MINI_PLACEHOLDER_PRICE = Object.freeze({ inputPerMTok: 0.4, outputPerMTok: 1.6, cacheWriteMultiplier: 1, cacheReadMultiplier: 0.25 });
+/**
+ * gpt-4.1-mini, OpenAI standard tier (developers.openai.com/api/docs/pricing, checked 2026-11-11):
+ * $0.40 in, $1.60 out, cached input $0.10 (0.25x); OpenAI charges nothing extra to write its cache.
+ */
+export const GPT_4_1_MINI_PRICE = Object.freeze({ inputPerMTok: 0.4, outputPerMTok: 1.6, cacheWriteMultiplier: 1, cacheReadMultiplier: 0.25 });
 
 export const PRICES = Object.freeze({
   'claude-sonnet-5-5': SONNET_5_5_PRICE,
-  'gpt-4.1-mini': OPENAI_MINI_PLACEHOLDER_PRICE,
+  'gpt-4.1-mini': GPT_4_1_MINI_PRICE,
 });
 
 /**
