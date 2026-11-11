@@ -51,3 +51,9 @@ Legend: ⬜ TODO · 🔄 In progress · ✅ Done (commit SHA) · ⛔ Blocked
 
 ## Step 6 — Delivery (at the end, per the user)
 - ⬜ README + docs (no placeholders), n8n export link, video, Drive folder, collaborator attempt, draft reply email
+  - Doc fixes found by the 12 Nov final review (overall 7/10, docs 5/10):
+    - README: remove push/callback wording (diagram, "Push and pull modes", "failed callback"); name `duplicate_window_minutes`; update the repo map (`workflows-src/`, `export/`, `tools/`); list the n8n features used (IF, Code, error workflow, sweeper, Header Auth).
+    - Take and embed the 9 screenshots (`docs/media/` is empty).
+    - Resolve every `{{TODO}}` / `{{VERIFY}}` (README:102, schema.md:150, decisions.md:15/64, ai-prompt-strategy.md:119/127, learning-log.md ×7).
+    - decisions.md: a new dated decision that replaces decisions 2–3 (push dropped on the free plan).
+    - Bubble `callback_mode` setting is dead: remove it from schema docs and the System page.
