@@ -666,3 +666,20 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   is sent for it; with the database down, the sweeper's runs fail every minute and alert (fix 6).
 - **Release engineer:** none (no migration, credential or setting). Bubble's API Connector already treats a non-2xx
   answer as an error; the body has the documented `{error:{code,message,retryable}}` shape.
+
+## Fix 4 — database writes that are safe to repeat retry (MEDIUM)
+
+- **Changed:** `pg()` takes `retry: true`: `retryOnFail`, `TUNING.dbRetries + 1` = **3** tries, `TUNING.dbRetryWaitMs` =
+  **1 s** apart. Retried: the reads (both Load Settings, Load Draft, Select Jobs) and every write guarded by the
+  job's status, where a second run changes nothing more: Mark Processing, Stage: Rewriting, Record Result, Mark
+  Sending, Mark Sent, Mark Failed, and the error handler's Fail Job. Deliberately run once: Enqueue Job (a retried
+  insert would answer as a duplicate of itself and the job would never be processed), Claim Draft and Discard Draft
+  (a retry would find the draft gone and answer ALREADY_SENT / NOT_A_DRAFT), and the sweep (it runs every minute).
+  So one dropped connection after a successful Send Email no longer turns a sent email into `EMAIL_UNCERTAIN`.
+- **Tests (written first, RED):** `n8n/tests/database-retries.test.js` classifies every Postgres node of every
+  workflow as retried or not, so a new node must be decided on.
+- **Gates:** npm test 540/540, build --check clean, contracts 41/41.
+- **Local environment:** the contract suite had been run five times inside one hour and hit `max_sends_per_hour`
+  (60): `max_sends_per_hour` is now **300 on the local database only** (one UPDATE of `bookleaf_settings`), so
+  repeated local runs pass. Production keeps its own value.
+- **Sizes:** unchanged (78 working nodes, 11 Code nodes, 165.4 KB).

@@ -104,6 +104,9 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "position": [
         260,
         0
@@ -267,6 +270,9 @@
       "name": "Mark Sent",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "position": [
         1300,
         0
@@ -292,6 +298,9 @@
       "notes": "EMAIL_FAILED + server reply",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "position": [
         1300,
         200

@@ -156,6 +156,9 @@
       },
       "alwaysOutputData": true,
       "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "notes": "html only with include=html",
       "notesInFlow": true,
       "position": [

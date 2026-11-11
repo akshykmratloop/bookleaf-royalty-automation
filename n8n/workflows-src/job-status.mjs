@@ -12,7 +12,7 @@ const nodes = [
   code('Parse Query', 'parseQuery', 'return main({ query: $json.query });'),
   ifTrue('Query Valid?', '$json.ok', IS_TRUE),
   respond('Respond Rejected'),
-  withNote(pg('Select Jobs', SELECT_JOBS, '$json.params', { alwaysOutputData: true, errorOutput: true }), 'html only with include=html'),
+  withNote(pg('Select Jobs', SELECT_JOBS, '$json.params', { alwaysOutputData: true, errorOutput: true, retry: true }), 'html only with include=html'),
   code('Shape Jobs', 'respondJobs', `return main({ rows: $input.all().map((i) => i.json), ids: ${PARSED}.ids, includeHtml: ${PARSED}.include_html });`),
   respond('Respond Jobs'),
   withNote(respondDatabaseDown('Respond 503'), 'Database down: 503'),

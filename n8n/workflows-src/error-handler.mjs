@@ -36,7 +36,7 @@ const ABOUT = [
 
 const nodes = [
   errorTrigger('Error Trigger'),
-  withNote(pg('Fail Job', FAIL_JOB, FAIL_PARAMS), 'By execution id; one row'),
+  withNote(pg('Fail Job', FAIL_JOB, FAIL_PARAMS, { retry: true }), 'By execution id; one row'),
   withNote(ifTrue('Alert Set?', '$json.alert_to', NOT_EMPTY), 'false: alert_email empty'),
   sendAlert('Send Alert', 'smtp', ALERT),
 ];

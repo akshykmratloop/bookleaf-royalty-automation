@@ -26,13 +26,13 @@ const ABOUT = [
 
 const nodes = [
   webhook('Approve Webhook', 'POST', 'royalty-summary/approve'),
-  pg('Load Settings', LOAD_SETTINGS, null, { errorOutput: true }),
+  pg('Load Settings', LOAD_SETTINGS, null, { errorOutput: true, retry: true }),
   withNote(code('Check Settings', 'checkSettings', 'return main({ settings: $json.settings });'), 'Bad settings: 500'),
   ifTrue('Settings OK?', '$json.ok', IS_TRUE),
   code('Parse Request', 'parseApprove', `return main({ body: ${WEBHOOK}.body, settings: $json.settings });`),
   ifTrue('Request Valid?', '$json.ok', IS_TRUE),
   respond('Respond Rejected'),
-  pg('Load Draft', SELECT_DRAFT, `${PARSED}.params`, { alwaysOutputData: true, errorOutput: true }),
+  pg('Load Draft', SELECT_DRAFT, `${PARSED}.params`, { alwaysOutputData: true, errorOutput: true, retry: true }),
   withNote(code('Decide', 'decide', `return main({ request: ${PARSED}.request, row: $json, settings: ${PARSED}.settings, executionId: $execution.id });`), 'Checks the edit; all answers'),
   switchRules('Action', '$json.action', [
     { output: 'Send', equals: APPROVE_ACTIONS.SEND }, { output: 'Discard', equals: APPROVE_ACTIONS.DISCARD }, { output: 'Answer', equals: APPROVE_ACTIONS.ANSWER },

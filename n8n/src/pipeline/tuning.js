@@ -12,6 +12,12 @@ export const TUNING = Object.freeze({
   aiRetries: 1,
   aiRetryBaseSeconds: 2,
   aiRetryMaxWaitSeconds: 10,
+  /**
+   * Extra tries of a Postgres read, or of a write guarded by the job's status (repeating it changes
+   * nothing more), after a dropped connection; and the wait between tries.
+   */
+  dbRetries: 2,
+  dbRetryWaitMs: 1000,
   /** The sweeper's cadence: every minute, so a stuck job fails close to stuck_job_minutes (lead's decision). */
   sweepEveryMinutes: 1,
 });

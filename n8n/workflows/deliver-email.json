@@ -113,6 +113,9 @@
         }
       },
       "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "notes": "Saves email; stage sending",
       "notesInFlow": true,
       "position": [
@@ -278,6 +281,9 @@
           "name": "BookLeaf Postgres (bookleaf db)"
         }
       },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "position": [
         1300,
         0
@@ -301,6 +307,9 @@
           "name": "BookLeaf Postgres (bookleaf db)"
         }
       },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "notes": "EMAIL_FAILED + server reply",
       "notesInFlow": true,
       "position": [

@@ -32,7 +32,7 @@ const ABOUT = [
 
 const nodes = [
   webhook('Royalty Summary Webhook', 'POST', 'royalty-summary'),
-  pg('Load Settings', LOAD_SETTINGS, null, { errorOutput: true }),
+  pg('Load Settings', LOAD_SETTINGS, null, { errorOutput: true, retry: true }),
   withNote(code('Check Settings', 'checkSettings', 'return main({ settings: $json.settings });'), 'Bad settings: 500'),
   ifTrue('Settings OK?', '$json.ok', IS_TRUE),
   withNote(code('Validate Body', 'prepare', `return main({ body: ${WEBHOOK}.body, settings: $json.settings, now: Date.now(), executionId: $execution.id });`), 'Bad body: 400'),
@@ -47,21 +47,21 @@ const nodes = [
   respond('Respond 429', '429', `${VALIDATED}.rate_limited`),
   respondFixed('Respond 500', 500, UNEXPECTED_ENQUEUE),
   withNote(respondDatabaseDown('Respond 503'), 'Database down: 503'),
-  withNote(pg('Mark Processing', MARK_PROCESSING, `JSON.stringify({ job_id: ${ENQUEUED}.job_id })`), 'PROCESSING, stage writing'),
+  withNote(pg('Mark Processing', MARK_PROCESSING, `JSON.stringify({ job_id: ${ENQUEUED}.job_id })`, { retry: true }), 'PROCESSING, stage writing'),
   withNote(code('Build Context', 'context', `return main({ validated: ${VALIDATED}.job, jobId: ${ENQUEUED}.job_id });`), 'Job id from Enqueue Job'),
   ifTrue('Context OK?', '$json.ok', IS_TRUE),
   withNote(executeWorkflow('Write Draft', WRITE_DRAFT, { job: JOB, ctx: CTX, request: `${CTX}.requests`, attempt: '1', previous: '{}' }), 'AI writes; figures checked'),
   switchRules('Draft OK?', '$json.outcome', [
     { output: 'Pass', equals: AI_OUTCOMES.PASS }, { output: 'Rewrite', equals: AI_OUTCOMES.REWRITE }, { output: 'Fail', equals: AI_OUTCOMES.FAIL },
   ], 'Unexpected'),
-  pg('Stage: Rewriting', SET_STAGE, `JSON.stringify({ job_id: ${JOB}.job_id, stage: 'rewriting' })`, { alwaysOutputData: true }),
+  pg('Stage: Rewriting', SET_STAGE, `JSON.stringify({ job_id: ${JOB}.job_id, stage: 'rewriting' })`, { alwaysOutputData: true, retry: true }),
   withNote(executeWorkflow('Rewrite Draft', WRITE_DRAFT, { job: JOB, ctx: CTX, request: `${FIRST}.rewrite`, attempt: '2', previous: `${FIRST}.ai` }), 'Again, with checker notes'),
   ifTrue('Rewrite OK?', '$json.ok', IS_TRUE),
   withNote(stopAndError('Stop: Unexpected', 'Write Draft gave an unexpected outcome.'), 'Error workflow fails the job'),
   code('Render Email', 'render', `return main({ ctx: ${CTX}, job: ${JOB}, ai: $json.ai });`),
   withNote(ifTrue('Send Now?', '$json.send', IS_TRUE), 'false: delivery=draft'),
   withNote(executeWorkflow('Deliver Email', DELIVER_EMAIL, '$json.deliver'), 'Saves, sends once, records'),
-  withNote(pg('Record Result', UPDATE_JOB, 'JSON.stringify($json.update)'), 'Drafts and every failure'),
+  withNote(pg('Record Result', UPDATE_JOB, 'JSON.stringify($json.update)', { retry: true }), 'Drafts and every failure'),
 ];
 
 const edges = [

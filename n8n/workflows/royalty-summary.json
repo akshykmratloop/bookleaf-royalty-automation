@@ -162,6 +162,9 @@
         }
       },
       "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "position": [
         260,
         0
@@ -510,6 +513,9 @@
           "name": "BookLeaf Postgres (bookleaf db)"
         }
       },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "notes": "PROCESSING, stage writing",
       "notesInFlow": true,
       "position": [
@@ -766,6 +772,9 @@
         }
       },
       "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "position": [
         3900,
         200
@@ -1052,6 +1061,9 @@
           "name": "BookLeaf Postgres (bookleaf db)"
         }
       },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "notes": "Drafts and every failure",
       "notesInFlow": true,
       "position": [

@@ -66,6 +66,9 @@
       "notes": "By execution id; one row",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "position": [
         260,
         0

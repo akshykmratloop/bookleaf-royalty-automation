@@ -35,13 +35,13 @@ const ABOUT = [
 
 const nodes = [
   subWorkflowTrigger('When Called', DELIVER_EMAIL.inputs),
-  withNote(pg('Mark Sending', UPDATE_JOB, SENDING, { alwaysOutputData: true }), 'Saves email; stage sending'),
+  withNote(pg('Mark Sending', UPDATE_JOB, SENDING, { alwaysOutputData: true, retry: true }), 'Saves email; stage sending'),
   withNote(ifTrue('Still Running?', '$json.job_id', NOT_EMPTY), 'false: job already ended'),
   withNote(ifTrue('Real SMTP?', `${CALL}.drill`, IS_FALSE), 'false: the email_down drill'),
   withNote(sendEmail('Send Email', 'smtp', `${CALL}.email`), 'One try, never retried'),
   withNote(sendEmail('Send Email (drill: SMTP down)', 'smtpDrill', `${CALL}.email`), 'Unreachable server: fails'),
-  pg('Mark Sent', MARK_SENT, `JSON.stringify({ job_id: ${CALL}.job_id, sent_to: ${CALL}.email.to })`),
-  withNote(pg('Mark Failed', MARK_EMAIL_FAILED, `JSON.stringify({ job_id: ${CALL}.job_id, error: $json.error })`), 'EMAIL_FAILED + server reply'),
+  pg('Mark Sent', MARK_SENT, `JSON.stringify({ job_id: ${CALL}.job_id, sent_to: ${CALL}.email.to })`, { retry: true }),
+  withNote(pg('Mark Failed', MARK_EMAIL_FAILED, `JSON.stringify({ job_id: ${CALL}.job_id, error: $json.error })`, { retry: true }), 'EMAIL_FAILED + server reply'),
 ];
 
 const edges = [

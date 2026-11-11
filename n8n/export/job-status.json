@@ -146,6 +146,9 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "onError": "continueErrorOutput",
       "position": [
         1040,

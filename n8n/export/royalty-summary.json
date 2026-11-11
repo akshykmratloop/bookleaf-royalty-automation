@@ -152,6 +152,9 @@
       "name": "Load Settings",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "onError": "continueErrorOutput",
       "position": [
         260,
@@ -501,6 +504,9 @@
       "notes": "PROCESSING, stage writing",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "position": [
         2600,
         0
@@ -755,6 +761,9 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "position": [
         3900,
         200
@@ -1043,6 +1052,9 @@
       "notes": "Drafts and every failure",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "position": [
         4940,
         600

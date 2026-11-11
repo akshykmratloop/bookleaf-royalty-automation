@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { errorBody, failure } from '../../src/pipeline/errors.js';
+import { TUNING } from '../../src/pipeline/tuning.js';
 import { credentialRef } from './credentials.mjs';
 
 /**
@@ -88,7 +89,8 @@ export const respond = (name, statusExpr = '$json.http_status', bodyExpr = '$jso
 
 /**
  * Postgres query with ONE JSON parameter ($1::jsonb).
- * @param {{alwaysOutputData?:boolean, errorOutput?:boolean}} [o] errorOutput: a failure goes to the second output
+ * @param {{alwaysOutputData?:boolean, errorOutput?:boolean, retry?:boolean}} [o] errorOutput: a failure goes to the
+ *   second output; retry: only for a read or a status-guarded write, which is safe to run twice (TUNING.dbRetries)
  */
 export const pg = (name, query, paramExpr, o = {}) => node(name, 'postgres', 2.6, {
   operation: 'executeQuery', query, options: paramExpr ? { queryReplacement: `={{ ${paramExpr} }}` } : {},
@@ -96,6 +98,7 @@ export const pg = (name, query, paramExpr, o = {}) => node(name, 'postgres', 2.6
   credentials: credentialRef('postgres'),
   ...(o.alwaysOutputData ? { alwaysOutputData: true } : {}),
   ...(o.errorOutput ? { onError: 'continueErrorOutput' } : {}),
+  ...(o.retry ? { retryOnFail: true, maxTries: TUNING.dbRetries + 1, waitBetweenTries: TUNING.dbRetryWaitMs } : {}),
 });
 
 /**

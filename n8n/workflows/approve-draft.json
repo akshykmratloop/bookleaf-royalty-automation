@@ -117,6 +117,9 @@
         }
       },
       "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "position": [
         260,
         0
@@ -259,6 +262,9 @@
       },
       "alwaysOutputData": true,
       "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
       "position": [
         1820,
         0
