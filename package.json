@@ -2,6 +2,7 @@
   "name": "bookleaf-royalty-automation",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "engines": {
     "node": ">=22"
   },
