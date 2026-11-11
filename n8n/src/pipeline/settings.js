@@ -80,7 +80,7 @@ export const SETTINGS_SCHEMA = deepFreeze({
   },
   allow_drills: {
     default: false, check: flag, perEnvironment: true,
-    description: 'true lets a request force failure drills (ai_down, email_down, data_down, primary_down); keep false where real authors are emailed.',
+    description: 'true lets a request force failure drills (ai_down, email_down, data_down, primary_down, crash); keep false where real authors are emailed.',
   },
   reference_date_default: {
     default: '2025-12-31', check: dateOrToday,

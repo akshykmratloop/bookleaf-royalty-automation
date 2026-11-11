@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readSettings, SETTINGS_SCHEMA, settingProblem } from '../../src/pipeline/settings.js';
 import { SETTINGS } from './settings-fixture.js';
+import { DRILLS } from '../../src/pipeline/request.js';
 
 const KEYS = [
   'brand_name', 'sender_name', 'email_from', 'support_email', 'default_demo_inbox', 'allow_drills', 'reference_date_default',
@@ -18,6 +19,10 @@ describe('settings schema', () => {
       expect(s.description, key).toMatch(/^[A-Za-z].{20,400}$/);
       expect(typeof s.check, key).toBe('function');
     }
+  });
+  it('the allow_drills description names every drill a request may force', () => {
+    expect(DRILLS).toEqual(['ai_down', 'email_down', 'data_down', 'primary_down', 'crash']);
+    for (const d of DRILLS) expect(SETTINGS_SCHEMA.allow_drills.description).toContain(d);
   });
   it('marks the values that differ between local and production', () => {
     expect(KEYS.filter((k) => SETTINGS_SCHEMA[k].perEnvironment)).toEqual(PER_ENVIRONMENT);

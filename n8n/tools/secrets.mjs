@@ -58,7 +58,7 @@ export const aiKeys = (path) => requireKeys(readEnvFile(path), ['ANTHROPIC_API_K
  * Credential name → {type, data}, keyed like workflows-src/lib/credentials.mjs.
  * @returns {Record<string, Object>}
  */
-export function credentialData({ db, smtp, ai, n8nApiKey, webhookKey: key }) {
+export function credentialData({ db, smtp, ai, webhookKey: key }) {
   const only = (domain) => ({ allowedHttpRequestDomains: 'domains', allowedDomains: domain });
   return {
     postgres: { ...db, ssl: 'disable', allowUnauthorizedCerts: false, sshTunnel: false },
@@ -66,7 +66,6 @@ export function credentialData({ db, smtp, ai, n8nApiKey, webhookKey: key }) {
     openai: { token: ai.OPENAI_API_KEY, ...only('api.openai.com') },
     smtp: { ...smtp, disableStartTls: false },
     smtpDrill: { host: '127.0.0.1', port: 9, secure: false, user: 'drill', password: 'drill', disableStartTls: true },
-    n8nApi: { name: 'X-N8N-API-KEY', value: n8nApiKey },
     webhookKey: { name: 'X-BookLeaf-Key', value: key, allowedHttpRequestDomains: 'none' },
   };
 }

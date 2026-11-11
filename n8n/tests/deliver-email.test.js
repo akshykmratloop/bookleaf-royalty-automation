@@ -104,9 +104,11 @@ describe('Deliver Email sub-workflow', () => {
 });
 
 describe('Send Email', () => {
-  it('only Deliver Email sends, and no Send Email node retries (a retry after a lost answer could email twice)', () => {
-    const sends = WORKFLOW_SOURCES.flatMap((wf) => ofType(wf, 'emailSend').map((n) => ({ wf, n })));
-    expect(sends.map(({ wf, n }) => `${wf}/${n.name}`)).toEqual([`${WF}/Send Email`, `${WF}/Send Email (drill: SMTP down)`]);
+  it('only Deliver Email emails authors (the error handler only alerts alert_email), and no email node retries', () => {
+    const all = WORKFLOW_SOURCES.flatMap((wf) => ofType(wf, 'emailSend').map((n) => ({ wf, n })));
+    expect(all.map(({ wf, n }) => `${wf}/${n.name}`)).toEqual(['error-handler/Send Alert', `${WF}/Send Email`, `${WF}/Send Email (drill: SMTP down)`]);
+    for (const { n } of all) expect(n, n.name).toMatchObject({ retryOnFail: false });
+    const sends = all.filter(({ wf }) => wf === WF);
     for (const { n } of sends) {
       expect(n, n.name).toMatchObject({ retryOnFail: false, onError: 'continueErrorOutput' });
       expect(n, n.name).not.toHaveProperty('maxTries');

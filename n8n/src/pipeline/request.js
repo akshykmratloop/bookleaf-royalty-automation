@@ -3,8 +3,12 @@ import { validatedBundleFromPayload } from '../payload.js';
 import { readStyle } from './style.js';
 
 const ID = /^[A-Za-z0-9_-]+$/;
-/** primary_down fails only the primary AI provider (Anthropic), so the OpenAI fallback writes the email. */
-const DRILLS = Object.freeze(['ai_down', 'email_down', 'data_down', 'primary_down']);
+/**
+ * Failure drills a request may force (with the allow_drills setting). primary_down fails only the
+ * primary AI provider (Anthropic), so the OpenAI fallback writes the email; crash makes Build Context
+ * throw, so the error workflow fails the job.
+ */
+export const DRILLS = Object.freeze(['ai_down', 'email_down', 'data_down', 'primary_down', 'crash']);
 export const MAX_ATTEMPT = 20;
 
 /**
@@ -12,7 +16,7 @@ export const MAX_ATTEMPT = 20;
  * @property {string} author_id @property {string|null} log_id @property {string|null} batch_id
  * @property {string} requested_by @property {'single'|'bulk'} mode @property {string|null} reference_date
  * @property {string|null} demo_inbox @property {number} attempt
- * @property {{ai_down:boolean, email_down:boolean, data_down:boolean, primary_down:boolean}} drills
+ * @property {{ai_down:boolean, email_down:boolean, data_down:boolean, primary_down:boolean, crash:boolean}} drills
  * @property {'send'|'draft'} delivery @property {'warm'|'formal'|'concise'} tone
  * @property {'short'|'standard'|'detailed'} length @property {string} note @property {string} sign_off
  * @property {import('../types.js').AuthorBundle} bundle the author and books sent with the request

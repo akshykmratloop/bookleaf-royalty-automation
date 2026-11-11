@@ -104,16 +104,29 @@ export function http(name, o) {
 }
 
 /**
- * Send Email (SMTP) with both HTML and text; a failure goes to the second output as the input item
- * plus `error` (the server's message). One try, never retried: when the server's answer is lost, a
- * second try could email the author twice.
+ * Send Email (SMTP), one try: when the server's answer is lost, a second try could send twice.
+ * @param {{from:string, to:string, subject:string, text:string, html?:string}} fields expressions; no html = plain text
+ */
+const emailNode = (name, credential, fields, extra) => node(name, 'emailSend', 2.1, {
+  resource: 'email', operation: 'send', fromEmail: `={{ ${fields.from} }}`, toEmail: `={{ ${fields.to} }}`,
+  subject: `={{ ${fields.subject} }}`, emailFormat: fields.html ? 'both' : 'text', text: `={{ ${fields.text} }}`,
+  ...(fields.html ? { html: `={{ ${fields.html} }}` } : {}), options: { appendAttribution: false },
+}, { credentials: credentialRef(credential), ...extra, retryOnFail: false });
+
+/**
+ * An author's email, HTML and text; a failure goes to the second output as the input item plus
+ * `error` (the server's message).
  * @param {string} name @param {string} credential @param {string} [src] expression for the {from,to,subject,html,text} object
  */
-export const sendEmail = (name, credential, src = '$json.email') => node(name, 'emailSend', 2.1, {
-  resource: 'email', operation: 'send', fromEmail: `={{ ${src}.from }}`, toEmail: `={{ ${src}.to }}`,
-  subject: `={{ ${src}.subject }}`, emailFormat: 'both', text: `={{ ${src}.text }}`, html: `={{ ${src}.html }}`,
-  options: { appendAttribution: false },
-}, { credentials: credentialRef(credential), onError: 'continueErrorOutput', retryOnFail: false });
+export const sendEmail = (name, credential, src = '$json.email') => emailNode(name, credential, {
+  from: `${src}.from`, to: `${src}.to`, subject: `${src}.subject`, text: `${src}.text`, html: `${src}.html`,
+}, { onError: 'continueErrorOutput' });
+
+/**
+ * A plain-text alert. A failure fails the node (and so its run, shown in the executions list).
+ * @param {string} name @param {string} credential @param {{from:string, to:string, subject:string, text:string}} fields expressions
+ */
+export const sendAlert = (name, credential, fields) => emailNode(name, credential, fields, {});
 
 /**
  * Execute Workflow Trigger ("When Executed by Another Workflow") with typed inputs. The caller's

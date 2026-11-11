@@ -48,7 +48,10 @@ describe('webhookKey', () => {
 
 describe('credentialData', () => {
   it('the webhook key credential sends X-BookLeaf-Key and no HTTP Request node may use it', () => {
-    const data = credentialData({ db: {}, smtp: {}, ai: {}, n8nApiKey: 'n8n-api-key', webhookKey: KEY });
+    const data = credentialData({ db: {}, smtp: {}, ai: {}, webhookKey: KEY });
     expect(data.webhookKey).toEqual({ name: 'X-BookLeaf-Key', value: KEY, allowedHttpRequestDomains: 'none' });
+  });
+  it('carries no n8n API key: the error handler no longer calls the n8n API', () => {
+    expect(Object.keys(credentialData({ db: {}, smtp: {}, ai: {}, webhookKey: KEY }))).toEqual(['postgres', 'anthropic', 'openai', 'smtp', 'smtpDrill', 'webhookKey']);
   });
 });

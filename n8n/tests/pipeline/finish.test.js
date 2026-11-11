@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { afterAi } from '../../src/pipeline/after-ai.js';
 import { buildContext } from '../../src/pipeline/context.js';
+import { CrashDrillError } from '../../src/pipeline/drills.js';
 import { errorBody, failure } from '../../src/pipeline/errors.js';
-import { internalFailureUpdate, jobIdFromExecution } from '../../src/pipeline/error-handler.js';
 import { deliveryFor, failedUpdate } from '../../src/pipeline/finalize.js';
 import { nodeErrorSummary } from '../../src/pipeline/node-errors.js';
 import { prepareJob } from '../../src/pipeline/prepare.js';
@@ -65,22 +65,15 @@ describe('job status query', () => {
   });
 });
 
-describe('error workflow helpers', () => {
-  const runOf = (node, json) => ({ data: { resultData: { runData: { [node]: [{ data: { main: [[{ json }]] } }] } } } });
-  it('finds the job id in the failed execution: the job Prepare Job made, or the draft Claim Draft took', () => {
-    expect(jobIdFromExecution(runOf('Prepare Job', { job: { job_id: ID } }))).toBe(ID);
-    expect(jobIdFromExecution(runOf('Claim Draft', { job_id: ID }))).toBe(ID);
-    expect(jobIdFromExecution({})).toBeNull();
+describe('the crash drill', () => {
+  it('throws a CrashDrillError from buildContext, so the run fails and the error workflow takes over', () => {
+    const r = prepareJob(payloadFor('AUTH002', { drills: { crash: true } }), SETTINGS, NOW, fixedRandom);
+    expect(() => buildContext(r.job)).toThrow(CrashDrillError);
+    expect(() => buildContext(r.job)).toThrow('Failure drill: the workflow crashed on purpose.');
   });
-  it('never takes the job id from Enqueue Job: for a duplicate it is the earlier request\'s job, which must not be failed', () => {
-    expect(jobIdFromExecution(runOf('Enqueue Job', { outcome: 'duplicate', job_id: ID }))).toBeNull();
-    expect(jobIdFromExecution(runOf('Insert Job', { job_id: ID }))).toBeNull();
-  });
-  it('builds an INTERNAL failure naming the node', () => {
-    const u = internalFailureUpdate(ID, { execution: { lastNodeExecuted: 'Record Result', error: { message: 'connection refused' } } });
-    expect(u).toMatchObject({ job_id: ID, status: 'FAILED', error_code: 'INTERNAL' });
-    expect(u.error).toContain('Node "Record Result": connection refused');
-  });
+});
+
+describe('node error summaries', () => {
   it('nodeErrorSummary is one line and redacts secrets', () => {
     const s = nodeErrorSummary({ error: { httpCode: '401', message: 'Bad key sk-ant-abcdefghijk', description: 'Bearer abcdefghijkl' } }, 'anthropic');
     expect(s).toBe('anthropic: 401 - Bad key [redacted] - [redacted]');

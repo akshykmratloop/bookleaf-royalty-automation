@@ -79,7 +79,7 @@ INSERT INTO bookleaf_settings (key, value, description) VALUES
   ('email_from', '""', 'Sender address. Required: set it for each environment to an address the SMTP account may send from.'),
   ('support_email', '""', 'Support address printed in the email footer; empty leaves the line out.'),
   ('default_demo_inbox', '""', 'Inbox for requests that name no demo_inbox; empty makes such requests fail with NO_RECIPIENT. Never an author address.'),
-  ('allow_drills', 'false', 'true lets a request force failure drills (ai_down, email_down, data_down, primary_down); keep false where real authors are emailed.'),
+  ('allow_drills', 'false', 'true lets a request force failure drills (ai_down, email_down, data_down, primary_down, crash); keep false where real authors are emailed.'),
   ('reference_date_default', '"2025-12-31"', 'Date the royalty status is worked out against when a request gives none: YYYY-MM-DD, or "today" (IST).'),
   ('ai_primary', '{"model":"claude-sonnet-5-5","effort":"medium","max_tokens":8000}', 'Primary AI writer (Anthropic Messages API): model, effort (low, medium or high) and output token limit.'),
   ('ai_fallback', '{"model":"gpt-4.1-mini","max_tokens":4000}', 'Fallback AI writer (OpenAI Responses API), used when the primary fails: model and output token limit.'),

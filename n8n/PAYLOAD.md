@@ -65,7 +65,7 @@ Bubble date (ISO instant, read in India time), or empty.
 | `reference_date` | Optional. "Figures as of" date. Empty = the `reference_date_default` setting (2025-12-31, or `today`). |
 | `demo_inbox` | Optional email. **Emails never go to `author.email`.** Empty = the `default_demo_inbox` setting; neither set = job refused with `NO_RECIPIENT` (422). |
 | `attempt` | Optional, 1-20, default 1. Bump it for a deliberate "send again" within the duplicate window (see idempotency). |
-| `drills` | Optional. Failure drills, honoured only when the `allow_drills` setting is true (otherwise **400**, never silently ignored). `ai_down` fails both AI providers; `primary_down` fails only Anthropic, so the OpenAI fallback writes the email (the job's `provider`/`model` show OpenAI); `email_down` points SMTP at an unreachable server; `data_down` fails the data step. Bubble maps its flat `ai_down`/`email_down`/`data_down`/`primary_down` parameters into this object. |
+| `drills` | Optional. Failure drills, honoured only when the `allow_drills` setting is true (otherwise **400**, never silently ignored). `ai_down` fails both AI providers; `primary_down` fails only Anthropic, so the OpenAI fallback writes the email (the job's `provider`/`model` show OpenAI); `email_down` points SMTP at an unreachable server; `data_down` fails the data step; `crash` makes the workflow throw after the 202 (like a bug), so the error workflow ends the job `INTERNAL` and sends the alert. Bubble maps its flat `ai_down`/`email_down`/`data_down`/`primary_down` parameters into this object. |
 | `delivery` | Optional. `send` (default): write, check and send. `draft`: write, check and render, then stop as `DRAFTED` for an admin to approve (see the approve endpoint). |
 | `tone` | Optional. `warm` (default, BookLeaf's usual tone), `formal` or `concise`. |
 | `length` | Optional. `short` (about 80-180 words of prose), `standard` (default, 150-300) or `detailed` (250-450). The prompt and the word-count warning follow it. |
@@ -122,9 +122,10 @@ plain poll.
 
 `status` moves QUEUED → PROCESSING → SENT or FAILED, or (with `delivery: "draft"`) → DRAFTED, and
 from there, through the approve endpoint, → PROCESSING → SENT/FAILED, or → DISCARDED. A job never
-stays QUEUED/PROCESSING: the error workflow marks unexpected failures `INTERNAL`, and the sweeper
-(every minute) marks anything not finished `stuck_job_minutes` (10) after it started (an approved
-draft: after it was claimed) `TIMEOUT`. The sweeper never touches DRAFTED or DISCARDED jobs. Poll every 3-5 seconds; a normal
+stays QUEUED/PROCESSING: the error workflow ends the job of a run that stopped unexpectedly
+(`INTERNAL`, or `EMAIL_UNCERTAIN` when it stopped while sending) and emails `alert_email`, and the
+sweeper (every minute) marks anything not finished `stuck_job_minutes` (10) after it started (an
+approved draft: after it was claimed) `TIMEOUT`. The sweeper never touches DRAFTED or DISCARDED jobs. Poll every 3-5 seconds; a normal
 job finishes in about 10-20 seconds.
 
 `stage` shows live progress:
@@ -194,7 +195,8 @@ a bad key):
 | `AI_FACT_CHECK_FAILED` | The draft quoted a figure not in the data, and the one rewrite with the checker's notes did too. Nothing was sent. | Yes |
 | `EMAIL_FAILED` | The SMTP server refused the email or could not be reached. Sending is tried once (a second try after a lost answer could email the author twice); `error` ends with the server's own message (`… smtp: connect ECONNREFUSED …`). The email is kept on the job. | Yes |
 | `TIMEOUT` | Not finished within `stuck_job_minutes` (sweeper). | Yes |
-| `INTERNAL` | Unexpected workflow error; `error` names the node. | Yes |
+| `EMAIL_UNCERTAIN` | The run stopped while the email was being sent (stage `sending`), so it may or may not have arrived: the SMTP server may have taken it before the stop. Set by the error workflow. | Check the inbox first |
+| `INTERNAL` | Unexpected workflow error (the error workflow found the job by its execution id); `error` names the node and its message. `alert_email` gets an email. | Yes |
 
 ## Server settings
 
@@ -221,7 +223,7 @@ written with `n8n/tools/settings-sql.mjs` and never committed. Job status reads 
 | `duplicate_window_minutes` | 10 | The duplicate window (sliding) |
 | `draft_ttl_hours` | 24 | `DRAFT_EXPIRED` |
 | `stuck_job_minutes` | 10 | The sweeper's `TIMEOUT` |
-| `alert_email` | *(per environment)* | Who is told about unexpected errors, once the error handler sends alerts (empty = nobody) |
+| `alert_email` | *(per environment)* | Who the error workflow emails about an unexpected error (empty = nobody) |
 
 Retries (AI requests only: an email is sent once, never retried) and the sweeper's schedule are node
 settings, fixed at build time in `n8n/workflows-src/lib/tuning.mjs`.

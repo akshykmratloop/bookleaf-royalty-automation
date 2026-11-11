@@ -4,6 +4,7 @@ import { buildPrompt } from '../prompt.js';
 import * as anthropic from '../providers/anthropic.js';
 import * as openai from '../providers/openai.js';
 import { sectionsSchema } from '../providers/schema.js';
+import { CrashDrillError } from './drills.js';
 import { failure } from './errors.js';
 
 /**
@@ -43,8 +44,10 @@ export function providerRequests(prompt, job) {
  * After the job is accepted: data, integrity check, facts, prompt and the two provider requests.
  * @param {import('./prepare.js').Job} job
  * @returns {{ok:true, ctx:Context}|import('./errors.js').Failure}
+ * @throws {CrashDrillError} on the crash drill
  */
 export function buildContext(job) {
+  if (job.drills.crash) throw new CrashDrillError();
   const loaded = loadBundle(job);
   if (!loaded.ok) return loaded;
   const bundle = loaded.value;

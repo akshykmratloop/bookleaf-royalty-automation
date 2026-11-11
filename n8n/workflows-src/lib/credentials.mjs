@@ -8,7 +8,6 @@ export const CREDENTIALS = Object.freeze({
   openai: { type: 'httpBearerAuth', name: 'BookLeaf OpenAI API (bearer)' },
   smtp: { type: 'smtp', name: 'BookLeaf SMTP' },
   smtpDrill: { type: 'smtp', name: 'BookLeaf SMTP (drill: unreachable server)' },
-  n8nApi: { type: 'httpHeaderAuth', name: 'BookLeaf n8n API (X-N8N-API-KEY)' },
   /** Checked by the three webhooks (Header Auth on X-BookLeaf-Key); no HTTP Request node may send it. */
   webhookKey: { type: 'httpHeaderAuth', name: 'BookLeaf Webhook Key' },
 });

@@ -18,7 +18,7 @@ describe('prepareJob', () => {
     expect(r.job).toMatchObject({
       author_id: 'bubble_auth002', author_code: 'AUTH002', log_id: 'log_auth002', mode: 'single',
       reference_date: '2025-12-31', recipient: 'demo@inbox.test', attempt: 1,
-      drills: { ai_down: false, email_down: false, data_down: false, primary_down: false },
+      drills: { ai_down: false, email_down: false, data_down: false, primary_down: false, crash: false },
       delivery: 'send', tone: 'warm', length: 'standard', note: '', sign_off: '',
     });
     expect(r.job.job_id).toMatch(UUID);
@@ -58,6 +58,11 @@ describe('prepareJob', () => {
   it('accepts the primary_down drill (only with the allow_drills setting)', () => {
     expect(prep(payloadFor('AUTH002', { drills: { primary_down: true } })).job.drills.primary_down).toBe(true);
     const off = prep(payloadFor('AUTH002', { drills: { primary_down: true } }), { ...SETTINGS, allow_drills: false });
+    expect(off).toMatchObject({ ok: false, fields: [{ path: 'drills', code: 'DISABLED' }] });
+  });
+  it('accepts the crash drill (only with the allow_drills setting)', () => {
+    expect(prep(payloadFor('AUTH002', { drills: { crash: true } })).job.drills.crash).toBe(true);
+    const off = prep(payloadFor('AUTH002', { drills: { crash: true } }), { ...SETTINGS, allow_drills: false });
     expect(off).toMatchObject({ ok: false, fields: [{ path: 'drills', code: 'DISABLED' }] });
   });
   it('returns field errors for a bad payload (VALIDATION, HTTP 400)', () => {
@@ -110,7 +115,7 @@ describe('prepareJob', () => {
       job_id: job.job_id, execution_id: '4711', fingerprint: job.fingerprint, author_id: 'bubble_auth001', author_code: 'AUTH001',
       mode: 'single', delivery: 'send', tone: 'warm', length: 'standard', note: '', sign_off: '', recipient: 'demo@inbox.test',
     });
-    expect(p.drills).toEqual({ ai_down: false, email_down: false, data_down: false, primary_down: false });
+    expect(p.drills).toEqual({ ai_down: false, email_down: false, data_down: false, primary_down: false, crash: false });
   });
   it('enqueueParams refuses a missing execution id (the function would raise)', () => {
     expect(() => enqueueParams(prep(payloadFor('AUTH001')).job, '')).toThrow(TypeError);

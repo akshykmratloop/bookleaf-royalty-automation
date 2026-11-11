@@ -15,7 +15,7 @@ import { sha256Hex } from './sha256.js';
  * @property {string} author_code @property {string|null} log_id @property {string|null} batch_id
  * @property {'single'|'bulk'} mode @property {string} requested_by @property {string} reference_date
  * @property {string} recipient @property {number} attempt
- * @property {{ai_down:boolean, email_down:boolean, data_down:boolean, primary_down:boolean}} drills
+ * @property {{ai_down:boolean, email_down:boolean, data_down:boolean, primary_down:boolean, crash:boolean}} drills
  * @property {'send'|'draft'} delivery @property {'warm'|'formal'|'concise'} tone
  * @property {'short'|'standard'|'detailed'} length @property {string} note @property {string} sign_off
  * @property {import('../types.js').AuthorBundle} bundle

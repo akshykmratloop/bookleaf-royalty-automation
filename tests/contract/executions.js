@@ -20,3 +20,22 @@ export async function executionsMentioning(marker, afterId) {
   const full = await Promise.all(newer.map((e) => N8N_API.call('GET', `/executions/${e.id}?includeData=true`)));
   return full.filter((e) => JSON.stringify(e).includes(marker)).map((e) => String(e.id));
 }
+
+/**
+ * Polls until an execution saved after `afterId` mentions `marker` and passes `accept`.
+ * @param {string} marker @param {number} afterId @param {(e: any) => boolean} accept
+ * @returns {Promise<any>} that execution, with its data
+ * @throws {Error} after `timeoutMs`
+ */
+export async function waitForExecution(marker, afterId, accept, timeoutMs = 30_000) {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    const page = await N8N_API.call('GET', '/executions?limit=50');
+    const newer = (page.data ?? []).filter((e) => idOf(e) > afterId);
+    const full = await Promise.all(newer.map((e) => N8N_API.call('GET', `/executions/${e.id}?includeData=true`)));
+    const found = full.find((e) => JSON.stringify(e).includes(marker) && accept(e));
+    if (found) return found;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(`no execution mentioning ${marker} within ${timeoutMs / 1000}s`);
+}

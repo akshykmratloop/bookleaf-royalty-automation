@@ -79,7 +79,7 @@ async function main() {
   const { N8N_BASE_URL: baseUrl, N8N_API_KEY: apiKey } = requireKeys(target, ['N8N_BASE_URL', 'N8N_API_KEY'], envPath);
   const smtp = smtpSettings(join(ROOT, '.env'));
   const data = credentialData({
-    db: databaseSettings(target), smtp, ai: aiKeys(join(ROOT, '..', '.env')), n8nApiKey: apiKey,
+    db: databaseSettings(target), smtp, ai: aiKeys(join(ROOT, '..', '.env')),
     webhookKey: webhookKey(join(ROOT, '.secrets', 'webhook.env')),
   });
   const api = n8nApi({ baseUrl, apiKey });

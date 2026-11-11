@@ -406,3 +406,50 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   Running?, and Claim Draft's `job_id` is what today's error handler reads. Every approve answer is a
   literal HTTP 200 (Decide no longer carries `http_status`).
 - **Release engineer:** no migration, credential or setting. Bubble sees the same answers.
+
+## Step 8 — error handler by execution id, EMAIL_UNCERTAIN, alert, crash drill
+
+- **Changed:** "BookLeaf - Error Handler" is **Error Trigger → Fail Job → Alert Set? → Send Alert** (4 working
+  nodes, was 6: Has Execution?, Fetch Execution, Find Job, Job Found?, Mark Job Failed are gone). **Fail Job** runs
+  `FAIL_JOB` (new `n8n/src/pipeline/sql-failures.js`) with `{execution_id, node, message}` from the Error Trigger:
+  it fails the job whose `execution_id` is the failed run's, only while QUEUED/PROCESSING, as `EMAIL_UNCERTAIN`
+  when the job was at stage `sending` and `INTERNAL` otherwise (`<standard message> Node "<node>": <message>`, one
+  line, at most 1000 characters). It always returns exactly one row: `job_id`/`error_code` (null when no running
+  job belonged to the run) plus `alert_to` (`alert_email`) and `alert_from` (`sender_name <email_from>`).
+  **Alert Set?** (IF 2.2, `alert_to` not empty) → **Send Alert** (plain text, SMTP credential, one try): workflow,
+  execution link, node, error, which job became FAILED with which code (or that none did), and for
+  `EMAIL_UNCERTAIN` "check the inbox before sending it again". No n8n API call, no key, no `$env`.
+- **Removed:** the credential key `n8nApi` ("BookLeaf n8n API (X-N8N-API-KEY)") from `CREDENTIALS`,
+  `credentialData` and `deploy.mjs`; `n8n/src/pipeline/error-handler.js` (`jobIdFromExecution`,
+  `internalFailureUpdate`, `JOB_ID_NODES`); the Code entry `failedJob`; the `SELF_API` constant.
+- **New:** error code `EMAIL_UNCERTAIN` (HTTP 502, `retryable: false`: the email may have arrived). The `crash`
+  drill (`drills.crash`, honoured only with `allow_drills`): Build Context throws `CrashDrillError` ("Failure
+  drill: the workflow crashed on purpose."), so the run fails like a bug would. `DRILLS` is exported from
+  `request.js`; the `allow_drills` description now lists `crash` (seed regenerated into 01 and 03 by
+  `settings-seed.mjs`; 03 is not yet in production, and a stored row keeps its description: harmless). Builders:
+  `sendAlert` (plain text, no error output) next to `sendEmail`, both on one `emailNode` (Deliver Email's JSON is
+  unchanged).
+- **Tests (written first, RED for the expected reasons):** `n8n/tests/error-handler.test.js` (9: nodes and wiring,
+  no API key or `/api/v1` anywhere, Fail Job's parameter on a run failure and on a trigger failure, Alert Set?,
+  Send Alert's fields evaluated like n8n for INTERNAL, EMAIL_UNCERTAIN and no job), `n8n/tests/pipeline/sql-failures.test.js`
+  (4 pins), crash-drill tests (prepare, buildContext, the built Build Context node), `credentialData` without
+  `n8nApi`, the drills listed in the `allow_drills` description. Real Postgres: `tests/db/failures.test.js` (5:
+  INTERNAL with node text, EMAIL_UNCERTAIN at stage sending, an ended job and another execution's job untouched,
+  a duplicate's execution owns no job, defaults and the 1000-character cap, empty `alert_email`). New contract
+  `tests/contract/06-error-handler.test.js`: the crash drill → job FAILED `INTERNAL` naming Build Context, and the
+  error handler's run (found through the n8n API by the job id) succeeded with Error Trigger → Fail Job → Alert Set?
+  → Send Alert. It failed first with `unknown drill(s): crash` (old deploy), then passed after the deploy.
+- **Live checks (local):** contracts 39/39 (06 adds 2); one alert email per run reaches the demo inbox
+  (`alert_email` = demo inbox locally).
+- **Sizes:** error-handler 6 → **4** working nodes; all workflows 66 → **64**. Code 11 → **10** nodes, 198.0 →
+  **196.3 KB** (Find Job gone; Build Context +0.5 KB for the drill). Switch 6 → **4** (one expression-mode Switch left, in job-status: step 9).
+- **Deviations:** Send Alert has no "continue on error" (the design said continue): a failed alert fails the error
+  handler's run, which then shows red in the executions list instead of passing silently; the job was already
+  failed before, so nothing depends on the alert. The alert text is built by n8n expressions in Send Alert from the
+  Error Trigger (no Code node); Fail Job gives the From line and recipient from the settings. `EMAIL_UNCERTAIN` is
+  not exercised live (no drill stops a run at stage `sending`); the real-Postgres test covers it.
+- **Release engineer:** no migration needed beyond 03 (the regenerated 03 seed differs only in the `allow_drills`
+  description). The error handler reads `alert_email`, `sender_name` and `email_from` (step 3b settings) and uses
+  the SMTP credential. After the rollout, delete the credential **BookLeaf n8n API (X-N8N-API-KEY)** on each
+  instance by hand, and the n8n API key it held if nothing else uses it (deploy and the contract suite still use
+  the key in the env file). Rollback to the previous tag recreates and needs that credential.

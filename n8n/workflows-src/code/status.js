@@ -1,6 +1,5 @@
-/** Entry points for the job-status, error-handler and sweeper workflows' Code nodes. */
+/** Entry points for the job-status workflow's Code nodes. */
 import { errorBody } from '../../src/pipeline/errors.js';
-import { internalFailureUpdate, jobIdFromExecution } from '../../src/pipeline/error-handler.js';
 import { parseStatusQuery, shapeJobs } from '../../src/pipeline/status.js';
 
 const item = (json) => [{ json }];
@@ -14,11 +13,4 @@ export function parseQuery({ query }) {
 
 export function respondJobs({ rows, ids, includeHtml }) {
   return item({ http_status: 200, response: shapeJobs(rows, ids, includeHtml) });
-}
-
-/** route 0 = no job found in the failed execution (nothing to update), 1 = mark it FAILED. */
-export function failedJob({ trigger, execution }) {
-  const jobId = jobIdFromExecution(execution);
-  if (!jobId) return item({ route: 0, reason: 'no job id in the failed execution' });
-  return item({ route: 1, update: internalFailureUpdate(jobId, trigger) });
 }

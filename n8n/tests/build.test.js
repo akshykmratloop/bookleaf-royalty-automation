@@ -67,8 +67,9 @@ describe('built workflows', () => {
     }
   });
   it('Send Email takes the From line from the settings; no deploy-time sender placeholder is left', () => {
-    const sends = WORKFLOW_SOURCES.flatMap((wf) => ofType(wf, 'emailSend'));
+    const sends = WORKFLOW_SOURCES.flatMap((wf) => ofType(wf, 'emailSend')).filter((n) => n.name !== 'Send Alert');
     expect(sends.length).toBeGreaterThan(0);
+    expect(nodeOf('error-handler', 'Send Alert').parameters.fromEmail).toBe('={{ $json.alert_from }}');
     for (const n of sends) expect(n.parameters.fromEmail, n.name).toMatch(/^=\{\{ [^|]+\.email\.from \}\}$/);
     expect(JSON.stringify(built)).not.toContain('__SMTP_FROM__');
   });
@@ -103,6 +104,14 @@ describe('built workflows', () => {
 });
 
 describe('bundled Code nodes run standalone', () => {
+  it('Build Context throws on the crash drill, so the execution fails and the error workflow runs', () => {
+    const job = runCode(nodeOf('royalty-summary', 'Prepare Job'), {
+      $json: { settings: SETTINGS }, $: outputsOf({ 'Royalty Summary Webhook': { body: payloadFor('AUTH002', { drills: { crash: true } }) } }),
+      $execution: { id: '81' },
+    })[0].json.job;
+    const run = () => runCode(nodeOf('royalty-summary', 'Build Context'), { $: outputsOf({ 'Prepare Job': { job } }) });
+    expect(run).toThrow('Failure drill: the workflow crashed on purpose.');
+  });
   // The webhook has already checked the key (Header Auth): the Code nodes get no headers at all.
   it('Prepare Job takes the request from the webhook, the settings from Load Settings and the execution id from n8n', () => {
     const node = nodeOf('royalty-summary', 'Prepare Job');
