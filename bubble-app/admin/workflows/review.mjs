@@ -3,7 +3,7 @@
 import { chain, f, op, text, value, groupData, parent, state, search, sorted } from '../expr.mjs';
 import { PAGE } from '../queries.mjs';
 import { onClick, setState, trigger, show, hide, display, when } from './actions.mjs';
-import { approveCall, out, okOf, notOkOf, reasonOf, markSending, markDiscarded } from './approve.mjs';
+import { approveCall, out, okOf, notOkOf, blockedOf, reasonOf, markSending, markDiscarded } from './approve.mjs';
 import { TONES_CHOICES, LENGTHS } from '../sections/emailSettings.mjs';
 import { rvTone, rvLength } from '../sections/reviewDrawer.mjs';
 
@@ -32,7 +32,7 @@ function check() {
     setState(PAGE, 'rv_checked', text('yes'), 'rv_check_s1'),
     setState(PAGE, 'rv_preview', text(out(c, op('_api_c2_html'))), 'rv_check_s2'),
     setState(PAGE, 'rv_issues', text(''), 'rv_check_s3'),
-    when(setState(PAGE, 'rv_issues', reasonOf(c), 'rv_check_s4'), chain(notOkOf(c), op('or_', { args: out(c, op('_api_c2_passed'), op('is_false')) }))),
+    when(setState(PAGE, 'rv_issues', reasonOf(c), 'rv_check_s4'), blockedOf(c)),
   ], 'Check edits');
 }
 

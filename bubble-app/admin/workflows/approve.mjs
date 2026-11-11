@@ -20,7 +20,10 @@ export const out = (stepId, ...ops) => chain(prevStep(stepId), op('_api_c2_body'
 const reached = (stepId) => chain(prevStep(stepId), op('_api_c2_returned_an_error'), op('is_false'));
 /** The call went through and n8n said ok. */
 export const okOf = (stepId) => chain(reached(stepId), op('and_', { args: out(stepId, op('_api_c2_ok'), op('is_true')) }));
-export const notOkOf = (stepId) => chain(okOf(stepId), op('is_false'));
+/** Bubble can't chain an operator after and/or, so "not ok" is spelled out: HTTP error, or ok is no. */
+export const notOkOf = (stepId) => chain(prevStep(stepId), op('_api_c2_returned_an_error'), op('is_true'), op('or_', { args: out(stepId, op('_api_c2_ok'), op('is_false')) }));
+/** Not ok, or the fact check found blocking issues. */
+export const blockedOf = (stepId) => chain(notOkOf(stepId), op('or_', { args: out(stepId, op('_api_c2_passed'), op('is_false')) }));
 
 /** What to tell the admin when n8n refused: the checker's issues, or the error, or the HTTP failure. */
 export const reasonOf = (stepId) => text(

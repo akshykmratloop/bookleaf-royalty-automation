@@ -4,8 +4,7 @@ import { text } from '../expr.mjs';
 export const API = {
   send: 'apiconnector2-0_default_collection.0_default_call',
   jobs: 'apiconnector2-0_default_collection.bTGNs',
-  // "Approve draft" call; its id is read from the editor after the call is created (see TASKS.md).
-  approve: 'apiconnector2-0_default_collection.APPROVE_CALL_ID',
+  approve: 'apiconnector2-0_default_collection.bTGOU', // "Approve draft"
 };
 
 /** actions: array -> {"0": {...}, "1": {...}}; each action gets id `${wfId}_a<i>` unless set. */

@@ -123,4 +123,20 @@ describe('admin page', () => {
     const missing = page.workflows.filter((w) => w.type === 'ButtonClicked' && !ids.has(w.properties.element_id)).map((w) => w.properties.element_id);
     expect(missing).toEqual([]);
   });
+
+  it('never chains an operator after and/or or a comparison (Bubble reads that condition as empty)', () => {
+    const COMPARISONS = ['greater_than', 'less_than', 'equals', 'not_equals'];
+    const names = (e) => { const out = []; for (let n = e; n; n = n.next) if (n.name) out.push(n.name); return out; };
+    const bad = [];
+    walk(page.workflows, (n) => {
+      const c = n.properties?.condition;
+      if (!c) return;
+      const ops = names(c);
+      const i = ops.findIndex((o) => o === 'and_' || o === 'or_');
+      if (i >= 0 && ops.slice(i + 1).some((o) => o !== 'and_' && o !== 'or_')) bad.push(n.id);
+      const cmp = ops.findIndex((o) => COMPARISONS.includes(o));
+      if (cmp >= 0 && ops.slice(cmp + 1).some((o) => o !== 'and_' && o !== 'or_')) bad.push(n.id);
+    });
+    expect(bad).toEqual([]);
+  });
 });

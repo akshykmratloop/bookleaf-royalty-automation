@@ -28,7 +28,7 @@ function approveStep() {
   return customEvent('approve_step', [
     ...approveSteps('approve_step', nextDraft()),
     when(schedule('approve_step', 1.5, 'approve_step_next'), left()),
-    when(setState(PAGE, 'approving_all', text(''), 'approve_step_done'), chain(left(), op('is_false'))),
+    when(setState(PAGE, 'approving_all', text(''), 'approve_step_done'), chain(approvable(), op('count'), op('equals', { args: 0 }))),
   ]);
 }
 
