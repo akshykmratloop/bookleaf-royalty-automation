@@ -37,14 +37,26 @@ export const booksOf = (authorExpr) => search('book', [['author_custom_author', 
 export const logsOf = (authorExpr) =>
   chain(search('notificationlog', [['author_custom_author', 'equals', authorExpr]]), sorted('Created Date', true));
 
+/** Statuses that mean n8n is finished with a request, or is waiting on the admin (a draft). */
+export const SETTLED_STATUSES = ['Sent', 'Failed', 'Duplicate', 'Draft ready', 'Discarded'];
+
 /** The author's send that is still on its way (Queued or Processing), if any. */
 export const inFlightOf = (authorExpr) =>
   search('notificationlog', [
     ['author_custom_author', 'equals', authorExpr],
-    ['status_option_sendstatus', 'not equal', optionValue('sendstatus', 'Sent')],
-    ['status_option_sendstatus', 'not equal', optionValue('sendstatus', 'Failed')],
-    ['status_option_sendstatus', 'not equal', optionValue('sendstatus', 'Duplicate')],
+    ...SETTLED_STATUSES.map((s) => ['status_option_sendstatus', 'not equal', optionValue('sendstatus', s)]),
   ]);
+
+/** The author's newest draft waiting for review, if any. */
+export const draftOf = (authorExpr) =>
+  chain(
+    search('notificationlog', [
+      ['author_custom_author', 'equals', authorExpr],
+      ['status_option_sendstatus', 'equals', optionValue('sendstatus', 'Draft ready')],
+    ]),
+    sorted('Created Date', true),
+    op('first_element'),
+  );
 
 /** Finished sends (Sent or Failed): a new click after these is a deliberate new attempt. */
 export const finishedCountOf = (authorExpr) =>
@@ -60,6 +72,11 @@ export const finishedCountOf = (authorExpr) =>
 
 export const logsWithStatus = (status) =>
   search('notificationlog', [['status_option_sendstatus', 'equals', optionValue('sendstatus', status)]]);
+
+/** Every request n8n has not settled yet (Queued or Processing). */
+export const unsettledLogs = () =>
+  search('notificationlog', SETTLED_STATUSES.map((s) => ['status_option_sendstatus', 'not equal', optionValue('sendstatus', s)]));
+export const oldestUnsettled = () => chain(unsettledLogs(), sorted('Created Date', false), op('first_element'));
 
 /** The oldest log still waiting for n8n's answer: the poller settles one per tick. */
 export const oldestProcessing = () =>

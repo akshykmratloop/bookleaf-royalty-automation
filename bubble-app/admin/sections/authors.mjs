@@ -3,7 +3,7 @@
 import { chain, f, op, parent, text, state, rupees, dateFmt, yesNo } from '../expr.mjs';
 import { group, row, card, cell, label, button, input, textDropdown, list, thingGroup, withStates, showWhen, hideWhen, hover, grow } from '../ui.mjs';
 import { T, fill, border, pad, font, sideBorder, shadow } from '../theme.mjs';
-import { PAGE, settings, filteredAuthors, allCities, authorsWithPending, authorsOverdue, recordsOf, booksOf, logsOf, pendingRecords, overdueRecords, inFlightOf } from '../queries.mjs';
+import { PAGE, settings, filteredAuthors, allCities, authorsWithPending, authorsOverdue, recordsOf, booksOf, logsOf, pendingRecords, overdueRecords, inFlightOf, draftOf } from '../queries.mjs';
 import { statusBadge, pill } from './badge.mjs';
 import { pageHeader } from './overview.mjs';
 
@@ -62,10 +62,13 @@ function lastEmail() {
 
 function actions() {
   const busy = chain(inFlightOf(parent()), op('count'), op('greater_than', { args: 0 }));
+  const hasDraft = chain(draftOf(parent()), op('is_not_empty'));
   const send = withStates(button('ad_r_send', 'Send', 'primary', pad(7, 12)), [{ when: reviewFirst(), set: { text: text('Draft & review') } }]);
   return row('ad_r_act', [
     button('ad_r_view', 'View', 'ghost', pad(7, 10)),
-    hideWhen(send, busy),
+    // A waiting draft is reviewed, not sent again: the row offers Review instead of Send.
+    hideWhen(hideWhen(send, busy), hasDraft),
+    showWhen(button('ad_r_rev', 'Review draft', 'soft', pad(7, 12)), hasDraft),
     showWhen(pill('ad_r_busy', text('Working…'), 'brand'), busy),
   ], { gap: 6, props: { width: 196, single_width: true, min_width_css: '196px' } });
 }

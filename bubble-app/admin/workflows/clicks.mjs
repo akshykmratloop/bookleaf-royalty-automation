@@ -1,7 +1,7 @@
 // Click and page-load workflows: navigation, opening an author, sending (straight away or as a
 // draft to review), bulk, email settings, system toggles, and the old-log cleanup.
 import { chain, f, op, text, now, parent, search, value, groupData, dateFmt, sorted, state } from '../expr.mjs';
-import { PAGE, settings } from '../queries.mjs';
+import { PAGE, settings, draftOf } from '../queries.mjs';
 import { VIEWS } from '../shell.mjs';
 import { TOGGLES } from '../sections/settings.mjs';
 import { TONES_CHOICES, LENGTHS } from '../sections/emailSettings.mjs';
@@ -86,6 +86,7 @@ export function clickWorkflows() {
     onClick('wf_ad_pa_tab_books', 'ad_pa_tab_books', [setState(PAGE, 'ad_tab', text(''))]),
     onClick('wf_ad_pa_tab_hist', 'ad_pa_tab_hist', [setState(PAGE, 'ad_tab', text('history'))]),
     sendFor('wf_ad_r_send', 'ad_r_send', parent(), false),
+    onClick('wf_ad_r_rev', 'ad_r_rev', openReview('ad_r_rev', draftOf(parent())), 'Review draft'),
     sendFor('wf_ad_pa_send', 'ad_pa_send', groupData('ad_pop_auth'), true),
     onClick('wf_ad_pa_close', 'ad_pa_close', [hide('ad_pop_auth')]),
     onClick('wf_ad_l_view', 'ad_l_view', [display('ad_pop_mail', parent()), show('ad_pop_mail')], 'View email'),

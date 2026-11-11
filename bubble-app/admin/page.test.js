@@ -2,6 +2,8 @@
 // a wrong id or field name there would only show up as a silent blank on screen.
 import { describe, expect, it } from 'vitest';
 import { buildAdminPage, CUSTOM_STATES, VIEWS } from './page.mjs';
+import { inFlightOf } from './queries.mjs';
+import { STALE_MINUTES } from './workflows/poll.mjs';
 import { OPTION_SETS, OPTION_IDS, TYPES } from '../schema.mjs';
 
 const page = buildAdminPage();
@@ -138,5 +140,23 @@ describe('admin page', () => {
       if (cmp >= 0 && ops.slice(cmp + 1).some((o) => o !== 'and_' && o !== 'or_')) bad.push(n.id);
     });
     expect(bad).toEqual([]);
+  });
+
+  it('counts only Queued/Processing as in progress, so drafts and discarded sends free the row', () => {
+    const excluded = JSON.stringify(inFlightOf({ type: 'CurrentUser' }));
+    for (const v of ['Sent', 'Failed', 'Duplicate', 'draft_ready', 'discarded']) expect(excluded).toContain(`"option_value":"${v}"`);
+    const rowIds = new Set(elements.map((e) => e.id));
+    expect(rowIds.has('ad_r_rev')).toBe(true);
+    expect(page.workflows.some((w) => w.properties?.element_id === 'ad_r_rev')).toBe(true);
+  });
+
+  it('fails a request n8n never answers instead of spinning forever', () => {
+    const poll = page.workflows.find((w) => w.id === 'poll_jobs');
+    const stale = Object.values(poll.actions).find((a) => a.id === 'poll_stale');
+    expect(stale.properties.condition).toBeTruthy();
+    expect(JSON.stringify(stale.properties.condition)).toContain(`"args":-${STALE_MINUTES}`);
+    expect(JSON.stringify(stale)).toContain('NO_ANSWER');
+    // The stale check is the last step, so earlier steps never switch to a different log mid-run.
+    expect(Object.values(poll.actions).at(-1).id).toBe('poll_stale');
   });
 });
