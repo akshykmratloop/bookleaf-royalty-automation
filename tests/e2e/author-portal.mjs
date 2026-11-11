@@ -30,9 +30,10 @@ export function expectedFor(author, referenceDate) {
 async function login(page, base, email) {
   await page.goto(`${base}/index`, { timeout: 90000 }).catch(() => {});
   await page.waitForTimeout(2500); // let the index page's redirect for a logged-in user run
-  if ((await page.url()).includes('dashboard')) {
+  // A signed-in author lands on /dashboard, an admin on /admin: log out of either first.
+  if (/dashboard|admin/.test(await page.url())) {
     await page.click('text="Log out"', { label: 'log out' });
-    await page.waitForURL((u) => !String(u).includes('dashboard'), { timeout: 30000 });
+    await page.waitForURL((u) => !/dashboard|admin/.test(String(u)), { timeout: 30000 });
     await page.waitForTimeout(3000); // logout navigation settles before typing
   }
   await page.waitForSelector('css=input[type=email]', { timeout: 30000 });
