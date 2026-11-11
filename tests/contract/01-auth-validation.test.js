@@ -3,7 +3,7 @@ import { payloadFor } from '../fixtures/payloads.js';
 import { DEMO_INBOX, enqueue, jobStatus } from './client.js';
 
 /** No AI calls and no emails in this file. */
-describe('webhook authentication (n8n Header Auth: missing or wrong key → 403)', () => {
+describe('webhook authentication (key checked in the workflow: missing or wrong key → 403)', () => {
   it('rejects a request without X-BookLeaf-Key', async () => {
     const r = await enqueue(payloadFor('AUTH002'), null);
     expect(r.status).toBe(403);

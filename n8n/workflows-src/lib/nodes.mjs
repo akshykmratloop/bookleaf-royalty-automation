@@ -14,9 +14,16 @@ export const code = (name, entry, body) => node(name, 'code', 2, { mode: 'runOnc
 export const route = (name, outputs, expression) =>
   node(name, 'switch', 3.2, { mode: 'expression', numberOutputs: outputs, output: `={{ ${expression} }}` });
 
+/**
+ * Webhook answered by a Respond node. The X-BookLeaf-Key check runs in the first Code node (see
+ * src/pipeline/auth.js), so a current and a next key can both be accepted during a rotation.
+ */
 export const webhook = (name, method, path) => node(name, 'webhook', 2.1, {
-  httpMethod: method, path, authentication: 'headerAuth', responseMode: 'responseNode', options: {},
-}, { credentials: credentialRef('webhook'), webhookId: `bookleaf-${path.replace(/\W+/g, '-')}` });
+  httpMethod: method, path, authentication: 'none', responseMode: 'responseNode', options: {},
+}, { webhookId: `bookleaf-${path.replace(/\W+/g, '-')}` });
+
+/** deploy.mjs replaces this with the SHA-256 hashes of the accepted webhook keys (never the keys). */
+export const KEY_HASHES_PLACEHOLDER = '__WEBHOOK_KEY_HASHES__';
 
 /** Respond to Webhook with JSON from `$json.response` and the status in `$json.http_status`. */
 export const respond = (name, statusExpr = '$json.http_status', bodyExpr = '$json.response') => node(name, 'respondToWebhook', 1.1, {
@@ -47,10 +54,13 @@ export function http(name, o) {
 /** deploy.mjs replaces this with the SMTP account address (SMTP_USER_EMAIL). */
 export const SMTP_FROM_PLACEHOLDER = '__SMTP_FROM__';
 
-/** Send Email (SMTP) with both HTML and text from `$json.email`, errors to the second output. */
-export const sendEmail = (name, credential) => node(name, 'emailSend', 2.1, {
-  resource: 'email', operation: 'send', fromEmail: `={{ $json.email.from || 'BookLeaf Author Relations <${SMTP_FROM_PLACEHOLDER}>' }}`, toEmail: '={{ $json.email.to }}',
-  subject: '={{ $json.email.subject }}', emailFormat: 'both', text: '={{ $json.email.text }}', html: '={{ $json.email.html }}',
+/**
+ * Send Email (SMTP) with both HTML and text, errors to the second output.
+ * @param {string} name @param {string} credential @param {string} [src] expression for the {from,to,subject,html,text} object
+ */
+export const sendEmail = (name, credential, src = '$json.email') => node(name, 'emailSend', 2.1, {
+  resource: 'email', operation: 'send', fromEmail: `={{ ${src}.from || 'BookLeaf Author Relations <${SMTP_FROM_PLACEHOLDER}>' }}`, toEmail: `={{ ${src}.to }}`,
+  subject: `={{ ${src}.subject }}`, emailFormat: 'both', text: `={{ ${src}.text }}`, html: `={{ ${src}.html }}`,
   options: { appendAttribution: false },
 }, { credentials: credentialRef(credential), onError: 'continueErrorOutput', retryOnFail: true, maxTries: 2, waitBetweenTries: 2000 });
 

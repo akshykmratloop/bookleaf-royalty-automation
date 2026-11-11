@@ -1,8 +1,6 @@
 import { checkEmail } from '../checker/index.js';
+import { wordRange } from './style.js';
 
-const MIN_WORDS = 150;
-const MAX_WORDS = 350;
-const SIGN_OFF = 'BookLeaf Author Relations';
 const PROSE_KEYS = ['subject', 'greeting', 'intro', 'totalsParagraph', 'payoutParagraph', 'productionParagraph', 'allPaidParagraph', 'closing'];
 
 /** @param {Object} sections @returns {string} every piece of AI prose, the subject included */
@@ -24,20 +22,28 @@ function structureIssues(sections, facts) {
   if (unknown.length) out.push(warn('UNKNOWN_BOOK', `Paragraphs for unknown books were dropped: ${unknown.join(', ')}`));
   const missing = published.filter((c) => !codes.includes(c));
   if (missing.length) out.push(warn('MISSING_BOOK', `No paragraph for: ${missing.join(', ')}`));
-  if (!String(sections.closing ?? '').includes(SIGN_OFF)) out.push(warn('SIGN_OFF', 'Closing does not sign off as BookLeaf Author Relations'));
   return out;
+}
+
+/** @param {string} text @returns {number} */
+export const countWords = (text) => text.split(/\s+/).filter(Boolean).length;
+
+/** @param {number} words @param {string} [length] short | standard | detailed @returns {Object[]} a LENGTH warning or none */
+export function lengthIssues(words, length) {
+  const [min, max] = wordRange(length);
+  return words < min || words > max ? [warn('LENGTH', `${words} words (target ${min}-${max})`)] : [];
 }
 
 /**
  * Fact-checks an AI draft against the author's facts (independently of the model).
  * @param {Object} sections @param {import('../facts-types.js').AuthorFacts} facts @param {string[]} titles
+ * @param {string} [length] the job's length option; sets the word-count warning
  * @returns {{passed:boolean, issues:Object[], blocking:Object[], verifiedFigures:number, words:number}}
  */
-export function checkDraft(sections, facts, titles) {
+export function checkDraft(sections, facts, titles, length = 'standard') {
   const text = proseText(sections);
   const r = checkEmail({ text, facts: facts.facts, titles });
-  const words = text.split(/\s+/).filter(Boolean).length;
-  const length = words < MIN_WORDS || words > MAX_WORDS ? [warn('LENGTH', `${words} words (target ${MIN_WORDS}-${MAX_WORDS})`)] : [];
-  const issues = [...r.issues, ...structureIssues(sections, facts), ...length];
+  const words = countWords(text);
+  const issues = [...r.issues, ...structureIssues(sections, facts), ...lengthIssues(words, length)];
   return { passed: r.passed, issues, blocking: issues.filter((i) => i.severity === 'BLOCK'), verifiedFigures: r.verifiedFigures, words };
 }

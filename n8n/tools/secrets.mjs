@@ -8,10 +8,16 @@ import { randomSecret, readEnvFile, requireKeys, writeSecretEnvFile } from './en
  */
 const DEFAULT_SSM_PARAM = '/bookleaf-a2/postgres/password';
 
-/** The shared webhook key; generated once into .secrets/webhook.env (mode 600). */
-export function webhookKey(path) {
+/**
+ * The accepted webhook keys from .secrets/webhook.env (mode 600; the current key is generated once):
+ * BOOKLEAF_WEBHOOK_KEY, plus BOOKLEAF_WEBHOOK_KEY_NEXT while a rotation is in progress.
+ * @returns {string[]} current key first, then the next key when set
+ */
+export function webhookKeys(path) {
   if (!existsSync(path)) writeSecretEnvFile(path, { BOOKLEAF_WEBHOOK_KEY: randomSecret(32) });
-  return requireKeys(readEnvFile(path), ['BOOKLEAF_WEBHOOK_KEY'], path).BOOKLEAF_WEBHOOK_KEY;
+  const env = readEnvFile(path);
+  const current = requireKeys(env, ['BOOKLEAF_WEBHOOK_KEY'], path).BOOKLEAF_WEBHOOK_KEY;
+  return env.BOOKLEAF_WEBHOOK_KEY_NEXT ? [current, env.BOOKLEAF_WEBHOOK_KEY_NEXT] : [current];
 }
 
 /** Postgres settings from the target env file; the password may come from AWS SSM (production). */
@@ -43,10 +49,9 @@ export const aiKeys = (path) => requireKeys(readEnvFile(path), ['ANTHROPIC_API_K
  * Credential name → {type, data}, keyed like workflows-src/lib/credentials.mjs.
  * @returns {Record<string, Object>}
  */
-export function credentialData({ webhook, db, smtp, ai, n8nApiKey, bubbleToken }) {
+export function credentialData({ db, smtp, ai, n8nApiKey, bubbleToken }) {
   const only = (domain) => ({ allowedHttpRequestDomains: 'domains', allowedDomains: domain });
   return {
-    webhook: { name: 'X-BookLeaf-Key', value: webhook },
     postgres: { ...db, ssl: 'disable', allowUnauthorizedCerts: false, sshTunnel: false },
     anthropic: { name: 'x-api-key', value: ai.ANTHROPIC_API_KEY, ...only('api.anthropic.com') },
     openai: { token: ai.OPENAI_API_KEY, ...only('api.openai.com') },

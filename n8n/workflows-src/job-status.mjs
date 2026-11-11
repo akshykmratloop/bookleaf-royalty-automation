@@ -1,11 +1,11 @@
 import { SELECT_JOBS } from '../src/pipeline/sql.js';
-import { code, pg, respond, route, webhook } from './lib/nodes.mjs';
+import { code, KEY_HASHES_PLACEHOLDER, pg, respond, route, webhook } from './lib/nodes.mjs';
 
 /** GET /webhook/royalty-summary/jobs?ids=<id>,<id>[&include=html] — what Bubble polls in pull mode. */
 const PARSED = "$('Parse Query').first().json";
 const nodes = [
   webhook('Job Status Webhook', 'GET', 'royalty-summary/jobs'),
-  code('Parse Query', 'parseQuery', 'return main({ query: $json.query });'),
+  code('Parse Query', 'parseQuery', `return main({ query: $json.query, headers: $json.headers, keyHashes: '${KEY_HASHES_PLACEHOLDER}' });`),
   route('Valid?', 2, '$json.route'),
   respond('Respond Rejected'),
   pg('Select Jobs', SELECT_JOBS, '$json.params', { alwaysOutputData: true }),

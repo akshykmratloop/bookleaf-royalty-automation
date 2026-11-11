@@ -28,7 +28,7 @@
       "typeVersion": 2.6,
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE royalty_jobs\nSET status = 'FAILED', error_code = 'TIMEOUT',\n    error = 'The job did not finish within 10 minutes, so it was stopped. Send it again if needed.',\n    completed_at = now(), updated_at = now()\nWHERE status IN ('QUEUED', 'PROCESSING') AND created_at < now() - interval '10 minutes'\nRETURNING job_id::text AS job_id, log_id, author_id",
+        "query": "UPDATE royalty_jobs\nSET status = 'FAILED', stage = 'failed', stage_at = now(), error_code = 'TIMEOUT',\n    error = 'The job did not finish within 10 minutes, so it was stopped. Send it again if needed.',\n    completed_at = now(), updated_at = now()\nWHERE status IN ('QUEUED', 'PROCESSING')\n  AND (CASE WHEN drafted_at IS NULL THEN created_at ELSE stage_at END) < now() - interval '10 minutes'\nRETURNING job_id::text AS job_id, log_id, author_id",
         "options": {}
       },
       "credentials": {

@@ -3,7 +3,6 @@
  * JSON carries a placeholder id that deploy.mjs swaps for the real credential id on the instance.
  */
 export const CREDENTIALS = Object.freeze({
-  webhook: { type: 'httpHeaderAuth', name: 'BookLeaf Webhook Key (X-BookLeaf-Key)' },
   postgres: { type: 'postgres', name: 'BookLeaf Postgres (bookleaf db)' },
   anthropic: { type: 'httpHeaderAuth', name: 'BookLeaf Anthropic API (x-api-key)' },
   openai: { type: 'httpBearerAuth', name: 'BookLeaf OpenAI API (bearer)' },

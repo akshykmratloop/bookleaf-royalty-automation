@@ -1,8 +1,12 @@
 import { failure, MAX_ERROR_LENGTH } from './errors.js';
 import { UUID } from './ids.js';
 
-/** Nodes of royalty-summary whose output carries the job id, most reliable first. */
-export const JOB_ID_NODES = Object.freeze(['Insert Job', 'Prepare Job']);
+/**
+ * Nodes whose output carries the job id, most reliable first: royalty-summary's insert, and
+ * approve-draft's claim (only a claimed draft belongs to that run; before the claim a failure
+ * must not touch the job).
+ */
+export const JOB_ID_NODES = Object.freeze(['Insert Job', 'Prepare Job', 'Claim Draft']);
 
 function jobIdIn(runs) {
   for (const run of runs ?? []) {

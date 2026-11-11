@@ -1,12 +1,20 @@
 # Royalty summary webhook: the contract Bubble sends
 
-Two endpoints, both protected by the header `X-BookLeaf-Key` (n8n Header Auth credential).
-A missing or wrong key gets **403** from n8n before any workflow runs.
+Three endpoints, all protected by the header `X-BookLeaf-Key`. A missing or wrong key gets **403**
+`{ "error": { "code": "FORBIDDEN", … } }` before anything else happens.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /webhook/royalty-summary` | Queue one royalty-summary email. Answers at once (**202**), never waits for the AI or SMTP. |
+| `POST /webhook/royalty-summary` | Queue one royalty-summary email (or draft). Answers at once (**202**), never waits for the AI or SMTP. |
 | `GET /webhook/royalty-summary/jobs?ids=<id>,<id>[&include=html]` | Poll the status of up to 50 jobs. |
+| `POST /webhook/royalty-summary/approve` | Check, send or discard a draft (`delivery: "draft"`). |
+
+**Key rotation.** The key is checked inside each workflow (first Code node), against SHA-256 hashes
+that `n8n/deploy.mjs` writes in from `.secrets/webhook.env`: `BOOKLEAF_WEBHOOK_KEY` and, while a
+rotation is in progress, `BOOKLEAF_WEBHOOK_KEY_NEXT`. Either key is accepted (constant-time
+comparison of the hashes); the keys themselves never leave `.secrets/`. To rotate: add
+`BOOKLEAF_WEBHOOK_KEY_NEXT`, deploy, switch Bubble to the new key, move it to
+`BOOKLEAF_WEBHOOK_KEY`, remove `_NEXT`, deploy again.
 
 ## POST body (pull mode, `DATA_SOURCE=payload`)
 
@@ -24,7 +32,12 @@ Bubble date (ISO instant, read in India time), or empty.
   "reference_date": "2025-12-31",
   "demo_inbox": "akshykmr@loopmethods.com",
   "attempt": 1,
-  "drills": { "ai_down": false, "email_down": false, "data_down": false },
+  "drills": { "ai_down": false, "email_down": false, "data_down": false, "primary_down": false },
+  "delivery": "send",
+  "tone": "warm",
+  "length": "standard",
+  "note": "",
+  "sign_off": "",
   "author": { "code": "AUTH002", "name": "Rohit Kapoor", "email": "rohit.kapoor@email.com", "city": "Delhi" },
   "books": [
     {
@@ -47,7 +60,12 @@ Bubble date (ISO instant, read in India time), or empty.
 | `reference_date` | Optional. "Figures as of" date. Empty = server default `REFERENCE_DATE_DEFAULT` (2025-12-31, or `today`). |
 | `demo_inbox` | Optional email. **Emails never go to `author.email`.** Empty = server `DEFAULT_DEMO_INBOX`; neither set = job refused with `NO_RECIPIENT` (422). |
 | `attempt` | Optional, 1-20, default 1. Bump it for a deliberate "send again" within 10 minutes (see idempotency). |
-| `drills` | Optional. Failure drills, honoured only when the server runs `ALLOW_DRILLS=true` (otherwise **400**, never silently ignored). |
+| `drills` | Optional. Failure drills, honoured only when the server runs `ALLOW_DRILLS=true` (otherwise **400**, never silently ignored). `ai_down` fails both AI providers; `primary_down` fails only Anthropic, so the OpenAI fallback writes the email (the job's `provider`/`model` show OpenAI); `email_down` points SMTP at an unreachable server; `data_down` fails the data step. Bubble maps its flat `ai_down`/`email_down`/`data_down`/`primary_down` parameters into this object. |
+| `delivery` | Optional. `send` (default): write, check and send. `draft`: write, check and render, then stop as `DRAFTED` for an admin to approve (see the approve endpoint). |
+| `tone` | Optional. `warm` (default, BookLeaf's usual tone), `formal` or `concise`. |
+| `length` | Optional. `short` (about 80-180 words of prose), `standard` (default, 150-300) or `detailed` (250-450). The prompt and the word-count warning follow it. |
+| `note` | Optional admin style guidance, 0-300 characters after trimming; control characters (line breaks included) become spaces. It goes into the AI's user message in a fenced block and may change wording and style only: it can never change or add figures, dates or policy, and the fact check still blocks any figure that is not in the data. |
+| `sign_off` | Optional signature name, 0-60 characters: letters, spaces and `. , ' & ( ) -` (no digits). Empty = `BookLeaf Author Relations`. The signature is rendered from data (escaped), never written by the AI: `Warm regards,` / `Kind regards,` (formal) / `Best regards,` (concise), then the name. |
 | `author` | Required in pull mode: `code`, `name` (first word = greeting name), `email`, `city`. |
 | `books[]` | Required in pull mode, up to 50. `status` is the status text; anything starting with "In Production" is treated as in production and its stage (e.g. "Cover Design") is used in the email. `platforms` may be a list or comma-separated text. |
 
@@ -61,18 +79,21 @@ n8n reads the author, books and royalty records through the Bubble Data API.
 | 202 | New job queued | `{ "job_id": "…", "status": "QUEUED", "duplicate": false }` |
 | 200 | Same request within the idempotency window (double click) | `{ "job_id": "<the existing job>", "status": "<its current status>", "duplicate": true }` |
 | 400 | Validation | `{ "error": { "code": "VALIDATION", "message": "…", "retryable": false, "fields": [{ "path": "books[0].copies_sold", "code": "TYPE", "message": "must be an integer" }] } }` |
-| 403 | Missing / wrong `X-BookLeaf-Key` | n8n's plain-text `Authorization data is wrong!` |
+| 403 | Missing / wrong `X-BookLeaf-Key` | `{ "error": { "code": "FORBIDDEN", "message": "…", "retryable": false } }` |
 | 422 | `NO_RECIPIENT` | error object as above |
 | 429 | More than `MAX_SENDS_PER_HOUR` jobs (not failed) in the last hour | `{ "error": { "code": "RATE_LIMITED", … } }` |
 | 500 | n8n itself failed before answering | `{ "message": "Error in workflow" }` |
 
 **Idempotency:** the key is author id + a SHA-256 fingerprint of everything that shapes the email
-(books, figures, reference date, recipient, drills, attempt) + the 10-minute window. The same click
+(books, figures, reference date, recipient, drills, attempt, delivery, tone, length, note, sign_off)
++ the 10-minute window. The same click
 twice returns the same job; changed data, a new `attempt` or the next window makes a new job.
 
 ## GET /webhook/royalty-summary/jobs
 
 `ids`: comma-separated job ids (UUIDs), 1-50. `include=html` adds `html` and `text_body`.
+`edit_text` (a draft's editable prose) is always included, so Bubble can fill its editor from a
+plain poll.
 
 ```json
 {
@@ -82,21 +103,81 @@ twice returns the same job; changed data, a new `attempt` or the next window mak
     "sent_to": "akshykmr@loopmethods.com", "figures_verified": 12, "ai_attempts": 1, "provider": "anthropic",
     "model": "claude-sonnet-5-5", "input_tokens": 3496, "output_tokens": 481, "cost_usd": 0.00752,
     "requested_by": "admin@bookleaf.in", "created_at": "…", "updated_at": "…", "completed_at": "…",
-    "callback_status": "NOT_NEEDED"
+    "callback_status": "NOT_NEEDED",
+    "stage": "sent", "stage_at": "…", "delivery": "send", "tone": "warm", "length": "standard",
+    "issues": null, "edit_text": null, "drafted_at": null
   }],
   "missing": []
 }
 ```
 
-`status` moves QUEUED → PROCESSING → SENT or FAILED. A job never stays in between: the error
-workflow marks unexpected failures `INTERNAL`, and the sweeper marks anything older than 10 minutes
-`TIMEOUT`. Poll every 3-5 seconds; a normal job finishes in about 10-20 seconds.
+`status` moves QUEUED → PROCESSING → SENT or FAILED, or (with `delivery: "draft"`) → DRAFTED, and
+from there, through the approve endpoint, → PROCESSING → SENT/FAILED, or → DISCARDED. A job never
+stays QUEUED/PROCESSING: the error workflow marks unexpected failures `INTERNAL`, and the sweeper
+marks anything not finished 10 minutes after it started (an approved draft: after it was claimed)
+`TIMEOUT`. The sweeper never touches DRAFTED or DISCARDED jobs. Poll every 3-5 seconds; a normal
+job finishes in about 10-20 seconds.
+
+`stage` shows live progress:
+
+| Stage | Meaning |
+|---|---|
+| `queued` | Accepted, not started. |
+| `reading_data` | Loading and checking the author's data. |
+| `writing` | The AI is writing (Anthropic, or the OpenAI fallback). |
+| `checking` | The draft is being fact-checked. |
+| `rewriting` | The draft failed the check; the AI is rewriting it once with feedback. |
+| `sending` | Handing the email to SMTP (also right after an approved draft is claimed). |
+| `sent` / `failed` | Final. |
+| `drafted` | Final until approved: a checked draft is waiting (status `DRAFTED`). |
+| `discarded` | The draft was discarded (status `DISCARDED`). |
+
+For a draft, `edit_text` is the prose as plain text: paragraphs separated by one blank line, with a
+line reading exactly `[FIGURES TABLE]` where the figures table, the payout-window line and the books
+in production go (they come from data and are not editable). The signature is not in it either (it
+is rendered from `sign_off`). `issues` lists checker warnings, one per line (e.g. the word count).
+
+## POST /webhook/royalty-summary/approve
+
+```json
+{ "job_id": "…", "action": "check", "subject": "Your BookLeaf royalty summary", "body": "Dear Rohit,\n\n…\n\n[FIGURES TABLE]\n\n…" }
+```
+
+| Field | Rule |
+|---|---|
+| `job_id` | Required job id (UUID, 1-64 chars). |
+| `action` | `check`, `send` or `discard`. |
+| `subject` | Required for check/send: 1-200 characters, one line. |
+| `body` | Required for check/send: 1-8000 characters, the edited `edit_text`. If `[FIGURES TABLE]` was removed, the data block goes after the second paragraph. |
+
+**Every business outcome is HTTP 200 with the same fields** (400 only for an invalid body, 403 for
+a bad key):
+
+```json
+{ "ok": true, "job_id": "…", "status": "DRAFTED", "passed": true, "issues": "", "issue_count": 0,
+  "html": "<!doctype html>…", "words": 182, "figures_verified": 9, "error_code": "", "error": "" }
+```
+
+| Action | Result |
+|---|---|
+| `check` | Re-runs the same fact checker on the edited subject + body against the stored facts and returns `passed`, `issues` (one per line, `Blocked (CODE): …` or `Warning (CODE): …`), `issue_count`, `words`, `figures_verified` and the rendered `html` preview. Nothing changes. |
+| `send` | Same check. Blocking issues → `ok:false, error_code:"EDIT_BLOCKED"`, nothing changes. Otherwise the draft is claimed atomically (`DRAFTED` → `PROCESSING`, stage `sending`) and the answer is `ok:true, status:"PROCESSING"` at once; the edited email then goes to the job's demo inbox and the job ends `SENT` (with the final subject, html and text) or `FAILED` (`EMAIL_FAILED`). Poll job-status for the end. A second click gets `ALREADY_SENT`: one draft, one email. The `email_down` drill stored on the job is honoured. |
+| `discard` | `DRAFTED` → `DISCARDED` (stage `discarded`): `ok:true, status:"DISCARDED"`. |
+
+| `error_code` | When |
+|---|---|
+| `NOT_FOUND` | No job with this id. |
+| `NOT_A_DRAFT` | The job is not `DRAFTED` (its `status` is in the answer). |
+| `ALREADY_SENT` | `send` on a job already `PROCESSING`/`SENT`, or a second concurrent click. |
+| `DRAFT_EXPIRED` | The draft is more than 24 hours old (check/send; discard still works). |
+| `EDIT_BLOCKED` | `send` with an edit that fails the fact check. |
 
 ## Error codes (`error_code`)
 
 | Code | Meaning | Retry helps? |
 |---|---|---|
 | `VALIDATION` | Bad request fields (answered synchronously). | No |
+| `FORBIDDEN` | Missing or wrong `X-BookLeaf-Key` (synchronous, 403). | No |
 | `NO_RECIPIENT` | No safe demo inbox (synchronous). | No |
 | `RATE_LIMITED` | Hourly limit reached (synchronous). | Later |
 | `INTEGRITY` | Figures do not add up (earned ≠ copies × royalty, paid + pending ≠ earned, payout in the future). No email is written. | No, fix the data |

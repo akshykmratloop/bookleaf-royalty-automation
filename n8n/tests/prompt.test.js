@@ -14,8 +14,13 @@ describe('system prompt', () => {
   });
   it('carries the tone, policy, grounding and sign-off rules', () => {
     for (const s of ['empathetic', '₹1,000', 'within 45 days', '48 hours', 'character for character',
-      'never invent a reason', 'refunds', 'Warm regards,\\nBookLeaf Author Relations', '150 to 350 words', 'Indian English'])
+      'never invent a reason', 'refunds', 'WRITING STYLE', 'ADMIN STYLE NOTE', 'Indian English'])
       expect(SYSTEM_PROMPT).toContain(s);
+  });
+  it('leaves the signature and the word count to data and the user message', () => {
+    expect(SYSTEM_PROMPT).not.toContain('150 to 350 words');
+    expect(SYSTEM_PROMPT).toMatch(/Do not write a sign-off/);
+    expect(PROMPT_VERSION).toBe('royalty-summary.v2');
   });
 });
 
@@ -62,6 +67,10 @@ describe('buildPrompt user message', () => {
     }
   });
   it('reports the situation keys it used', () => expect(promptFor('AUTH008').situations).toEqual(['ALL_PAID']));
+  it('ends with the writing style (warm, standard length by default)', () => {
+    const { user } = promptFor('AUTH001');
+    expect(section(user, 'WRITING STYLE')).toMatch(/Tone: warm[\s\S]*150 to 300 words/);
+  });
 });
 
 describe('helpers', () => {

@@ -17,8 +17,8 @@ import { assertEdges, connectionsFrom, layout } from './workflows-src/lib/graph.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, 'workflows');
-const ENTRY_FILES = ['code/summary.js', 'code/status.js'].map((f) => join(HERE, 'workflows-src', f));
-export const WORKFLOW_SOURCES = ['error-handler', 'royalty-summary', 'job-status', 'sweeper'];
+const ENTRY_FILES = ['code/summary.js', 'code/status.js', 'code/approve.js'].map((f) => join(HERE, 'workflows-src', f));
+export const WORKFLOW_SOURCES = ['error-handler', 'royalty-summary', 'job-status', 'sweeper', 'approve-draft'];
 export const SETTINGS = Object.freeze({
   executionOrder: 'v1', saveDataErrorExecution: 'all', saveDataSuccessExecution: 'all',
   saveManualExecutions: true, callerPolicy: 'workflowsFromSameOwner',

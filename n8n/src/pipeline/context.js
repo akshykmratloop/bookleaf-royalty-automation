@@ -8,7 +8,10 @@ import { sectionsSchema } from '../providers/schema.js';
 import { validateBundle } from '../validate.js';
 import { failure } from './errors.js';
 
-/** The AI-down drill asks both providers for a model that does not exist: a real HTTP error, no cost. */
+/**
+ * Drills ask a provider for a model that does not exist: a real HTTP error, no cost. ai_down fails
+ * both providers; primary_down fails only Anthropic, so the OpenAI fallback writes the email.
+ */
 export const DRILL_MODEL = 'bookleaf-drill-model-does-not-exist';
 
 /**
@@ -30,11 +33,12 @@ function loadBundle(job, bubble) {
 
 /** @param {{system:string, user?:string, messages?:Object[]}} prompt @param {import('./prepare.js').Job} job */
 export function providerRequests(prompt, job) {
-  const drill = job.drills.ai_down;
+  const { ai_down: allDown, primary_down: primaryDown } = job.drills;
   const { config } = job;
+  const primaryModel = allDown || primaryDown ? DRILL_MODEL : config.primaryModel;
   return {
-    anthropic: anthropic.buildRequest({ ...prompt, schema: sectionsSchema, model: drill ? DRILL_MODEL : config.primaryModel, effort: config.effort }).body,
-    openai: openai.buildRequest({ ...prompt, model: drill ? DRILL_MODEL : config.fallbackModel }).body,
+    anthropic: anthropic.buildRequest({ ...prompt, schema: sectionsSchema, model: primaryModel, effort: config.effort }).body,
+    openai: openai.buildRequest({ ...prompt, model: allDown ? DRILL_MODEL : config.fallbackModel }).body,
   };
 }
 
@@ -53,7 +57,7 @@ export function buildContext(job, bubble = null) {
     return failure('INTEGRITY', list);
   }
   const facts = buildFacts(bundle, job.reference_date);
-  const prompt = buildPrompt({ bundle, facts });
+  const prompt = buildPrompt({ bundle, facts, style: { tone: job.tone, length: job.length, note: job.note } });
   const titles = bundle.books.map((b) => b.title);
   return { ok: true, ctx: { bundle, facts, prompt, titles, requests: providerRequests(prompt, job) } };
 }

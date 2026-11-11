@@ -4,6 +4,7 @@
  */
 export const ERROR_CODES = Object.freeze({
   VALIDATION: { http: 400, retryable: false, message: 'The request is missing fields or has invalid values.' },
+  FORBIDDEN: { http: 403, retryable: false, message: 'The X-BookLeaf-Key header is missing or wrong.' },
   INTEGRITY: { http: 422, retryable: false, message: 'The royalty figures do not add up, so no email was written.' },
   NO_RECIPIENT: { http: 422, retryable: false, message: 'No demo inbox is configured, so the email has nowhere safe to go.' },
   RATE_LIMITED: { http: 429, retryable: true, message: 'Too many emails were sent in the last hour.' },

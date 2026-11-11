@@ -19,6 +19,12 @@ export async function enqueue(body, key = KEY) {
   return { status: r.status, body: parseOrText(text) };
 }
 
+/** POST /webhook/royalty-summary/approve. @returns {Promise<{status:number, body:any}>} */
+export async function approve(body, key = KEY) {
+  const r = await fetch(`${BASE_URL}/webhook/royalty-summary/approve`, { method: 'POST', headers: headers(key), body: JSON.stringify(body) });
+  return { status: r.status, body: parseOrText(await r.text()) };
+}
+
 export async function jobStatus(query, key = KEY) {
   const r = await fetch(`${BASE_URL}/webhook/royalty-summary/jobs?${new URLSearchParams(query)}`, { headers: headers(key) });
   return { status: r.status, body: parseOrText(await r.text()) };
@@ -45,13 +51,16 @@ export async function enqueueFresh(payload) {
   throw new Error('no free attempt number in this 10-minute window');
 }
 
-/** Polls until the job is SENT or FAILED. */
-export async function waitForJob(jobId, { includeHtml = false } = {}) {
+/** Statuses a job rests in: SENT, FAILED, DRAFTED (waiting for approval) and DISCARDED. */
+export const SETTLED = Object.freeze(['SENT', 'FAILED', 'DRAFTED', 'DISCARDED']);
+
+/** Polls until the job reaches one of `until` (default: any settled status). */
+export async function waitForJob(jobId, { includeHtml = false, until: statuses = SETTLED } = {}) {
   const until = Date.now() + POLL_LIMIT_MS;
   while (Date.now() < until) {
     const r = await jobStatus({ ids: jobId, ...(includeHtml ? { include: 'html' } : {}) });
     const job = r.body?.jobs?.[0];
-    if (job && ['SENT', 'FAILED'].includes(job.status)) return job;
+    if (job && statuses.includes(job.status)) return job;
     await new Promise((res) => setTimeout(res, 2000));
   }
   throw new Error(`job ${jobId} did not finish within ${POLL_LIMIT_MS / 1000}s`);

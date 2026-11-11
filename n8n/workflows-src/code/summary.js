@@ -4,21 +4,28 @@
  */
 import { authorQuery, booksQuery, royaltiesQuery } from '../../src/bubble-client.js';
 import { afterAi, AI_ROUTES } from '../../src/pipeline/after-ai.js';
+import { authFailure, isAuthorized } from '../../src/pipeline/auth.js';
 import { callbackFor } from '../../src/pipeline/callback.js';
 import { classifyInsert } from '../../src/pipeline/classify.js';
 import { buildContext } from '../../src/pipeline/context.js';
 import { errorBody, failure } from '../../src/pipeline/errors.js';
-import { aiColumns, failedUpdate, renderForSend, sentUpdate } from '../../src/pipeline/finalize.js';
+import { aiColumns, draftUpdate, failedUpdate, renderForSend, sentUpdate } from '../../src/pipeline/finalize.js';
 import { nodeErrorSummary } from '../../src/pipeline/node-errors.js';
 import { insertParams, prepareJob } from '../../src/pipeline/prepare.js';
 
 const item = (json) => [{ json }];
 const failItem = (job, f, extra) => item({ route: 0, update: failedUpdate(job, f, extra) });
 
-/** Validate the webhook body. route 0 = reject (respond 4xx), 1 = insert the job. */
-export function prepare({ body, env, now }) {
+const rejected = (f) => item({ route: 0, http_status: f.http_status, response: errorBody(f) });
+
+/**
+ * Check the key, then validate the webhook body. route 0 = reject (respond 4xx), 1 = insert the job.
+ * `keyHashes` is written in at deploy time (SHA-256 of the current and next webhook keys).
+ */
+export function prepare({ body, headers, keyHashes, env, now }) {
+  if (!isAuthorized(headers, keyHashes)) return rejected(authFailure());
   const r = prepareJob(body, env, now);
-  if (!r.ok) return item({ route: 0, http_status: r.http_status, response: errorBody(r) });
+  if (!r.ok) return rejected(r);
   return item({ route: 1, job: r.job, insert_params: insertParams(r.job) });
 }
 
@@ -63,10 +70,14 @@ export function regenerationFailed({ job, error, previous }) {
   return failItem(job, failure('AI_UNAVAILABLE', `Regeneration failed. ${nodeErrorSummary(error, previous?.provider ?? 'ai')}`), aiColumns(previous));
 }
 
-/** route 0 = real SMTP, 1 = email-down drill (unreachable SMTP server). */
+/**
+ * route 0 = send (`drill` true = the email-down drill's unreachable SMTP server),
+ * 1 = delivery=draft: save the checked, rendered draft for an admin to approve; nothing is sent.
+ */
 export function render({ ctx, job, ai }) {
+  if (job.delivery === 'draft') return item({ route: 1, update: draftUpdate({ ctx, job, ai }) });
   const r = renderForSend({ ctx, job, ai });
-  return item({ route: job.drills.email_down ? 1 : 0, email: r.email, update: r.update });
+  return item({ route: 0, drill: job.drills.email_down, email: r.email, update: r.update });
 }
 
 export const markSent = ({ job, rendered }) => item({ update: sentUpdate(job, rendered.update) });

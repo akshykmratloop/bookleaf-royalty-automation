@@ -24,6 +24,20 @@ describe('buildContext', () => {
     expect(ctx.requests.anthropic.model).toBe(DRILL_MODEL);
     expect(ctx.requests.openai.model).toBe(DRILL_MODEL);
   });
+  it('primary-down drill fails only Anthropic, so the OpenAI fallback writes the email', () => {
+    const ctx = ctxFor(jobFor('AUTH002', { drills: { primary_down: true } }));
+    expect(ctx.requests.anthropic.model).toBe(DRILL_MODEL);
+    expect(ctx.requests.openai.model).toBe('gpt-4.1-mini');
+  });
+  it('tone, length and the admin note go into the user message only', () => {
+    const plain = ctxFor(jobFor('AUTH002'));
+    const styled = ctxFor(jobFor('AUTH002', { tone: 'formal', length: 'short', note: 'Mention the dashboard.' }));
+    expect(styled.prompt.system).toBe(plain.prompt.system);
+    expect(styled.prompt.user).toContain('Tone: formal');
+    expect(styled.prompt.user).toContain('80 to 180 words');
+    expect(styled.prompt.user).toContain('Mention the dashboard.');
+    expect(styled.requests.anthropic.messages[0].content).toBe(styled.prompt.user);
+  });
   it('data-down drill fails DATA_UNAVAILABLE', () => {
     expect(buildContext(jobFor('AUTH002', { drills: { data_down: true } }))).toMatchObject({ ok: false, code: 'DATA_UNAVAILABLE' });
   });
@@ -102,6 +116,13 @@ describe('afterAi', () => {
     const s = { ...goodSections, bookParagraphs: [goodSections.bookParagraphs[0], { code: 'BK999', text: 'Hello.' }], closing: 'Bye.' };
     const r = afterAi({ response: anthropicOk(s), ctx, job, attempt: 1 });
     expect(r.route).toBe(AI_ROUTES.PASS);
-    expect(r.ai.warnings.map((w) => w.code)).toEqual(expect.arrayContaining(['UNKNOWN_BOOK', 'MISSING_BOOK', 'SIGN_OFF']));
+    expect(r.ai.warnings.map((w) => w.code)).toEqual(expect.arrayContaining(['UNKNOWN_BOOK', 'MISSING_BOOK']));
+  });
+  it('the word-count warning follows the chosen length', () => {
+    const short = jobFor('AUTH002', { length: 'short' });
+    const detailed = jobFor('AUTH002', { length: 'detailed' });
+    const lengthWarn = (j) => afterAi({ response: anthropicOk(), ctx: ctxFor(j), job: j, attempt: 1 }).ai.warnings.find((w) => w.code === 'LENGTH');
+    expect(lengthWarn(short)).toBeUndefined();
+    expect(lengthWarn(detailed).message).toMatch(/target 250-450/);
   });
 });

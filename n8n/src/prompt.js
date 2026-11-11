@@ -1,6 +1,7 @@
 import { formatDate } from './dates.js';
 import { formatInr } from './money.js';
 import { PROMPT_VERSION, SYSTEM_PROMPT } from './prompt-system.js';
+import { styleLines } from './prompt-style.js';
 
 export { PROMPT_VERSION, SYSTEM_PROMPT };
 
@@ -50,11 +51,11 @@ const factLine = (f) => `- ${f.id} | ${f.label} | ${f.display}`;
 
 /**
  * Builds the prompt for one author. The system prompt is constant (cache-friendly); everything
- * author-specific is in the user message.
- * @param {{bundle: import('./types.js').AuthorBundle, facts: AuthorFacts}} input
+ * author- or request-specific (writing style, admin note) is in the user message.
+ * @param {{bundle: import('./types.js').AuthorBundle, facts: AuthorFacts, style?:{tone?:string, length?:string, note?:string}}} input
  * @returns {{system:string, user:string, version:string, situations:string[]}}
  */
-export function buildPrompt({ bundle, facts }) {
+export function buildPrompt({ bundle, facts, style }) {
   const situations = situationsFor(facts);
   const user = [
     `Author first name: ${bundle.author.firstName}`,
@@ -69,6 +70,8 @@ export function buildPrompt({ bundle, facts }) {
     '',
     'VERIFIED FACTS (id | label | display):',
     ...facts.facts.map(factLine),
+    '',
+    ...styleLines(style),
   ].join('\n');
   return { system: SYSTEM_PROMPT, user, version: PROMPT_VERSION, situations: situations.map((s) => s.key) };
 }

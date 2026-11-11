@@ -15,7 +15,8 @@ describe('prepareJob', () => {
     expect(r.job).toMatchObject({
       author_id: 'bubble_auth002', author_code: 'AUTH002', log_id: 'log_auth002', mode: 'single',
       reference_date: '2025-12-31', recipient: 'demo@inbox.test', attempt: 1,
-      drills: { ai_down: false, email_down: false, data_down: false },
+      drills: { ai_down: false, email_down: false, data_down: false, primary_down: false },
+      delivery: 'send', tone: 'warm', length: 'standard', note: '', sign_off: '',
     });
     expect(r.job.job_id).toMatch(UUID);
     expect(r.job.bundle.books).toHaveLength(2);
@@ -33,6 +34,25 @@ describe('prepareJob', () => {
     expect(prep(payloadFor('AUTH002', { attempt: 2 })).job.idem_key).not.toBe(base);
     expect(prep(payloadFor('AUTH002', { drills: { ai_down: true } })).job.idem_key).not.toBe(base);
     expect(prep(payloadFor('AUTH002'), ENV, NOW + IDEMPOTENCY_WINDOW_MS).job.idem_key).not.toBe(base);
+  });
+  it('delivery, tone, length, note and sign-off each change the idempotency key', () => {
+    const base = prep(payloadFor('AUTH002')).job.idem_key;
+    for (const over of [{ delivery: 'draft' }, { tone: 'formal' }, { length: 'short' }, { note: 'Be brief.' }, { sign_off: 'Priya' }]) {
+      expect(prep(payloadFor('AUTH002', over)).job.idem_key, JSON.stringify(over)).not.toBe(base);
+    }
+    expect(prep(payloadFor('AUTH002', { tone: 'warm', length: 'standard', delivery: 'send' })).job.idem_key).toBe(base);
+  });
+  it('carries the writing options on the job and rejects unknown values with 400', () => {
+    const r = prep(payloadFor('AUTH002', { delivery: 'draft', tone: 'concise', length: 'detailed', note: ' Thank them. ', sign_off: 'Anita Rao' }));
+    expect(r.job).toMatchObject({ delivery: 'draft', tone: 'concise', length: 'detailed', note: 'Thank them.', sign_off: 'Anita Rao' });
+    const bad = prep(payloadFor('AUTH002', { delivery: 'email', tone: 'loud', length: 'epic' }));
+    expect(bad).toMatchObject({ ok: false, code: 'VALIDATION', http_status: 400 });
+    expect(bad.fields.map((f) => f.path)).toEqual(['delivery', 'tone', 'length']);
+  });
+  it('accepts the primary_down drill (only with ALLOW_DRILLS)', () => {
+    expect(prep(payloadFor('AUTH002', { drills: { primary_down: true } })).job.drills.primary_down).toBe(true);
+    const off = prep(payloadFor('AUTH002', { drills: { primary_down: true } }), { ...ENV, ALLOW_DRILLS: 'false' });
+    expect(off).toMatchObject({ ok: false, fields: [{ path: 'drills', code: 'DISABLED' }] });
   });
   it('returns field errors for a bad payload (VALIDATION, HTTP 400)', () => {
     const r = prep({ ...payloadFor('AUTH001'), mode: 'all', author_id: 'bad id!', reference_date: '31-12-2025' });
@@ -72,6 +92,8 @@ describe('prepareJob', () => {
   it('insertParams is one JSON value with the rate limit and callback status', () => {
     const p = JSON.parse(insertParams(prep(payloadFor('AUTH001')).job));
     expect(p).toMatchObject({ author_id: 'bubble_auth001', max_sends: 60, callback_status: 'NOT_NEEDED', mode: 'single' });
+    expect(p).toMatchObject({ delivery: 'send', tone: 'warm', length: 'standard', note: '', sign_off: '', recipient: 'demo@inbox.test' });
+    expect(p.drills).toEqual({ ai_down: false, email_down: false, data_down: false, primary_down: false });
   });
 });
 

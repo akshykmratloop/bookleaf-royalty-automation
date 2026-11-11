@@ -59,7 +59,7 @@ export function afterAi({ response, ctx, job, attempt, previous }) {
     return regenerate(provider, ctx, job, [{ role: 'user', content: ctx.prompt.user }], spent, [{ code: parsed.error.code, message: detail }]);
   }
   const ai = { provider, model: parsed.model, sections: parsed.sections, attempts: attempt, ...addUsage(previous, parsed.usage, parsed.model) };
-  const check = checkDraft(parsed.sections, ctx.facts, ctx.titles);
+  const check = checkDraft(parsed.sections, ctx.facts, ctx.titles, job.length);
   const withCheck = { ...ai, verified_figures: check.verifiedFigures, words: check.words, warnings: check.issues.filter((i) => i.severity !== 'BLOCK') };
   if (check.passed) return { route: AI_ROUTES.PASS, outcome: 'PASS', ai: withCheck, issues: check.issues };
   if (attempt >= 2) {

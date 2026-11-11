@@ -1,8 +1,10 @@
 import { date, email, isObject, makeCtx, oneOf, str } from '../validate-fields.js';
 import { validatedBundleFromPayload } from '../payload.js';
+import { readStyle } from './style.js';
 
 const ID = /^[A-Za-z0-9_-]+$/;
-const DRILLS = Object.freeze(['ai_down', 'email_down', 'data_down']);
+/** primary_down fails only the primary AI provider (Anthropic), so the OpenAI fallback writes the email. */
+const DRILLS = Object.freeze(['ai_down', 'email_down', 'data_down', 'primary_down']);
 export const MAX_ATTEMPT = 20;
 
 /**
@@ -10,14 +12,16 @@ export const MAX_ATTEMPT = 20;
  * @property {string} author_id @property {string|null} log_id @property {string|null} batch_id
  * @property {string} requested_by @property {'single'|'bulk'} mode @property {string|null} reference_date
  * @property {string|null} demo_inbox @property {number} attempt
- * @property {{ai_down:boolean, email_down:boolean, data_down:boolean}} drills
+ * @property {{ai_down:boolean, email_down:boolean, data_down:boolean, primary_down:boolean}} drills
+ * @property {'send'|'draft'} delivery @property {'warm'|'formal'|'concise'} tone
+ * @property {'short'|'standard'|'detailed'} length @property {string} note @property {string} sign_off
  * @property {import('../types.js').AuthorBundle|null} bundle null when DATA_SOURCE=bubble
  */
 
 const optional = (v) => v === undefined || v === null || v === '';
 
 function readDrills(ctx, v) {
-  const off = { ai_down: false, email_down: false, data_down: false };
+  const off = Object.fromEntries(DRILLS.map((k) => [k, false]));
   if (optional(v)) return off;
   if (!isObject(v)) return ctx.fail('drills', 'TYPE', 'must be an object');
   const unknown = Object.keys(v).filter((k) => !DRILLS.includes(k));
@@ -46,6 +50,7 @@ function readHeader(ctx, body) {
     demo_inbox: optional(body.demo_inbox) ? null : email(ctx, 'demo_inbox', body.demo_inbox),
     attempt: readAttempt(ctx, body.attempt),
     drills: readDrills(ctx, body.drills),
+    ...readStyle(ctx, body),
   };
 }
 
