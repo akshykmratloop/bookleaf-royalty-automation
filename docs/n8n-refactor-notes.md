@@ -782,3 +782,18 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
 - **Gates:** npm test 557/557, build --check clean, test:db 47/47, contracts 41/41 (job-status contracts unchanged).
 - **Sizes:** working nodes 81 → **80** (job-status 6); Code 14 → **13** nodes, 164.2 → **162.7 KB**; total budget
   165 → 163 KB.
+
+## Fix 8 — CI (MEDIUM "no CI")
+
+- **Changed:** `.github/workflows/ci.yml` runs on every push to `main` and `refactor/**` and on pull requests:
+  `npm ci` → `npm test` → `node n8n/build.mjs --check` → `npm run test:db` against a `postgres:16-alpine` service
+  (the image the local stack runs). Read-only token, 15-minute limit, one run per branch at a time. The real-Postgres
+  tests no longer need the local container: `tests/db/pg-command.js` runs psql and pg_dump through `docker exec`
+  by default, or directly when `BOOKLEAF_PG_DIRECT=1` (CI sets it with `PGHOST`/`PGPORT`; any other value is refused).
+- **Not in CI, on purpose:** the contract suite. It needs a live n8n with the workflows deployed, the webhook key, AI
+  keys and SMTP, and it spends real AI calls; CI would need those secrets in GitHub. It stays a local gate, run
+  before every commit on this branch (41/41 at each commit above).
+- **Tests (written first, RED):** `tests/infra/ci.test.js`: the workflow exists, its steps run in order, Postgres 16
+  matches the local stack, read-only, no contract step and no secrets; `pgCommand` picks docker or direct and
+  refuses an unknown value.
+- **Gates:** npm test 564/564, build --check clean, test:db 47/47, contracts 41/41.

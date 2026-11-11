@@ -1,22 +1,23 @@
 /**
- * psql and pg_dump inside the local stack's Postgres 16 container (docker/docker-compose.local.yml),
- * so the ledger SQL is tested against real Postgres. Tests only use throwaway databases made by
- * scratchDatabase(); the `bookleaf` database is never touched.
- * BOOKLEAF_PG_CONTAINER and BOOKLEAF_PG_USER override the local stack's container and user.
+ * psql and pg_dump against real Postgres 16: the local stack's container (docker/docker-compose.local.yml),
+ * or with BOOKLEAF_PG_DIRECT=1 a server reached directly (CI; see pg-command.js). Tests only use throwaway
+ * databases made by scratchDatabase(); the `bookleaf` database is never touched.
+ * BOOKLEAF_PG_USER overrides the user (n8n, as in the local stack and the CI service).
  */
 import { execFile, execFileSync } from 'node:child_process';
 import { freshSchema } from '../fixtures/ledger-sql.js';
+import { pgCommand } from './pg-command.js';
 
-const CONTAINER = process.env.BOOKLEAF_PG_CONTAINER || 'bookleaf-n8n-local-postgres-1';
 const USER = process.env.BOOKLEAF_PG_USER || 'n8n';
-const psqlArgs = (db) => ['exec', '-i', CONTAINER, 'psql', '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-U', USER, '-d', db];
+const psqlCommand = (db) => pgCommand('psql', ['-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-U', USER, '-d', db]);
 
 export class PsqlError extends Error {}
 
 /** Runs `sql` in one session. @returns {string} the rows, one per line @throws {PsqlError} with psql's message */
 export function psql(db, sql) {
   try {
-    return execFileSync('docker', psqlArgs(db), { input: sql, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    const { file, args } = psqlCommand(db);
+    return execFileSync(file, args, { input: sql, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
   } catch (e) {
     throw new PsqlError(`psql: ${String(e.stderr || e.message).trim()}`);
   }
@@ -25,7 +26,8 @@ export function psql(db, sql) {
 /** Like psql(), in a session of its own that runs alongside others. Never rejects: the caller asserts on `ok`. */
 export function psqlAsync(db, sql) {
   return new Promise((resolve) => {
-    const child = execFile('docker', psqlArgs(db), { encoding: 'utf8' }, (error, out, err) => {
+    const { file, args } = psqlCommand(db);
+    const child = execFile(file, args, { encoding: 'utf8' }, (error, out, err) => {
       resolve({ ok: !error, out: out.trim(), err: err.trim() });
     });
     child.stdin.end(sql);
@@ -33,11 +35,14 @@ export function psqlAsync(db, sql) {
 }
 
 /** @returns {string} the schema of `db` as pg_dump prints it */
-export const schemaDump = (db) => execFileSync('docker', ['exec', CONTAINER, 'pg_dump', '-U', USER, '--schema-only', '--no-owner', '-d', db], { encoding: 'utf8' });
+export function schemaDump(db) {
+  const { file, args } = pgCommand('pg_dump', ['-U', USER, '--schema-only', '--no-owner', '-d', db]);
+  return execFileSync(file, args, { encoding: 'utf8' });
+}
 
 /**
  * A new database holding the fresh-install schema (infra/db/init/01-bookleaf.sql).
- * @throws {PsqlError} when the local stack is not running (start it: node docker/bootstrap.mjs)
+ * @throws {PsqlError} when the local stack is not running (start it: node docker/bootstrap.mjs, or point BOOKLEAF_PG_DIRECT=1 at one)
  */
 export function scratchDatabase() {
   const name = `bookleaf_test_${process.pid}_${Date.now()}`;
