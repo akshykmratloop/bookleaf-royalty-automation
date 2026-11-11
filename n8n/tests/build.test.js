@@ -81,12 +81,15 @@ describe('built workflows', () => {
   it('job-status (polled every few seconds) saves only failed runs, so its successful polls and their headers are not kept', () => {
     expect(built['job-status'].settings).toMatchObject({ saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all' });
   });
-  it('job-status is Parse Query → Query Valid? (IF 2.2) → Select Jobs → Shape Jobs → Respond Jobs, or Respond Rejected', () => {
+  it('job-status is Parse Query → Query Valid? (IF 2.2) → Select Jobs → Respond Jobs, or Respond Rejected: one Code node per poll', () => {
     const wf = built['job-status'];
     const next = (from, i = 0) => (wf.connections[from]?.main[i] ?? []).map((c) => c.node);
     expect(nodeOf('job-status', 'Query Valid?')).toMatchObject({ type: 'n8n-nodes-base.if', typeVersion: 2.2 });
-    expect([next('Parse Query'), next('Query Valid?', 0), next('Query Valid?', 1), next('Select Jobs'), next('Shape Jobs')])
-      .toEqual([['Query Valid?'], ['Select Jobs'], ['Respond Rejected'], ['Shape Jobs'], ['Respond Jobs']]);
+    expect([next('Parse Query'), next('Query Valid?', 0), next('Query Valid?', 1), next('Select Jobs')])
+      .toEqual([['Query Valid?'], ['Select Jobs'], ['Respond Rejected'], ['Respond Jobs']]);
+    expect(ofType('job-status', 'code').map((n) => n.name)).toEqual(['Parse Query']);
+    const respondJobs = nodeOf('job-status', 'Respond Jobs').parameters;
+    expect([respondJobs.options.responseCode, respondJobs.responseBody]).toEqual(['={{ 200 }}', '={{ $json.response }}']);
   });
   it('no Switch picks its output by a computed number: every Switch is in Rules mode with named outputs', () => {
     const switches = WORKFLOW_SOURCES.flatMap((wf) => ofType(wf, 'switch'));

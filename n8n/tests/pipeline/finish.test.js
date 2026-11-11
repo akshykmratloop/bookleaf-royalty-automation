@@ -6,7 +6,7 @@ import { errorBody, failure } from '../../src/pipeline/errors.js';
 import { deliveryFor, failedUpdate } from '../../src/pipeline/finalize.js';
 import { nodeErrorSummary } from '../../src/pipeline/node-errors.js';
 import { queuedJob } from './job-fixture.js';
-import { parseStatusQuery, shapeJobs } from '../../src/pipeline/status.js';
+import { parseStatusQuery } from '../../src/pipeline/status.js';
 import { NOW, SETTINGS } from './settings-fixture.js';
 import { payloadFor } from './fixtures.js';
 import { anthropicOk } from './ai-fixtures.js';
@@ -55,14 +55,6 @@ describe('job status query', () => {
   it.each([
     [{}, 'REQUIRED'], [{ ids: 'abc' }, 'PATTERN'], [{ ids: Array(51).fill(0).map((_, i) => ID.slice(0, -2) + String(i).padStart(2, '0')).join(',') }, 'TOO_MANY'],
   ])('rejects %j', (q, code) => expect(parseStatusQuery(q)).toMatchObject({ ok: false, code: 'VALIDATION', fields: [{ code }] }));
-  it('shapes rows in request order, hides html unless asked, reports missing ids', () => {
-    const other = ID.replace(/^0/, '1');
-    const rows = [{ job_id: ID, status: 'SENT', html: '<p>x</p>', text_body: 'x', created_at: new Date(0) }, {}];
-    const r = shapeJobs(rows, [other, ID], false);
-    expect(r.jobs).toEqual([{ job_id: ID, status: 'SENT', created_at: '1970-01-01T00:00:00.000Z', updated_at: null, completed_at: null }]);
-    expect(r.missing).toEqual([other]);
-    expect(shapeJobs(rows, [ID], true).jobs[0].html).toBe('<p>x</p>');
-  });
 });
 
 describe('the crash drill', () => {

@@ -6,20 +6,18 @@ import { code, ifTrue, IS_TRUE, pg, respond, respondDatabaseDown, webhook, withN
  * Reads no settings, and keeps no successful run (saveDataSuccessExecution none): a poll changes nothing,
  * and thousands of saved polls would bury every other execution (and keep each request's headers).
  */
-const PARSED = "$('Parse Query').first().json";
 const nodes = [
   webhook('Job Status Webhook', 'GET', 'royalty-summary/jobs'),
   code('Parse Query', 'parseQuery', 'return main({ query: $json.query });'),
   ifTrue('Query Valid?', '$json.ok', IS_TRUE),
   respond('Respond Rejected'),
-  withNote(pg('Select Jobs', SELECT_JOBS, '$json.params', { alwaysOutputData: true, errorOutput: true, retry: true }), 'html only with include=html'),
-  code('Shape Jobs', 'respondJobs', `return main({ rows: $input.all().map((i) => i.json), ids: ${PARSED}.ids, includeHtml: ${PARSED}.include_html });`),
-  respond('Respond Jobs'),
+  withNote(pg('Select Jobs', SELECT_JOBS, '$json.params', { errorOutput: true, retry: true }), 'One row: {jobs, missing}'),
+  respond('Respond Jobs', '200', '$json.response'),
   withNote(respondDatabaseDown('Respond 503'), 'Database down: 503'),
 ];
 const edges = [
   ['Job Status Webhook', 'Parse Query'], ['Parse Query', 'Query Valid?'], ['Query Valid?', 'Select Jobs', 'true'],
-  ['Query Valid?', 'Respond Rejected', 'false'], ['Select Jobs', 'Shape Jobs'], ['Select Jobs', 'Respond 503', 'error'], ['Shape Jobs', 'Respond Jobs'],
+  ['Query Valid?', 'Respond Rejected', 'false'], ['Select Jobs', 'Respond Jobs'], ['Select Jobs', 'Respond 503', 'error'],
 ];
 const ABOUT = [
   '## BookLeaf job status',
@@ -28,11 +26,11 @@ const ABOUT = [
 ].join('\n');
 const grid = {
   'Job Status Webhook': [0, 0], 'Parse Query': [1, 0], 'Query Valid?': [2, 0], 'Respond Rejected': [3, 1],
-  'Select Jobs': [4, 0], 'Shape Jobs': [5, 0], 'Respond Jobs': [6, 0], 'Respond 503': [5, 1],
+  'Select Jobs': [4, 0], 'Respond Jobs': [5, 0], 'Respond 503': [5, 1],
 };
 const sections = [
   { title: 'Intake', text: 'A bad query gets 400.', nodes: ['Job Status Webhook', 'Parse Query', 'Query Valid?', 'Respond Rejected'] },
-  { title: 'Answer', text: 'The jobs, in the order asked; 503 if the database is down.', nodes: ['Select Jobs', 'Shape Jobs', 'Respond Jobs', 'Respond 503'] },
+  { title: 'Answer', text: 'One query answers the jobs, in the order asked; 503 if the database is down.', nodes: ['Select Jobs', 'Respond Jobs', 'Respond 503'] },
 ];
 
 export default {

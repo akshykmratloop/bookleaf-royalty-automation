@@ -764,3 +764,21 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
 - **Gates:** npm test 559/559, build --check clean, contracts 41/41.
 - **Sizes:** working nodes 79 → 81 (write-draft 10, approve-draft 21); Code 12 → 14 nodes, 164.2 KB. Largest now:
   Check Draft 28.0, Build Context 27.0, Check Edit 20.7, Validate Body 18.1 KB (was 34.9 / 35.0 / 32.7 / 29.8).
+
+## Fix 7c — job-status answers from one SQL query (HIGH, part 4 of 4; LOW "two Code nodes per poll")
+
+- **Changed:** `SELECT_JOBS` returns one row, `response = {jobs, missing}`: the ids come from `$1->'ids'` WITH
+  ORDINALITY, so the jobs keep the order asked and an unknown id lands in `missing`; timestamps are written as
+  JavaScript's `toISOString()` writes them (UTC, milliseconds; null stays null); `cost_usd` is a number; html and
+  text_body are left out unless `include_html`. **Shape Jobs** (Code) is gone, with `shapeJobs` and `respondJobs`:
+  job-status is Job Status Webhook → Parse Query → Query Valid? → Select Jobs → Respond Jobs (`200`, `$json.response`),
+  or Respond Rejected / Respond 503. Select Jobs no longer needs `alwaysOutputData` (it always returns one row). A poll
+  now runs one Code node (Parse Query). Every job-status field and the answer shape are unchanged for Bubble (the
+  JSON key order inside a job is Postgres's, which JSON readers ignore).
+- **Tests (written first, RED):** `tests/db/status.test.js` runs the query on real Postgres: order, `missing`, the
+  exact field list, ISO timestamps (`2026-11-12T09:00:02.250Z`), numbers, nulls, html only on request, empty lists;
+  build test: one Code node, Respond Jobs answers `$json.response` with 200. The `shapeJobs` unit tests are removed
+  with the function.
+- **Gates:** npm test 557/557, build --check clean, test:db 47/47, contracts 41/41 (job-status contracts unchanged).
+- **Sizes:** working nodes 81 → **80** (job-status 6); Code 14 → **13** nodes, 164.2 → **162.7 KB**; total budget
+  165 → 163 KB.

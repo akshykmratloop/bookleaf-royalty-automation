@@ -5,7 +5,6 @@ import { CLAIM_DRAFT, DISCARD_DRAFT, SELECT_DRAFT } from '../../src/pipeline/sql
 import {
   ENQUEUE_JOB, LOAD_SETTINGS, MARK_EMAIL_FAILED, MARK_PROCESSING, MARK_SENT, SELECT_JOBS, SET_STAGE, UPDATE_JOB,
 } from '../../src/pipeline/sql.js';
-import { shapeJobs } from '../../src/pipeline/status.js';
 
 /** The SQL is exercised live by the contract suite; these pin the guards that keep it safe. */
 describe('job ledger SQL guards', () => {
@@ -59,12 +58,3 @@ describe('job ledger SQL guards', () => {
   });
 });
 
-describe('shapeJobs with drafts', () => {
-  it('formats drafted_at and stage_at as ISO strings', () => {
-    const id = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
-    const rows = [{ job_id: id, status: 'DRAFTED', stage: 'drafted', drafted_at: new Date(0), stage_at: new Date(1000), edit_text: 'x' }];
-    expect(shapeJobs(rows, [id], false).jobs[0]).toMatchObject({
-      status: 'DRAFTED', stage: 'drafted', drafted_at: '1970-01-01T00:00:00.000Z', stage_at: '1970-01-01T00:00:01.000Z', edit_text: 'x',
-    });
-  });
-});

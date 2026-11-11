@@ -91,12 +91,26 @@ export const MARK_EMAIL_FAILED = `UPDATE royalty_jobs SET status = 'FAILED', sta
 ${RUNNING_JOB}
 RETURNING job_id::text AS job_id, status, stage, error_code`;
 
-export const SELECT_JOBS = `SELECT job_id::text AS job_id, log_id, batch_id, author_id, author_code, mode, status, error_code, error,
-  subject, sent_to, figures_verified, ai_attempts, provider, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd,
-  requested_by, created_at, updated_at, completed_at, callback_status,
-  stage, stage_at, delivery, tone, length, issues, edit_text, drafted_at,
-  CASE WHEN (${P}->>'include_html')::boolean THEN html END AS html,
-  CASE WHEN (${P}->>'include_html')::boolean THEN text_body END AS text_body
-FROM royalty_jobs
-WHERE job_id = ANY (ARRAY(SELECT jsonb_array_elements_text(${P}->'ids'))::uuid[])`;
+/** A timestamp as the ISO string JavaScript's toISOString() gives (UTC, milliseconds); null stays null. */
+const iso = (column) => `to_char(r.${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS ${column}`;
 
+/**
+ * job-status's whole answer as one row, `response` = {jobs, missing}: the jobs in the order asked, the ids
+ * not found in `missing`, html and text_body only with include_html.
+ */
+export const SELECT_JOBS = `WITH asked AS (
+  SELECT id, ord FROM jsonb_array_elements_text(${P}->'ids') WITH ORDINALITY AS a(id, ord)
+), found AS (
+  SELECT a.ord, to_jsonb(j) AS job FROM asked a CROSS JOIN LATERAL (
+    SELECT r.job_id::text AS job_id, r.log_id, r.batch_id, r.author_id, r.author_code, r.mode, r.status, r.error_code, r.error,
+      r.subject, r.sent_to, r.figures_verified, r.ai_attempts, r.provider, r.model, r.input_tokens, r.output_tokens,
+      r.cost_usd::float8 AS cost_usd, r.requested_by, ${iso('created_at')}, ${iso('updated_at')}, ${iso('completed_at')},
+      r.callback_status, r.stage, ${iso('stage_at')}, r.delivery, r.tone, r.length, r.issues, r.edit_text, ${iso('drafted_at')},
+      r.html, r.text_body
+    FROM royalty_jobs r WHERE r.job_id = a.id::uuid) j
+)
+SELECT jsonb_build_object(
+  'jobs', coalesce((SELECT jsonb_agg(CASE WHEN (${P}->>'include_html')::boolean THEN job ELSE job - 'html' - 'text_body' END ORDER BY ord)
+    FROM found), '[]'::jsonb),
+  'missing', coalesce((SELECT jsonb_agg(a.id ORDER BY a.ord) FROM asked a WHERE a.ord NOT IN (SELECT ord FROM found)), '[]'::jsonb)
+) AS response`;

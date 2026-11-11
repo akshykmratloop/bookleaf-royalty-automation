@@ -75,7 +75,7 @@ describe('every built workflow', () => {
       .toEqual(['Intake', 'Ledger', 'Data & facts', 'AI writer', 'Fact check', 'Render & deliver', 'Record']);
   });
   it.each([
-    ['job-status', ['Job Status Webhook', 'Parse Query', 'Query Valid?', 'Select Jobs', 'Shape Jobs', 'Respond Jobs']],
+    ['job-status', ['Job Status Webhook', 'Parse Query', 'Query Valid?', 'Select Jobs', 'Respond Jobs']],
     ['error-handler', ['Error Trigger', 'Fail Job', 'Alert Set?', 'Send Alert']],
     ['sweeper', ['Every Minute', 'Sweep Stuck Jobs']],
   ])('%s reads left to right on one row', (wf, happy) => {
