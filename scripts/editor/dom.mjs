@@ -36,6 +36,7 @@ export async function clickExactText(page, text, nth = 0) {
       );
       const el = leaves[n];
       if (!el) return null;
+      el.scrollIntoView({ block: 'center' }); // long lists put the target below the fold
       const r = el.getBoundingClientRect();
       return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
     },

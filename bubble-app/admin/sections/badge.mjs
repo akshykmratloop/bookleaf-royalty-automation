@@ -1,34 +1,39 @@
-// Author-level payout badge, worded like the author portal's per-book badges:
-// Fully paid (green) → Pending (yellow) → Overdue (red); later rules win.
+// Pills: 22px tall, fully round, soft background with strong text and a status dot.
+// statusBadge: Fully paid (green) → Pending (amber) → Overdue (red); later rules win.
+// sendBadge: the notification log status (Queued, Processing, Draft ready, Sent, Failed, ...).
 import { chain, op, text } from '../expr.mjs';
-import { group, label, withStates } from '../ui.mjs';
+import { row, label, group, withStates } from '../ui.mjs';
+import { TONES, fill, border, pad, font } from '../theme.mjs';
 
 const gt0 = (countExpr) => chain(countExpr, op('greater_than', { args: 0 }));
-const colors = (tone) => ({ bg: `var(--color_badge${tone}bg_default)`, fg: `var(--color_badge${tone}text_default)` });
+const toneSet = (tone) => ({ fg: { font_color: TONES[tone][0] }, bg: { bgcolor: TONES[tone][1], border_color: TONES[tone][1] }, dot: { bgcolor: TONES[tone][0], border_color: TONES[tone][0] } });
 
-/** pendingCount / overdueCount: numbers of this author's records pending / overdue. */
-export function statusBadge(id, pendingCount, overdueCount) {
-  const amber = colors('amber');
-  const red = colors('red');
-  const t = withStates(label(`${id}_t`, text('Fully paid'), 'Text_badge_green_', { fit_width: true, min_width_css: 'max-content' }), [
-    { when: gt0(pendingCount), set: { text: text('Pending'), font_color: amber.fg } },
-    { when: gt0(overdueCount), set: { text: text('Overdue'), font_color: red.fg } },
-  ]);
-  return withStates(group(id, [t], { layout: 'row', gap: 0, style: 'Group_badge_green_', props: { fit_width: true, padding_top: 3, padding_bottom: 3, padding_left: 10, padding_right: 10 } }), [
-    { when: gt0(pendingCount), set: { bgcolor: amber.bg } },
-    { when: gt0(overdueCount), set: { bgcolor: red.bg } },
-  ]);
+/** A pill whose tone switches by condition: rules = [{ when, tone, text? }]. */
+export function pill(id, baseText, baseTone, rules = []) {
+  const base = toneSet(baseTone);
+  const t = withStates(label(`${id}_t`, baseText, font(11.5, 700, TONES[baseTone][0]), { fit_width: true, min_width_css: 'max-content' }),
+    rules.map((r) => ({ when: r.when, set: { ...toneSet(r.tone).fg, ...(r.text ? { text: r.text } : {}) } })));
+  const dot = withStates(group(`${id}_d`, [], { props: { ...fill(TONES[baseTone][0]), ...border(TONES[baseTone][0], 999), width: 6, height: 6, single_width: true, single_height: true, min_width_css: '6px', min_height_css: '6px', fit_height: false } }),
+    rules.map((r) => ({ when: r.when, set: toneSet(r.tone).dot })));
+  const shell = row(id, [dot, t], { gap: 6, props: { ...fill(base.bg.bgcolor), ...border(base.bg.bgcolor, 999), ...pad(3, 10), fit_width: true } });
+  return withStates(shell, rules.map((r) => ({ when: r.when, set: toneSet(r.tone).bg })));
 }
 
-/** Send status chip for the notification log (Queued/Processing/Sent/Failed/Duplicate). */
+/** pendingCount / overdueCount: numbers of this author's records pending / overdue. */
+export const statusBadge = (id, pendingCount, overdueCount) =>
+  pill(id, text('Fully paid'), 'success', [
+    { when: gt0(pendingCount), tone: 'warning', text: text('Pending') },
+    { when: gt0(overdueCount), tone: 'danger', text: text('Overdue') },
+  ]);
+
+/** Send status pill; `statusDisplayExpr` is the log's status:display. */
 export function sendBadge(id, statusDisplayExpr) {
   const is = (v) => chain(statusDisplayExpr, op('equals', { args: v }));
-  const t = withStates(label(`${id}_t`, text(statusDisplayExpr), 'Text_badge_amber_', { fit_width: true, min_width_css: 'max-content' }), [
-    { when: is('Sent'), set: { font_color: colors('green').fg } },
-    { when: is('Failed'), set: { font_color: colors('red').fg } },
-  ]);
-  return withStates(group(id, [t], { layout: 'row', gap: 0, style: 'Group_badge_amber_', props: { fit_width: true, padding_top: 3, padding_bottom: 3, padding_left: 10, padding_right: 10 } }), [
-    { when: is('Sent'), set: { bgcolor: colors('green').bg } },
-    { when: is('Failed'), set: { bgcolor: colors('red').bg } },
+  return pill(id, text(statusDisplayExpr), 'warning', [
+    { when: is('Draft ready'), tone: 'info' },
+    { when: is('Sent'), tone: 'success' },
+    { when: is('Failed'), tone: 'danger' },
+    { when: is('Discarded'), tone: 'neutral' },
+    { when: is('Duplicate'), tone: 'neutral' },
   ]);
 }

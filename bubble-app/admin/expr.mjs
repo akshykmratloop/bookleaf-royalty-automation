@@ -3,6 +3,8 @@
 //   Current User's author's name  ->  {type:'CurrentUser', next:{name:'author_custom_author', next:{name:'name_text'}}}
 // Every builder returns a fresh object, so expressions can be reused safely.
 
+import { OPTION_IDS } from '../schema.mjs';
+
 const node = (type, extra = {}) => ({ type, is_slidable: false, ...extra });
 
 /** An operator ("Message") in a chain. `args` is the operand, `properties` its options. */
@@ -44,7 +46,7 @@ export const now = () => node('PageData', { properties: { name: 'Current Date/Ti
 export const element = (id) => node('GetElement', { properties: { element_id: id } });
 export const prevStep = (actionId) => node('PreviousStep', { properties: { action_id: actionId } });
 export const optionValue = (set, value) =>
-  node('OptionValue', { properties: { option_set: `option.${set}`, option_value: value } });
+  node('OptionValue', { properties: { option_set: `option.${set}`, option_value: OPTION_IDS[set]?.[value] ?? value } });
 
 /** A page custom state: `page's state`. */
 export const state = (pageId, name) => chain(element(pageId), op(`custom.${name}`));

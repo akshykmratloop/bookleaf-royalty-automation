@@ -4,6 +4,8 @@ import { text } from '../expr.mjs';
 export const API = {
   send: 'apiconnector2-0_default_collection.0_default_call',
   jobs: 'apiconnector2-0_default_collection.bTGNs',
+  // "Approve draft" call; its id is read from the editor after the call is created (see TASKS.md).
+  approve: 'apiconnector2-0_default_collection.APPROVE_CALL_ID',
 };
 
 /** actions: array -> {"0": {...}, "1": {...}}; each action gets id `${wfId}_a<i>` unless set. */
@@ -31,6 +33,7 @@ export const resetInputs = () => ({ type: 'ResetInputs' });
 const fieldList = (fields) => Object.fromEntries(Object.entries(fields).map(([key, value], i) => [i, { key, value }]));
 
 export const create = (type, fields, id) => ({ type: 'NewThing', id, properties: { thing_type: `custom.${type}`, initial_values: fieldList(fields) } });
+export const deleteList = (type, list, id) => ({ type: 'DeleteListOfThings', id, properties: { type_to_delete: `custom.${type}`, to_delete: list } });
 export const change = (thing, fields, id) => ({ type: 'ChangeThing', id, properties: { to_change: thing, changes: fieldList(fields) } });
 
 /** API Connector action: params are the call's parameter names (body_params_x / url_params_x). */

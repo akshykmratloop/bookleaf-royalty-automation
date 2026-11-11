@@ -6,7 +6,14 @@ export const OPTION_SETS = {
   BookStatus: ['Published & Live', 'In Production - Cover Design', 'In Production - Typesetting'],
   PrintPartner: ['In-House', 'Repro India', 'Epitome Books'],
   Platform: ['Amazon India', 'Flipkart', 'BookLeaf Store', 'Amazon US', 'Amazon UK'],
-  SendStatus: ['Queued', 'Processing', 'Sent', 'Failed', 'Duplicate'],
+  // Quarter ends and pay-by dates (quarter end + 45 days); attributes quarter_end and pay_by (date).
+  PayoutCycle: ['Q1 2025', 'Q2 2025', 'Q3 2025', 'Q4 2025', 'Q1 2026', 'Q2 2026', 'Q3 2026', 'Q4 2026', 'Q1 2027', 'Q2 2027'],
+  SendStatus: ['Queued', 'Processing', 'Sent', 'Failed', 'Duplicate', 'Draft ready', 'Discarded'],
+};
+
+/** Option values created in the editor UI get a snake_case db_value; values made by the AI agent use their name. */
+export const OPTION_IDS = {
+  sendstatus: { 'Draft ready': 'draft_ready', Discarded: 'discarded' },
 };
 
 /** Field type labels as the editor shows them ("list of X" is shown as "list of X"). */
@@ -33,9 +40,14 @@ export const TYPES = {
     job_id: 'text', status: 'SendStatus', error: 'text', subject: 'text', email_html: 'text',
     sent_to: 'text', figures_verified: 'number', model: 'text', cost_usd: 'number',
     requested_at: 'date', completed_at: 'date',
+    // live progress and the draft-review flow
+    stage: 'text', delivery: 'text', tone: 'text', length: 'text', edit_text: 'text', issues: 'text',
   },
   AppSettings: {
     reference_date: 'date', use_today: 'yes / no', demo_inbox: 'text', callback_mode: 'text',
     drill_ai_down: 'yes / no', drill_email_down: 'yes / no', drill_data_down: 'yes / no',
+    drill_primary_down: 'yes / no',
+    // email defaults the admin sets on the Email settings view
+    email_tone: 'text', email_length: 'text', email_note: 'text', sign_off: 'text', review_first: 'yes / no',
   },
 };

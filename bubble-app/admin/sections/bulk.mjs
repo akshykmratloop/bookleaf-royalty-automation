@@ -1,13 +1,15 @@
-// Bulk send: one button for every author with pending royalties, with live batch progress.
-import { chain, op, text, state, optionValue } from '../expr.mjs';
-import { group, row, label, button, showWhen, hideWhen } from '../ui.mjs';
+// Bulk: one email for every author with pending royalties, either drafted for review first or
+// sent straight away. Each author is one call to the same n8n webhook; progress updates live.
+import { chain, op, text, state, injected, optionValue } from '../expr.mjs';
+import { group, row, card, label, button, showWhen, hideWhen, grow } from '../ui.mjs';
+import { T, font } from '../theme.mjs';
 import { PAGE, authorsWithPending, batchLogs, batchQueue } from '../queries.mjs';
 
 const count = (e) => chain(e, op('count'));
 const batch = () => state(PAGE, 'cur_batch');
 const batchWith = (status) =>
   chain(batchLogs(batch()), op('filtered', {
-    properties: { constraints: { 0: { key: '_advanced_search_constraint', value: chain({ type: 'InjectedValue', is_slidable: false }, op('status_option_sendstatus'), op('equals', { args: optionValue('sendstatus', status) })) } } },
+    properties: { constraints: { 0: { key: '_advanced_search_constraint', value: chain(injected(), op('status_option_sendstatus'), op('equals', { args: optionValue('sendstatus', status) })) } } },
   }), op('count'));
 
 /** True while this page is working through a batch. */
@@ -15,18 +17,21 @@ export const bulkRunning = () => chain(batch(), op('is_not_empty'), op('and_', {
 
 export function bulkCard() {
   const hasBatch = chain(batch(), op('is_not_empty'));
-  return group('ad_bulk', [
-    row('ad_bulk_top', [
-      group('ad_bulk_txt', [
-        label('ad_bulk_h', 'Send royalty summaries in bulk', 'Text_h3_'),
-        label('ad_bulk_d', text('One personalised email for each of the ', count(authorsWithPending()), ' authors with pending royalties. Each is written by AI, checked figure by figure, then sent.'), 'Text_muted_'),
-      ], { gap: 4, props: { fit_width: false, min_width_css: '0px' } }),
-      hideWhen(button('ad_bulk_btn', text('Send to all ', count(authorsWithPending()), ' authors'), 'Button_primary_'), bulkRunning()),
-      showWhen(label('ad_bulk_wait', 'Sending…', 'Text_bold_'), bulkRunning()),
-    ], { gap: 16 }),
-    showWhen(label('ad_bulk_prog', text(
-      'Batch ', batch(), ': ', count(batchLogs(batch())), ' of ', count(authorsWithPending()), ' queued · ',
-      batchWith('Sent'), ' sent · ', batchWith('Failed'), ' failed · ', batchWith('Processing'), ' in progress',
-    ), 'Text_small_'), hasBatch),
-  ], { gap: 12, style: 'Group_card_' });
+  const n = count(authorsWithPending());
+  return card('ad_bulk', [
+    label('ad_bulk_h', 'Royalty emails in bulk', 'h2'),
+    label('ad_bulk_d', text('One personalised email for each of the ', n, ' authors with money pending. Each is written by AI and checked figure by figure against the records. Draft them to read and edit first, or send them now.'), 'sub'),
+    hideWhen(row('ad_bulk_btns', [
+      button('ad_bulk_draft', text('Draft all ', n, ' for review'), 'primary'),
+      button('ad_bulk_btn', text('Send all ', n, ' now'), 'secondary'),
+    ], { gap: 10 }), bulkRunning()),
+    showWhen(label('ad_bulk_wait', 'Working through the batch. Keep this page open; each author takes a few seconds.', font(13, 700, T.brandInk)), bulkRunning()),
+    showWhen(group('ad_bulk_prog', [
+      label('ad_bulk_prog_t', text('Batch ', batch(), ' · ', state(PAGE, 'cur_delivery')), 'micro'),
+      label('ad_bulk_prog_n', text(
+        count(batchLogs(batch())), ' of ', n, ' requested · ', batchWith('Sent'), ' sent · ', batchWith('Draft ready'), ' drafted · ',
+        batchWith('Failed'), ' failed · ', batchWith('Processing'), ' in progress',
+      ), font(13, 700, T.text1)),
+    ], { gap: 4 }), hasBatch),
+  ], { gap: 12, props: grow({ min_width_css: '360px' }) });
 }

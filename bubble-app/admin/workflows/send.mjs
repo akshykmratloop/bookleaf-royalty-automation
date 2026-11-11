@@ -2,11 +2,17 @@
 // bulk_step: pick the next author of the batch, send, and schedule itself until the batch is done.
 import { chain, f, op, text, state, now, currentUser, prevStep, optionValue, injected, jsonSafe, formatList, dateFmt, yesNo } from '../expr.mjs';
 import { PAGE, settings, recordsOf, finishedCountOf, batchQueue, batchLogs, authorsWithPending } from '../queries.mjs';
+import { defaultTone, defaultLength } from '../sections/emailSettings.mjs';
 import { customEvent, when, setState, trigger, schedule, create, change, apiCall, API } from './actions.mjs';
 
 const author = () => state(PAGE, 'cur_author');
 const mode = () => state(PAGE, 'cur_mode');
 const isBulk = () => chain(mode(), op('equals', { args: 'bulk' }));
+/** Writing options for this request: what the admin picked, else the Email settings defaults. */
+const delivery = () => chain(state(PAGE, 'cur_delivery'), op('defaulting_to', { args: 'send' }));
+const tone = () => chain(state(PAGE, 'cur_tone'), op('defaulting_to', { args: defaultTone() }));
+const length = () => chain(state(PAGE, 'cur_len'), op('defaulting_to', { args: defaultLength() }));
+const note = () => chain(state(PAGE, 'cur_note'), op('defaulting_to', { args: chain(settings(), f.text('email_note')) }));
 /** Numbers have no JSON-safe operator in Bubble: empty -> null, otherwise the plain number. */
 const numJson = (expr) => chain(expr, op('is_empty'), yesNo('null', [expr]));
 const flag = (field) => text(chain(settings(), f.bool(field), op('is_true'), yesNo('true', 'false')));
@@ -45,6 +51,13 @@ function sendCall(logStep) {
     body_params_ai_down: flag('drill_ai_down'),
     body_params_email_down: flag('drill_email_down'),
     body_params_data_down: flag('drill_data_down'),
+    body_params_primary_down: flag('drill_primary_down'),
+    body_params_delivery: text(delivery()),
+    body_params_tone: text(tone()),
+    body_params_length: text(length()),
+    // Free text goes in JSON-safe (quoted and escaped); the body template has no quotes around these.
+    body_params_note: text(chain(note(), jsonSafe())),
+    body_params_sign_off: text(chain(settings(), f.text('sign_off'), jsonSafe())),
     body_params_author_code: text(a(f.text('code'))),
     body_params_author_name: text(a(f.text('name'))),
     body_params_author_email: text(a(f.text('email'))),
@@ -68,6 +81,10 @@ export function sendOne() {
       mode_text: text(mode()),
       batch_id_text: text(chain(isBulk(), yesNo(state(PAGE, 'cur_batch'), ''))),
       status_option_sendstatus: status('Queued'),
+      stage_text: text('queued'),
+      delivery_text: text(delivery()),
+      tone_text: text(tone()),
+      length_text: text(length()),
       requested_at_date: now(),
     }, 'send_one_log'),
     sendCall('send_one_log'),
@@ -84,6 +101,7 @@ export function sendOne() {
     when(change(log(), {
       status_option_sendstatus: status('Failed'),
       error_text: text('n8n refused the request (HTTP ', res(op('_api_c2_error'), op('_api_c2_status_code')), '): ', res(op('_api_c2_error'), op('_api_c2_body'))),
+      stage_text: text('failed'),
       completed_at_date: now(),
     }, 'send_one_err'), failed()),
   ]);
