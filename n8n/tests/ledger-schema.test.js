@@ -69,9 +69,9 @@ describe('enqueue_royalty_job (one transaction-scoped advisory lock)', () => {
     at('r.created_at > now() - make_interval(mins => window_minutes)');
     expect(block(enqueueFn, 'SELECT r.job_id, r.status', 'LIMIT 1;')).not.toMatch(/status (NOT )?IN/);
   });
-  it('caps at exactly max_sends_per_hour per rolling hour, failed and discarded jobs not counted', () => {
+  it('caps at exactly max_sends_per_hour per rolling hour; discarded jobs and failures before the AI not counted', () => {
     at("max_sends integer := bookleaf_setting('max_sends_per_hour')::integer;");
-    at("WHERE r.created_at > now() - interval '1 hour' AND r.status NOT IN ('FAILED', 'DISCARDED');");
+    at("WHERE r.created_at > now() - interval '1 hour' AND r.status <> 'DISCARDED' AND NOT (r.status = 'FAILED' AND r.ai_attempts = 0);");
     at('IF sends >= max_sends THEN');
   });
   it('answers a duplicate before it checks the cap, so a double click at the limit still gets its job', () => {

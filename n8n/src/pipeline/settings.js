@@ -69,7 +69,7 @@ export const SETTINGS_SCHEMA = deepFreeze({
   },
   max_sends_per_hour: {
     default: 60, check: SETTING_CHECKS.max_sends_per_hour,
-    description: 'Jobs accepted per rolling hour (failed and discarded jobs do not count); beyond it the webhook answers 429.',
+    description: 'Jobs accepted per rolling hour (discarded jobs and jobs that failed before any AI answer do not count); beyond it the webhook answers 429.',
   },
   duplicate_window_minutes: {
     default: 10, check: SETTING_CHECKS.duplicate_window_minutes,

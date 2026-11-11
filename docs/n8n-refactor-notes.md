@@ -799,3 +799,17 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
 - **Gates:** npm test 564/564, build --check clean, test:db 47/47, contracts 41/41.
 - **First run on GitHub:** green in 1 m 11 s (unit 43 files, ledger SQL 7 files on Postgres 16.15). It warned that
   `actions/checkout@v4` and `actions/setup-node@v4` run on the deprecated Node 20, so both moved to `@v5`.
+
+## Fix 9 — a failed job that reached the AI counts toward the hourly cap (LOW)
+
+- **Changed:** `enqueue_royalty_job` counts every job of the last hour except discarded ones and failures with
+  `ai_attempts = 0` (bad data, a database or setting failure before any AI answer). A job that failed after the AI
+  answered (fact check failed, email failed, a rewrite that failed) spent money and may have sent mail, so retrying it
+  can no longer get round `max_sends_per_hour`. Discarded drafts still do not count: discarding is the admin's own
+  choice, and the slot is theirs to reuse. Both `03-settings-enqueue.sql` (not yet in production) and the fresh
+  install changed; the setting description, the seed and `n8n/PAYLOAD.md` say the same.
+- **Tests (written first, RED):** a failed job with `ai_attempts = 2` takes a slot; a failure with 0 and a discarded
+  draft with 1 do not; the schema pin.
+- **Local:** migration 03 re-applied to the local `bookleaf` database (re-runnable; the stored setting rows are kept,
+  so the local description row still has the old text). 104 jobs counted in the last hour against the local 300.
+- **Gates:** npm test 564/564, build --check clean, test:db 48/48, contracts 41/41.

@@ -87,7 +87,7 @@ Bubble date (ISO instant, read in India time), or empty.
 | 400 | Validation | `{ "error": { "code": "VALIDATION", "message": "…", "retryable": false, "fields": [{ "path": "books[0].copies_sold", "code": "TYPE", "message": "must be an integer" }] } }` |
 | 403 | Missing / wrong `X-BookLeaf-Key` (n8n answers; the workflow never starts) | plain text `Authorization data is wrong!` |
 | 422 | `NO_RECIPIENT` | error object as above |
-| 429 | `max_sends_per_hour` jobs (failed and discarded ones not counted) in the last hour | `{ "error": { "code": "RATE_LIMITED", … } }` |
+| 429 | `max_sends_per_hour` jobs in the last hour (discarded ones, and failed ones that got no AI answer, not counted) | `{ "error": { "code": "RATE_LIMITED", … } }` |
 | 500 | The server settings are missing or invalid (each one named, no value shown) | `{ "error": { "code": "INTERNAL", "message": "… Server settings are invalid: email_from must be an email address." } }` |
 | 500 | n8n itself failed before answering | `{ "message": "Error in workflow" }` |
 

@@ -85,7 +85,7 @@ INSERT INTO bookleaf_settings (key, value, description) VALUES
   ('ai_fallback', '{"model":"gpt-4.1-mini","max_tokens":4000}', 'Fallback AI writer (OpenAI Responses API), used when the primary fails: model and output token limit.'),
   ('ai_timeout_ms', '45000', 'Time limit for one AI request, in milliseconds. All AI calls of a run at worst (draft and rewrite, two providers, two tries each) plus 60 s must end within stuck_job_minutes and the 600 s run timeout; 62500 is the most that fits.'),
   ('model_prices', '{"claude-sonnet-5-5":{"inputPerMTok":2,"outputPerMTok":10,"cacheWriteMultiplier":1.25,"cacheReadMultiplier":0.1},"gpt-4.1-mini":{"inputPerMTok":0.4,"outputPerMTok":1.6,"cacheWriteMultiplier":1,"cacheReadMultiplier":0.25}}', 'USD per million tokens by model, for cost_usd; cache multipliers apply to the input price, and a model with no entry records no cost. claude-sonnet-5-5: Anthropic list price (claude-api model table, 2026-10-06); gpt-4.1-mini: OpenAI standard tier (developers.openai.com/api/docs/pricing, checked 2026-11-11).'),
-  ('max_sends_per_hour', '60', 'Jobs accepted per rolling hour (failed and discarded jobs do not count); beyond it the webhook answers 429.'),
+  ('max_sends_per_hour', '60', 'Jobs accepted per rolling hour (discarded jobs and jobs that failed before any AI answer do not count); beyond it the webhook answers 429.'),
   ('duplicate_window_minutes', '10', 'A request identical to one accepted within this many minutes gets that job back (duplicate) instead of a new one.'),
   ('draft_ttl_hours', '24', 'Hours a draft can still be approved and sent; after that, approval answers DRAFT_EXPIRED.'),
   ('stuck_job_minutes', '10', 'A job still running after this many minutes is stopped by the sweeper and marked failed. Must leave room for the AI worst case (see ai_timeout_ms).'),
@@ -147,7 +147,7 @@ BEGIN
 
   SELECT count(*)::integer INTO sends
   FROM royalty_jobs r
-  WHERE r.created_at > now() - interval '1 hour' AND r.status NOT IN ('FAILED', 'DISCARDED');
+  WHERE r.created_at > now() - interval '1 hour' AND r.status <> 'DISCARDED' AND NOT (r.status = 'FAILED' AND r.ai_attempts = 0);
   IF sends >= max_sends THEN
     RETURN QUERY SELECT 'rate_limited'::text, NULL::text, NULL::text, NULL::text, sends;
     RETURN;

@@ -11,6 +11,8 @@ const LOCK = "hashtextextended('bookleaf.enqueue_royalty_job', 0)";
 const data = (c) => ({ book: String(c), paid: 100 });
 const FINGERPRINT_OF = data('a');
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+/** The jobs the cap counts: all but discarded ones and failures that never reached the AI. */
+const COUNTED = "status <> 'DISCARDED' AND NOT (status = 'FAILED' AND ai_attempts = 0)";
 let db;
 let seq = 0;
 
@@ -72,17 +74,23 @@ describe('enqueue_royalty_job', () => {
     expect(enqueue(request({ fingerprint_of: data('b') })).outcome).toBe('queued');
     expect(enqueue(request({ author_id: 'author-2' })).outcome).toBe('queued');
   });
-  it('caps at exactly max_sends_per_hour; failed, discarded and older jobs do not count; duplicates still answered', () => {
+  it('caps at exactly max_sends_per_hour; discarded, older and failed-before-the-AI jobs do not count; duplicates still answered', () => {
     setting('max_sends_per_hour', 3);
     const [failed, discarded, old] = ['c', 'd', 'e'].map((c) => enqueue(request({ fingerprint_of: data(c) })));
-    update(failed.job_id, "status = 'FAILED'");
-    update(discarded.job_id, "status = 'DISCARDED'");
+    update(failed.job_id, "status = 'FAILED', ai_attempts = 0");
+    update(discarded.job_id, "status = 'DISCARDED', ai_attempts = 1");
     update(old.job_id, "status = 'SENT', created_at = now() - interval '61 minutes'");
     const answers = [1, 2, 3, 4].map((i) => enqueue(request({ fingerprint_of: data(i) })));
     expect(answers.map((a) => [a.outcome, a.recent_sends])).toEqual([['queued', 1], ['queued', 2], ['queued', 3], ['rate_limited', 3]]);
     expect(answers[3]).toMatchObject({ job_id: null, status: null, error_code: null });
     expect(enqueue(request({ fingerprint_of: data(1) }))).toMatchObject({ outcome: 'duplicate', job_id: answers[0].job_id });
-    expect(count("created_at > now() - interval '1 hour' AND status NOT IN ('FAILED', 'DISCARDED')")).toBe(3);
+    expect(count(`created_at > now() - interval '1 hour' AND ${COUNTED}`)).toBe(3);
+  });
+  it('counts a failed job that called the AI: it spent money, and retrying it must not get round the cap', () => {
+    setting('max_sends_per_hour', 2);
+    const spent = enqueue(request({ fingerprint_of: data('f') }));
+    update(spent.job_id, "status = 'FAILED', error_code = 'AI_FACT_CHECK_FAILED', ai_attempts = 2");
+    expect([1, 2].map((i) => enqueue(request({ fingerprint_of: data(i) })).outcome)).toEqual(['queued', 'rate_limited']);
   });
   it('takes Enqueue Job\'s query with the parameter Validate Body builds, and answers what the Outcome switch reads', () => {
     const job = prepareJob(payloadFor('AUTH002'), SETTINGS, NOW).job;
