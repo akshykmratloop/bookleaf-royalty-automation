@@ -28,6 +28,11 @@
 **
 ```
 
+**Things another session should know (2026-11-11, Phase 3):** S217's own sub-agent works in the git
+worktree `/Users/aksykmr_mac/Loop Methods/experiments/bookleaf/bubble-n8n` on branch
+`refactor/n8n-clean` (n8n clean-up: settings table, Header Auth webhooks, Deliver Email sub-workflow).
+It deploys only to the LOCAL n8n until merged. The main checkout is doing the book-themed Bubble UI.
+
 ---
 
 # Path Ownership Map
