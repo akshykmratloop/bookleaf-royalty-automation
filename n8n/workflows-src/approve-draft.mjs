@@ -1,5 +1,6 @@
 import { APPROVE_ACTIONS } from '../src/pipeline/approve.js';
 import { CLAIM_DRAFT, DISCARD_DRAFT, SELECT_DRAFT } from '../src/pipeline/sql-approve.js';
+import { errorBody, failure } from '../src/pipeline/errors.js';
 import { LOAD_SETTINGS } from '../src/pipeline/sql.js';
 import { DELIVER_EMAIL } from './deliver-email.mjs';
 import { code, executeWorkflow, ifTrue, IS_TRUE, NOT_EMPTY, pg, respond, switchRules, webhook, withNote } from './lib/nodes.mjs';
@@ -12,6 +13,7 @@ import { code, executeWorkflow, ifTrue, IS_TRUE, NOT_EMPTY, pg, respond, switchR
 const WEBHOOK = "$('Approve Webhook').first().json";
 const PARSED = "$('Parse Request').first().json";
 const DECIDED = "$('Decide').first().json";
+const UNEXPECTED_ACTION = errorBody(failure('INTERNAL', 'Decide gave an unexpected action.'));
 
 const ABOUT = [
   '## BookLeaf approve draft',
@@ -33,7 +35,8 @@ const nodes = [
   withNote(code('Decide', 'decide', `return main({ request: ${PARSED}.request, row: $json, settings: ${PARSED}.settings, executionId: $execution.id });`), 'Checks the edit; all answers'),
   switchRules('Action', '$json.action', [
     { output: 'Send', equals: APPROVE_ACTIONS.SEND }, { output: 'Discard', equals: APPROVE_ACTIONS.DISCARD }, { output: 'Answer', equals: APPROVE_ACTIONS.ANSWER },
-  ]),
+  ], 'Unexpected'),
+  respond('Respond 500', '500', JSON.stringify(UNEXPECTED_ACTION)),
   withNote(pg('Discard Draft', DISCARD_DRAFT, `${DECIDED}.params`, { alwaysOutputData: true }), 'Only while still DRAFTED'),
   respond('Respond Discard', '200', `$json.job_id ? ${DECIDED}.response : ${DECIDED}.fallback`),
   respond('Respond Answer', '200'),
@@ -50,6 +53,7 @@ const edges = [
   ['Request Valid?', 'Load Draft', 'true'], ['Request Valid?', 'Respond Rejected', 'false'],
   ['Load Draft', 'Decide'], ['Decide', 'Action'],
   ['Action', 'Claim Draft', 'Send'], ['Action', 'Discard Draft', 'Discard'], ['Action', 'Respond Answer', 'Answer'],
+  ['Action', 'Respond 500', 'Unexpected'],
   ['Discard Draft', 'Respond Discard'],
   ['Claim Draft', 'Claimed?'], ['Claimed?', 'Respond Sending', 'true'], ['Claimed?', 'Respond Already Sent', 'false'],
   ['Respond Sending', 'Deliver Email'],
@@ -61,14 +65,14 @@ const grid = {
   'Request Valid?': [5, 0], 'Respond Rejected': [6, 1],
   'Load Draft': [7, 0], Decide: [8, 0], Action: [9, 0],
   'Claim Draft': [10, 0], 'Claimed?': [11, 0], 'Respond Sending': [12, 0], 'Deliver Email': [13, 0], 'Respond Already Sent': [12, 1],
-  'Discard Draft': [10, 3], 'Respond Discard': [11, 3], 'Respond Answer': [10, 4],
+  'Discard Draft': [10, 3], 'Respond Discard': [11, 3], 'Respond Answer': [10, 4], 'Respond 500': [10, 5],
 };
 const sections = [
   { title: 'Intake', text: 'The settings (bad: 500), then the body (bad: 400).',
     nodes: ['Approve Webhook', 'Load Settings', 'Check Settings', 'Settings OK?', 'Parse Request', 'Request Valid?', 'Respond Rejected'] },
   { title: 'Load & decide', text: 'Re-checks the edit and works out every answer.', nodes: ['Load Draft', 'Decide', 'Action'] },
   { title: 'Send', text: 'One click wins the draft; the email goes out once.', nodes: ['Claim Draft', 'Claimed?', 'Respond Sending', 'Deliver Email', 'Respond Already Sent'] },
-  { title: 'Discard or check', text: 'Closes the draft, or answers a preview.', nodes: ['Discard Draft', 'Respond Discard', 'Respond Answer'] },
+  { title: 'Discard or check', text: 'Closes the draft, or answers a preview.', nodes: ['Discard Draft', 'Respond Discard', 'Respond Answer', 'Respond 500'] },
 ];
 
 export default { name: 'BookLeaf - Approve Draft', nodes, edges, grid, sections, about: ABOUT, errorWorkflow: 'BookLeaf - Error Handler' };

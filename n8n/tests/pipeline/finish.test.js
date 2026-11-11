@@ -88,6 +88,12 @@ describe('nodeErrorSummary for HTTP errors', () => {
   it('keeps non-JSON messages as they are', () => {
     expect(nodeErrorSummary({ error: { message: 'connect ECONNREFUSED 127.0.0.1:9' } }, 'smtp')).toBe('smtp: connect ECONNREFUSED 127.0.0.1:9');
   });
+  it('reads a full HTTP answer (the AI nodes never error on a status): the status and the API\'s own message', () => {
+    const anthropic = { statusCode: 404, headers: {}, body: { type: 'error', error: { type: 'not_found_error', message: 'model: x' } } };
+    expect(nodeErrorSummary(anthropic, 'anthropic')).toBe('anthropic: 404 model: x');
+    expect(nodeErrorSummary({ statusCode: 429, body: { error: { message: 'Rate limit sk-abcdefghijkl' } } }, 'openai')).toBe('openai: 429 Rate limit [redacted]');
+    expect(nodeErrorSummary({ statusCode: 502, body: {} }, 'openai')).toBe('openai: 502');
+  });
 });
 
 describe('sender, brand and plain-text table details', () => {

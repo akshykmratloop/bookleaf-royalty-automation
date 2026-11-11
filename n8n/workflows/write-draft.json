@@ -1,0 +1,535 @@
+{
+  "name": "BookLeaf - Write Draft",
+  "nodes": [
+    {
+      "id": "56567098-57cd-4cb7-a50c-44d3c23ed9d1",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## BookLeaf write draft\nCalled by **Royalty Summary** with `job`, `ctx`, `request` (both providers' bodies), `attempt` (1 draft, 2 rewrite) and `previous`.\n**Call Anthropic** writes; its answer Switch sends a 2xx to **Check Draft**, retries a 429, 5xx or timeout after a short wait (1 extra try, Retry-After honoured, at most 10 s), and hands anything else to **Call OpenAI (fallback)**, which works the same way and ends in **AI Failed**. Check Draft checks every figure: PASS, REWRITE (with both providers' rewrite bodies) or FAIL. No error workflow here: a crash fails the caller's node.",
+        "height": 160,
+        "width": 1200
+      },
+      "position": [
+        -60,
+        -316
+      ]
+    },
+    {
+      "id": "a99e6e12-e179-41d1-a6d7-2d776ac49c78",
+      "name": "AI writer",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## AI writer\nAnthropic writes; OpenAI if it fails. Only a 429, 5xx or timeout is tried again.",
+        "height": 894,
+        "width": 1260
+      },
+      "position": [
+        -60,
+        -94
+      ]
+    },
+    {
+      "id": "c721c0b3-a5ed-4f28-acc1-eeab40664fa2",
+      "name": "Fact check",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Fact check\nEvery figure against the data.",
+        "height": 316,
+        "width": 220
+      },
+      "position": [
+        1500,
+        -116
+      ]
+    },
+    {
+      "id": "b6da63d7-33b5-42b6-aa7f-a6a303dee900",
+      "name": "Record",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Record\nNeither provider answered.",
+        "height": 316,
+        "width": 220
+      },
+      "position": [
+        1500,
+        484
+      ]
+    },
+    {
+      "id": "a3fec7f9-3d75-48a7-a859-cb70f051202b",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "job",
+              "type": "object"
+            },
+            {
+              "name": "ctx",
+              "type": "object"
+            },
+            {
+              "name": "request",
+              "type": "object"
+            },
+            {
+              "name": "attempt",
+              "type": "number"
+            },
+            {
+              "name": "previous",
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ef81e35b-b4be-413f-a5b4-d8a6d7ba8f47",
+      "name": "Call Anthropic",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "anthropic-beta",
+              "value": "server-side-fallback-2026-07-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('When Called').first().json.request.anthropic) }}",
+        "options": {
+          "timeout": "={{ $('When Called').first().json.job.settings.ai_timeout_ms }}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "__CREDENTIAL_anthropic__",
+          "name": "BookLeaf Anthropic API (x-api-key)"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "id": "e601aaed-1168-4dc4-a2ad-a92cafa22dac",
+      "name": "Anthropic Answer",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b26e2c26-0862-44da-a172-f768046c5e07",
+                    "leftValue": "={{ $json.statusCode >= 200 && $json.statusCode < 300 }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Answer"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4394660e-ce48-4e75-a88e-1bb1e5829065",
+                    "leftValue": "={{ (!$json.statusCode || $json.statusCode === 429 || $json.statusCode >= 500) && $runIndex < 1 }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Retry"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Fallback"
+        }
+      },
+      "notes": "Retry 429/5xx; else OpenAI",
+      "notesInFlow": true,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "id": "bc13ae07-f390-4862-abe8-190b703ee46a",
+      "name": "Wait (Anthropic)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ Math.min(Number(($json.headers || {})['retry-after']) || 2 * Math.pow(2, $runIndex), 10) }}",
+        "unit": "seconds"
+      },
+      "webhookId": "9677ea82-c05d-4ff9-acda-f680245882e9",
+      "notes": "Growing wait; Retry-After",
+      "notesInFlow": true,
+      "position": [
+        520,
+        200
+      ]
+    },
+    {
+      "id": "b7ac440d-2b78-49de-ab70-f3f04236d4d5",
+      "name": "Call OpenAI (fallback)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('When Called').first().json.request.openai) }}",
+        "options": {
+          "timeout": "={{ $('When Called').first().json.job.settings.ai_timeout_ms }}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "__CREDENTIAL_openai__",
+          "name": "BookLeaf OpenAI API (bearer)"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "position": [
+        780,
+        400
+      ]
+    },
+    {
+      "id": "b251c7f1-62a4-4264-a2fd-b6d571cae6b6",
+      "name": "OpenAI Answer",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c8b570ce-3cb9-4f06-a3b3-c9902df1e835",
+                    "leftValue": "={{ $json.statusCode >= 200 && $json.statusCode < 300 }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Answer"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4d8c2858-0fe2-4470-a50e-3dad2c9fbb54",
+                    "leftValue": "={{ (!$json.statusCode || $json.statusCode === 429 || $json.statusCode >= 500) && $runIndex < 1 }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Retry"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Give up"
+        }
+      },
+      "notes": "Retry 429/5xx; else fail",
+      "notesInFlow": true,
+      "position": [
+        1040,
+        400
+      ]
+    },
+    {
+      "id": "d3e613cb-ffd8-4fa6-a41c-0d96fed534ac",
+      "name": "Wait (OpenAI)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ Math.min(Number(($json.headers || {})['retry-after']) || 2 * Math.pow(2, $runIndex), 10) }}",
+        "unit": "seconds"
+      },
+      "webhookId": "92ca40e4-68f0-402f-a360-85dd9fbef0d8",
+      "notes": "Growing wait; Retry-After",
+      "notesInFlow": true,
+      "position": [
+        1040,
+        600
+      ]
+    },
+    {
+      "id": "52d92bea-5ca2-4886-acd0-b069bf17f938",
+      "name": "Check Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// BookLeaf: generated by n8n/build.mjs. Logic: n8n/src (entry \"checkDraft\"). Edit the source and rebuild;\n// do not edit this node by hand.\nconst run = (main) => {\nreturn main({ response: $json.body, ctx: $('When Called').first().json.ctx, job: $('When Called').first().json.job, attempt: $('When Called').first().json.attempt, previous: $('When Called').first().json.attempt > 1 ? $('When Called').first().json.previous : null });\n};\n// ---- bundled from n8n/src ----\nconst __bookleaf = {};\n(() => {\n  // n8n/src/pipeline/style.js\n  var DELIVERIES = Object.freeze([\"send\", \"draft\"]);\n  var TONES = Object.freeze([\"warm\", \"formal\", \"concise\"]);\n  var LENGTHS = Object.freeze([\"short\", \"standard\", \"detailed\"]);\n  var WORD_RANGES = Object.freeze({ short: [80, 180], standard: [150, 300], detailed: [250, 450] });\n  var wordRange = (length) => WORD_RANGES[length] ?? WORD_RANGES.standard;\n\n  // n8n/src/prompt.js\n  function feedbackMessage(issues) {\n    const lines = issues.slice(0, 10).map((i) => `- ${i.message}${i.excerpt ? ` (you wrote: \"${i.excerpt}\")` : \"\"}`);\n    return [\n      \"Your draft failed BookLeaf's fact check, so it was not sent. Problems found:\",\n      ...lines,\n      \"\",\n      \"Write the complete JSON again. Fix every problem above. Copy each figure exactly from the display column of\",\n      \"VERIFIED FACTS, and leave out any figure that is not listed there. Keep everything else that was correct.\"\n    ].join(\"\\n\");\n  }\n\n  // n8n/src/providers/sections.js\n  var REQUIRED = [\"subject\", \"greeting\", \"intro\", \"totalsParagraph\", \"payoutParagraph\", \"closing\"];\n  var OPTIONAL = [\"productionParagraph\", \"allPaidParagraph\"];\n  function normalizeSections(v) {\n    const bad = (message) => ({ ok: false, error: { code: \"INVALID_SHAPE\", message } });\n    if (typeof v !== \"object\" || v === null || Array.isArray(v)) return bad(\"output is not an object\");\n    const missing = REQUIRED.filter((k) => typeof v[k] !== \"string\");\n    if (missing.length) return bad(`missing or non-string: ${missing.join(\", \")}`);\n    const paras = v.bookParagraphs;\n    const okParas = Array.isArray(paras) && paras.every((p) => p && typeof p.code === \"string\" && typeof p.text === \"string\");\n    if (!okParas) return bad(\"bookParagraphs must be a list of {code, text}\");\n    const sections = Object.fromEntries(REQUIRED.map((k) => [k, v[k]]));\n    sections.bookParagraphs = paras.map((p) => ({ code: p.code, text: p.text }));\n    for (const k of OPTIONAL) if (typeof v[k] === \"string\") sections[k] = v[k];\n    return { ok: true, sections: orderKeys(sections) };\n  }\n  var ORDER = [\"subject\", \"greeting\", \"intro\", \"bookParagraphs\", \"totalsParagraph\", \"payoutParagraph\", \"productionParagraph\", \"allPaidParagraph\", \"closing\"];\n  var orderKeys = (s) => Object.fromEntries(ORDER.filter((k) => k in s).map((k) => [k, s[k]]));\n  function parseSectionsText(text) {\n    let parsed;\n    try {\n      parsed = JSON.parse(text);\n    } catch (e) {\n      return { ok: false, error: { code: \"INVALID_JSON\", message: `AI output is not valid JSON: ${e.message}` } };\n    }\n    return normalizeSections(parsed);\n  }\n\n  // n8n/src/providers/anthropic.js\n  var URL = \"https://api.anthropic.com/v1/messages\";\n  var CREDENTIAL_PLACEHOLDER = \"__ANTHROPIC_API_KEY__\";\n  var ANTHROPIC_VERSION = \"2023-06-01\";\n  var DEFAULT_MODEL = \"claude-sonnet-5-5\";\n  var DEFAULT_MAX_TOKENS = 8e3;\n  var DEFAULT_EFFORT = \"medium\";\n  var FALLBACK_BETA = \"server-side-fallback-2026-07-01\";\n  var err = (code, message) => ({ ok: false, error: { code, message } });\n  function buildRequest({\n    system,\n    user,\n    messages,\n    schema,\n    model = DEFAULT_MODEL,\n    maxTokens = DEFAULT_MAX_TOKENS,\n    effort = DEFAULT_EFFORT,\n    serverFallback = true\n  }) {\n    const headers = { \"content-type\": \"application/json\", \"anthropic-version\": ANTHROPIC_VERSION, \"x-api-key\": CREDENTIAL_PLACEHOLDER };\n    const body = {\n      model,\n      max_tokens: maxTokens,\n      system: [{ type: \"text\", text: system, cache_control: { type: \"ephemeral\" } }],\n      messages: messages ? messages.map((m) => ({ role: m.role, content: m.content })) : [{ role: \"user\", content: user }],\n      output_config: { effort, format: { type: \"json_schema\", schema } }\n    };\n    if (!serverFallback) return { url: URL, headers, body };\n    return { url: URL, headers: { ...headers, \"anthropic-beta\": FALLBACK_BETA }, body: { ...body, fallbacks: \"default\" } };\n  }\n  var usageOf = (json) => ({\n    inputTokens: json.usage?.input_tokens ?? 0,\n    outputTokens: json.usage?.output_tokens ?? 0,\n    cacheWriteTokens: json.usage?.cache_creation_input_tokens ?? 0,\n    cacheReadTokens: json.usage?.cache_read_input_tokens ?? 0\n  });\n  function checkStop(json) {\n    if (json.stop_reason === \"refusal\") return err(\"REFUSED\", \"The model declined to answer\");\n    if (json.stop_reason === \"max_tokens\") return err(\"TRUNCATED\", \"The answer hit the token limit\");\n    return null;\n  }\n  function parseResponse(json) {\n    if (typeof json !== \"object\" || json === null) return err(\"INVALID_RESPONSE\", \"Response is not an object\");\n    if (json.type === \"error\") return err(\"API_ERROR\", `${json.error?.type ?? \"error\"}: ${json.error?.message ?? \"\"}`);\n    const stop = checkStop(json);\n    if (stop) return stop;\n    const block = Array.isArray(json.content) ? json.content.find((b) => b.type === \"text\") : void 0;\n    if (!block) return err(\"EMPTY\", \"Response has no text block\");\n    const parsed = parseSectionsText(block.text);\n    if (!parsed.ok) return parsed;\n    return { ok: true, sections: parsed.sections, usage: usageOf(json), model: json.model ?? DEFAULT_MODEL };\n  }\n\n  // n8n/src/providers/schema.js\n  var str = { type: \"string\" };\n  var OPTIONAL2 = [\"productionParagraph\", \"allPaidParagraph\"];\n  var sectionsSchema = Object.freeze({\n    type: \"object\",\n    properties: {\n      subject: str,\n      greeting: str,\n      intro: str,\n      bookParagraphs: {\n        type: \"array\",\n        items: {\n          type: \"object\",\n          properties: { code: str, text: str },\n          required: [\"code\", \"text\"],\n          additionalProperties: false\n        }\n      },\n      totalsParagraph: str,\n      payoutParagraph: str,\n      productionParagraph: str,\n      allPaidParagraph: str,\n      closing: str\n    },\n    required: [\"subject\", \"greeting\", \"intro\", \"bookParagraphs\", \"totalsParagraph\", \"payoutParagraph\", \"closing\"],\n    additionalProperties: false\n  });\n  var strictSectionsSchema = Object.freeze({\n    ...sectionsSchema,\n    properties: Object.fromEntries(\n      Object.entries(sectionsSchema.properties).map(([k, v]) => [k, OPTIONAL2.includes(k) ? { type: [\"string\", \"null\"] } : v])\n    ),\n    required: Object.keys(sectionsSchema.properties)\n  });\n\n  // n8n/src/providers/openai.js\n  var URL2 = \"https://api.openai.com/v1/responses\";\n  var CREDENTIAL_PLACEHOLDER2 = \"Bearer __OPENAI_API_KEY__\";\n  var DEFAULT_MODEL2 = \"gpt-4.1-mini\";\n  var DEFAULT_MAX_TOKENS2 = 4e3;\n  var SCHEMA_NAME = \"royalty_email_sections\";\n  var err2 = (code, message) => ({ ok: false, error: { code, message } });\n  function buildRequest2({ system, user, messages, model = DEFAULT_MODEL2, maxTokens = DEFAULT_MAX_TOKENS2 }) {\n    return {\n      url: URL2,\n      headers: { \"content-type\": \"application/json\", authorization: CREDENTIAL_PLACEHOLDER2 },\n      body: {\n        model,\n        instructions: system,\n        input: messages ? messages.map((m) => ({ role: m.role, content: m.content })) : user,\n        max_output_tokens: maxTokens,\n        text: { format: { type: \"json_schema\", name: SCHEMA_NAME, strict: true, schema: strictSectionsSchema } }\n      }\n    };\n  }\n  function usageOf2(json) {\n    const cached = json.usage?.input_tokens_details?.cached_tokens ?? 0;\n    return { inputTokens: (json.usage?.input_tokens ?? 0) - cached, outputTokens: json.usage?.output_tokens ?? 0, cacheWriteTokens: 0, cacheReadTokens: cached };\n  }\n  function outputText(json) {\n    const contents = (json.output ?? []).filter((o) => o.type === \"message\").flatMap((o) => o.content ?? []);\n    if (contents.some((c) => c.type === \"refusal\")) return err2(\"REFUSED\", \"The model declined to answer\");\n    const t = contents.find((c) => c.type === \"output_text\");\n    return t ? { ok: true, text: t.text } : err2(\"EMPTY\", \"Response has no output text\");\n  }\n  function parseResponse2(json) {\n    if (typeof json !== \"object\" || json === null) return err2(\"INVALID_RESPONSE\", \"Response is not an object\");\n    if (json.error) return err2(\"API_ERROR\", `${json.error.code ?? \"error\"}: ${json.error.message ?? \"\"}`);\n    if (json.status === \"incomplete\") return err2(\"TRUNCATED\", \"The answer was cut short\");\n    const text = outputText(json);\n    if (!text.ok) return text;\n    const parsed = parseSectionsText(text.text);\n    if (!parsed.ok) return parsed;\n    return { ok: true, sections: parsed.sections, usage: usageOf2(json), model: json.model ?? DEFAULT_MODEL2 };\n  }\n\n  // n8n/src/providers/cost.js\n  var totalInputTokens = (u) => u.inputTokens + (u.cacheWriteTokens ?? 0) + (u.cacheReadTokens ?? 0);\n  function costUsd(usage, model, prices) {\n    const key = Object.keys(prices).find((k) => model === k || String(model).startsWith(`${k}-`));\n    if (!key) return null;\n    const p = prices[key];\n    const input = usage.inputTokens + (usage.cacheWriteTokens ?? 0) * p.cacheWriteMultiplier + (usage.cacheReadTokens ?? 0) * p.cacheReadMultiplier;\n    const usd = (input * p.inputPerMTok + usage.outputTokens * p.outputPerMTok) / 1e6;\n    return Math.round(usd * 1e6) / 1e6;\n  }\n\n  // n8n/src/pipeline/errors.js\n  var ERROR_CODES = Object.freeze({\n    VALIDATION: { http: 400, retryable: false, message: \"The request is missing fields or has invalid values.\" },\n    INTEGRITY: { http: 422, retryable: false, message: \"The royalty figures do not add up, so no email was written.\" },\n    NO_RECIPIENT: { http: 422, retryable: false, message: \"No demo inbox is configured, so the email has nowhere safe to go.\" },\n    RATE_LIMITED: { http: 429, retryable: true, message: \"Too many emails were sent in the last hour.\" },\n    DATA_UNAVAILABLE: { http: 502, retryable: true, message: \"The author data could not be loaded.\" },\n    AI_UNAVAILABLE: { http: 502, retryable: true, message: \"Neither AI provider returned a usable draft.\" },\n    AI_FACT_CHECK_FAILED: { http: 422, retryable: true, message: \"The AI draft quoted figures that do not match the data, twice.\" },\n    EMAIL_FAILED: { http: 502, retryable: true, message: \"The email server did not accept the email.\" },\n    EMAIL_UNCERTAIN: {\n      http: 502,\n      retryable: false,\n      message: \"The workflow stopped while the email was being sent, so it may or may not have arrived. Check the inbox before sending it again.\"\n    },\n    TIMEOUT: { http: 504, retryable: true, message: \"The job did not finish in time (the stuck_job_minutes setting), so the sweeper stopped it.\" },\n    INTERNAL: { http: 500, retryable: true, message: \"An unexpected error stopped the workflow.\" }\n  });\n  var MAX_ERROR_LENGTH = 1e3;\n  function failure(code, detail, fields) {\n    const def = ERROR_CODES[code];\n    if (!def) throw new TypeError(`Unknown error code ${code}`);\n    const message = (detail ? `${def.message} ${detail}` : def.message).slice(0, MAX_ERROR_LENGTH);\n    const out = { ok: false, code, message, http_status: def.http, retryable: def.retryable };\n    return fields ? { ...out, fields } : out;\n  }\n\n  // n8n/src/pipeline/context.js\n  var DRILL_MODEL = \"bookleaf-drill-model-does-not-exist\";\n  function providerRequests(prompt, job) {\n    const { ai_down: allDown, primary_down: primaryDown } = job.drills;\n    const { ai_primary: primary, ai_fallback: fallback } = job.settings;\n    const primaryModel = allDown || primaryDown ? DRILL_MODEL : primary.model;\n    return {\n      anthropic: buildRequest({ ...prompt, schema: sectionsSchema, model: primaryModel, effort: primary.effort, maxTokens: primary.max_tokens }).body,\n      openai: buildRequest2({ ...prompt, model: allDown ? DRILL_MODEL : fallback.model, maxTokens: fallback.max_tokens }).body\n    };\n  }\n\n  // n8n/src/checker/patterns.js\n  var MONTHS = [\"jan\", \"feb\", \"mar\", \"apr\", \"may\", \"jun\", \"jul\", \"aug\", \"sep\", \"oct\", \"nov\", \"dec\"];\n  var MONTH = \"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\";\n  var NUM = \"(\\\\d+(?:,\\\\d+)*(?:\\\\.\\\\d+)?)\";\n  var MULT = \"(lakhs?|lacs?|crores?|cr|k|thousand|million|mn)\";\n  var BARE_MULT = \"(lakhs?|lacs?|crores?|cr|k)\";\n  var pad = (n) => String(n).padStart(2, \"0\");\n  var monthIndex = (name) => MONTHS.indexOf(name.slice(0, 3).toLowerCase()) + 1;\n  var SCALE = { k: 1e3, thousand: 1e3, million: 1e6, mn: 1e6, cr: 1e7 };\n  function scaleOf(word) {\n    const w = (word ?? \"\").toLowerCase();\n    if (!w) return 1;\n    if (w.startsWith(\"lakh\") || w.startsWith(\"lac\")) return 1e5;\n    if (w.startsWith(\"crore\")) return 1e7;\n    return SCALE[w] ?? 1;\n  }\n  var GROUPED = /^\\d{1,3}(?:,\\d{2,3})+(?:\\.\\d{1,2})?$/;\n  var PLAIN = /^\\d+(?:\\.\\d{1,2})?$/;\n  function parseAmount(raw) {\n    return GROUPED.test(raw) || PLAIN.test(raw) ? Number(raw.replace(/,/g, \"\")) : NaN;\n  }\n  var toPaise = (raw, scale) => Math.round(parseAmount(raw) * scaleOf(scale) * 100);\n  var blankOut = (text, re) => text.replace(re, (m) => \" \".repeat(m.length));\n\n  // n8n/src/checker/titles.js\n  var escapeRegex = (s) => s.replace(/[.*+?^${}()|[\\]\\\\]/g, \"\\\\$&\");\n  var FIGURE_WORDS = new RegExp(\n    `\\\\b(?:${MONTH}|rs|inr|rupees?|usd|eur|gbp|lakhs?|crores?|k|of|days?|hours?|weeks?|months?|quarters?|years?|business|working)\\\\b`,\n    \"gi\"\n  );\n  function isFigureLike(title) {\n    return title.replace(FIGURE_WORDS, \"\").replace(/[\\d\\s\\p{Sc}.,:/%–-]/gu, \"\") === \"\";\n  }\n  function stripTitle(text, title) {\n    if (!title || isFigureLike(title)) return text;\n    const re = new RegExp(`(?<![\\\\p{L}\\\\p{N}])${escapeRegex(title)}(?![\\\\p{L}\\\\p{N}])`, \"giu\");\n    return text.replace(re, \" \");\n  }\n\n  // n8n/src/checker/extract.js\n  var MONEY_PREFIX = new RegExp(\n    `(?:₹|\\\\brs\\\\.?|\\\\binr)\\\\s*${NUM}(?:\\\\s*${MULT}\\\\b)?(?:\\\\s*(?:rupees|inr)\\\\b)?`,\n    \"gi\"\n  );\n  var MONEY_SUFFIX = new RegExp(`\\\\b${NUM}\\\\s*(?:${MULT}\\\\s*)?(?:rupees|inr)\\\\b`, \"gi\");\n  var MONEY_SCALED = new RegExp(`\\\\b${NUM}\\\\s*${BARE_MULT}\\\\b`, \"gi\");\n  var DATE_DMY = new RegExp(\n    `\\\\b(\\\\d{1,2})(?:st|nd|rd|th)?\\\\s+(?:of\\\\s+)?${MONTH},?\\\\s+(\\\\d{4})\\\\b`,\n    \"gi\"\n  );\n  var DATE_MDY = new RegExp(`\\\\b${MONTH}\\\\s+(\\\\d{1,2})(?:st|nd|rd|th)?,?\\\\s+(\\\\d{4})\\\\b`, \"gi\");\n  var DATE_ISO = /\\b(\\d{4})-(\\d{2})-(\\d{2})\\b/g;\n  var DATE_SLASH = /\\b(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})\\b/g;\n  var DURATION = /\\b(\\d{1,3})(?:\\s*(?:–|-|to)\\s*(\\d{1,3}))?\\s*(business days|working days|days|hours|hrs|h)\\b/gi;\n  var PERCENT = /\\b(\\d{1,3})\\s*(?:%|percent\\b)/gi;\n  var COPIES = /\\b(\\d{1,3}(?:,\\d{3})+|\\d+)\\s+copies\\b/gi;\n  var PLACEHOLDER = /\\[CONFIRM:[^\\]]*\\]/gi;\n  var EXCLUSIONS = [/\\b97[89][-\\d\\sX]{10,20}\\b/gi, /\\b[A-Z]{2,5}\\d*-\\d+\\b/g];\n  function stripExclusions(text, extra = []) {\n    let out = text;\n    for (const re of EXCLUSIONS) out = out.replace(re, \" \");\n    for (const phrase of extra) out = stripTitle(out, phrase.trim());\n    return out;\n  }\n  var toNumber = (s) => Number(s.replace(/,/g, \"\"));\n  var iso = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;\n  function findMoney(text) {\n    const out = [];\n    let rest = text;\n    for (const re of [MONEY_PREFIX, MONEY_SUFFIX, MONEY_SCALED]) {\n      for (const m of rest.matchAll(re)) out.push({ raw: m[0], value: toPaise(m[1], m[2]) });\n      rest = blankOut(rest, re);\n    }\n    return out;\n  }\n  function findDates(text) {\n    const out = [];\n    for (const m of text.matchAll(DATE_DMY))\n      out.push({ raw: m[0], value: iso(+m[3], monthIndex(m[2]), +m[1]) });\n    for (const m of text.matchAll(DATE_MDY))\n      out.push({ raw: m[0], value: iso(+m[3], monthIndex(m[1]), +m[2]) });\n    for (const m of text.matchAll(DATE_ISO)) out.push({ raw: m[0], value: iso(+m[1], +m[2], +m[3]) });\n    for (const m of text.matchAll(DATE_SLASH)) out.push({ raw: m[0], value: slashDate(m) });\n    return out;\n  }\n  function slashDate(m) {\n    const [day, month, year] = [+m[1], +m[2], +m[3]];\n    if (day <= 12 && month <= 12 && day !== month) return `ambiguous:${m[0]}`;\n    return iso(year, month, day);\n  }\n  function findDurations(text) {\n    return [...text.matchAll(DURATION)].map((m) => {\n      const unit = (m[3] ?? \"\").toLowerCase();\n      const normUnit = unit.startsWith(\"h\") ? \"hours\" : unit.includes(\"business\") || unit.includes(\"working\") ? \"business days\" : \"days\";\n      const range = m[2] ? `${m[1]}-${m[2]}` : m[1];\n      return { raw: m[0], value: `${range} ${normUnit}` };\n    });\n  }\n  function findPercents(text) {\n    return [...text.matchAll(PERCENT)].map((m) => ({ raw: m[0], value: Number(m[1]) }));\n  }\n  function findCopyCounts(text) {\n    return [...text.matchAll(COPIES)].map((m) => ({ raw: m[0], value: toNumber(m[1]) }));\n  }\n  function findPlaceholders(text) {\n    return [...text.matchAll(PLACEHOLDER)].map((m) => m[0]);\n  }\n\n  // n8n/src/checker/loose.js\n  var CURRENCY = \"(\\\\$|€|£|\\\\b(?:usd|eur|gbp|aud|cad|sgd|aed)\\\\b)\";\n  var CURRENCY_WORD = \"(dollars?|euros?|pounds?|usd|eur|gbp|aud|cad|sgd|aed)\";\n  var FOREIGN_PREFIX = new RegExp(`${CURRENCY}\\\\s*${NUM}(?:\\\\s*${MULT}\\\\b)?`, \"gi\");\n  var FOREIGN_SUFFIX = new RegExp(`\\\\b${NUM}\\\\s*(?:${MULT}\\\\s*)?${CURRENCY_WORD}\\\\b`, \"gi\");\n  var SHORT_DMY = new RegExp(`\\\\b(\\\\d{1,2})(?:st|nd|rd|th)?\\\\s+(?:of\\\\s+)?${MONTH}\\\\b`, \"gi\");\n  var SHORT_MDY = new RegExp(`\\\\b${MONTH}\\\\s+(\\\\d{1,2})(?:st|nd|rd|th)?\\\\b`, \"gi\");\n  var LONG_DURATION = /\\b(\\d{1,3})(?:\\s*(?:–|-|to)\\s*(\\d{1,3}))?[\\s-]*(weeks?|months?|quarters?)\\b/gi;\n  var NUMBER = /\\b\\d+(?:,\\d+)*(?:\\.\\d+)?\\b/g;\n  var MONEY_WORD_BEFORE = /\\b(?:royalt(?:y|ies)|payouts?|amount|pending|paid|earned|balance)(?:[ \\t]+[a-z']+){0,3}[ \\t]+$/i;\n  var COUNTED_NOUN = /^[ \\t]+(?!(?:is|was|are|were|has|have|had|will|would|and|or|but|only|so|to|now|today|in|on|at|for|by|this|which|that|from|as|into|per|each|with)\\b)[a-z]/i;\n  var YEAR_AFTER = /\\b(?:in|for|since|during|from|until|till|by|year)[ \\t]+$/i;\n  var CODE = { $: \"USD\", \"€\": \"EUR\", \"£\": \"GBP\" };\n  var currencyCode = (s) => {\n    const w = s.toLowerCase().replace(/s$/, \"\");\n    if (CODE[s]) return CODE[s];\n    return { dollar: \"USD\", euro: \"EUR\", pound: \"GBP\" }[w] ?? w.toUpperCase();\n  };\n  var DAYS_PER = { week: 7, month: 30, quarter: 90 };\n  function findForeignMoney(text) {\n    const prefix = [...text.matchAll(FOREIGN_PREFIX)].map((m) => ({\n      raw: m[0],\n      value: `${currencyCode(m[1])}:${toPaise(m[2], m[3])}`\n    }));\n    const suffix = [...blankOut(text, FOREIGN_PREFIX).matchAll(FOREIGN_SUFFIX)].map((m) => ({\n      raw: m[0],\n      value: `${currencyCode(m[3])}:${toPaise(m[1], m[2])}`\n    }));\n    return [...prefix, ...suffix];\n  }\n  var monthDay = (month, day) => +day >= 1 && +day <= 31 ? `--${pad(monthIndex(month))}-${pad(+day)}` : `invalid:${day}`;\n  function findShortDates(text) {\n    const dmy = [...text.matchAll(SHORT_DMY)].map((m) => ({\n      raw: m[0],\n      value: monthDay(m[2], m[1])\n    }));\n    const mdy = [...blankOut(text, SHORT_DMY).matchAll(SHORT_MDY)].map((m) => ({\n      raw: m[0],\n      value: monthDay(m[1], m[2])\n    }));\n    return [...dmy, ...mdy];\n  }\n  function findLongDurations(text) {\n    return [...text.matchAll(LONG_DURATION)].map((m) => {\n      const per = DAYS_PER[(m[3] ?? \"\").toLowerCase().replace(/s$/, \"\")] ?? 1;\n      const range = m[2] ? `${+m[1] * per}-${+m[2] * per}` : `${+m[1] * per}`;\n      return { raw: m[0], value: `${range} days` };\n    });\n  }\n  function readsAsMoney(text, at, raw) {\n    const before = text.slice(Math.max(0, at - 60), at);\n    const after = text.slice(at + raw.length);\n    if (raw.includes(\",\")) return parseAmount(raw) >= 1e3 || raw.replace(/\\D/g, \"\").length >= 4;\n    if (!MONEY_WORD_BEFORE.test(before) || COUNTED_NOUN.test(after)) return false;\n    return !(/^(?:19|20)\\d{2}$/.test(raw) && YEAR_AFTER.test(before));\n  }\n  function findBareFigures(text) {\n    return [...text.matchAll(NUMBER)].filter((m) => readsAsMoney(text, m.index ?? 0, m[0])).map((m) => ({ raw: m[0], value: toPaise(m[0]) }));\n  }\n  var blankRaw = (text, found) => found.reduce((t, f) => t.split(f.raw).join(\" \".repeat(f.raw.length)), text);\n  function findLoose(text) {\n    let rest = blankRaw(text, [\n      ...findMoney(text),\n      ...findDates(text),\n      ...findDurations(text),\n      ...findPercents(text),\n      ...findCopyCounts(text)\n    ]);\n    const foreign = findForeignMoney(rest);\n    rest = blankRaw(rest, foreign);\n    const shortDates = findShortDates(rest);\n    rest = blankRaw(rest, shortDates);\n    const longDurations = findLongDurations(rest);\n    rest = blankRaw(rest, longDurations);\n    return { foreign, shortDates, longDurations, bare: findBareFigures(rest) };\n  }\n\n  // n8n/src/checker/allowed.js\n  function allowedValues(facts) {\n    const a = {\n      money: /* @__PURE__ */ new Set(),\n      dates: /* @__PURE__ */ new Set(),\n      durations: /* @__PURE__ */ new Set(),\n      percents: /* @__PURE__ */ new Set(),\n      counts: /* @__PURE__ */ new Set(),\n      foreign: /* @__PURE__ */ new Set(),\n      monthDays: /* @__PURE__ */ new Set(),\n      figures: /* @__PURE__ */ new Set()\n    };\n    for (const f of facts) {\n      if (f.type === \"UNKNOWN\") continue;\n      addTypedValue(a, f);\n      addDisplayFigures(a, f.display);\n    }\n    a.dates.forEach((d) => a.monthDays.add(`--${d.slice(5)}`));\n    a.money.forEach((m) => a.figures.add(m));\n    a.counts.forEach((c) => a.figures.add(c * 100));\n    return a;\n  }\n  function addTypedValue(a, f) {\n    const v = f.value;\n    if (typeof v === \"number\") {\n      if (f.type === \"MONEY\") a.money.add(v);\n      if (f.type === \"PERCENT\") a.percents.add(v);\n      if (f.type === \"COUNT\") a.counts.add(v);\n    }\n    if (typeof v === \"string\") {\n      if (f.type === \"DATE\") a.dates.add(v);\n      if (f.type === \"DURATION\") a.durations.add(v);\n    }\n  }\n  function addDisplayFigures(a, display) {\n    findMoney(display).forEach((m) => a.money.add(m.value));\n    findDates(display).forEach((d) => a.dates.add(d.value));\n    findDurations(display).forEach((d) => a.durations.add(d.value));\n    findCopyCounts(display).forEach((c) => a.counts.add(c.value));\n    findForeignMoney(display).forEach((m) => a.foreign.add(m.value));\n  }\n\n  // n8n/src/checker/number-words.js\n  var UNITS = {\n    zero: 0,\n    one: 1,\n    two: 2,\n    three: 3,\n    four: 4,\n    five: 5,\n    six: 6,\n    seven: 7,\n    eight: 8,\n    nine: 9,\n    ten: 10,\n    eleven: 11,\n    twelve: 12,\n    thirteen: 13,\n    fourteen: 14,\n    fifteen: 15,\n    sixteen: 16,\n    seventeen: 17,\n    eighteen: 18,\n    nineteen: 19,\n    twenty: 20,\n    thirty: 30,\n    forty: 40,\n    fifty: 50,\n    sixty: 60,\n    seventy: 70,\n    eighty: 80,\n    ninety: 90\n  };\n  var SCALES = {\n    thousand: 1e3,\n    hazaar: 1e3,\n    hazar: 1e3,\n    lakh: 1e5,\n    lakhs: 1e5,\n    lac: 1e5,\n    million: 1e6,\n    crore: 1e7,\n    crores: 1e7\n  };\n  var HUNDRED = 100;\n  var NUMBER_WORD = /\\b[a-z]+(?:-[a-z]+)?\\b/g;\n  var isUnit = (w) => w.split(\"-\").every((p) => p in UNITS);\n  var isNumberWord = (w) => isUnit(w) || w === \"hundred\" || w in SCALES;\n  function valueOf(words) {\n    let total = 0;\n    let current = 0;\n    for (const w of words) {\n      if (isUnit(w)) current += w.split(\"-\").reduce((sum, p) => sum + (UNITS[p] ?? 0), 0);\n      else if (w === \"hundred\") current = (current || 1) * HUNDRED;\n      else {\n        total += (current || 1) * (SCALES[w] ?? 1);\n        current = 0;\n      }\n    }\n    return total + current;\n  }\n  function runsIn(text) {\n    const runs = [];\n    let open = null;\n    for (const m of text.toLowerCase().matchAll(NUMBER_WORD)) {\n      const word = m[0];\n      const start = m.index ?? 0;\n      const after = start + word.length;\n      const joins = open !== null && /^\\s+$/.test(text.slice(open.joinFrom, start));\n      if (open && joins && word === \"and\") {\n        open.joinFrom = after;\n      } else if (isNumberWord(word)) {\n        if (!open || !joins) {\n          open = { start, end: after, joinFrom: after, words: [] };\n          runs.push(open);\n        }\n        open.words.push(word);\n        open.end = after;\n        open.joinFrom = after;\n      } else open = null;\n    }\n    return runs.filter((r) => r.words.some(isUnit));\n  }\n  function wordsToDigits(text) {\n    let out = \"\";\n    let at = 0;\n    for (const r of runsIn(text)) {\n      out += text.slice(at, r.start) + String(valueOf(r.words));\n      at = r.end;\n    }\n    return out + text.slice(at);\n  }\n\n  // n8n/src/checker/phrases.js\n  var PHRASE_RULES = [\n    {\n      code: \"INTERNAL_LEAK\",\n      pattern: /\\b(internal note|facts? pack|kb\\.[a-z_]+|book\\.BK\\d+\\.[a-z_.]+|author\\.[a-z_]+|evidence id|as an ai|language model)\\b/i,\n      message: \"Mentions internal tooling or evidence ids. Authors must not see these.\",\n      overridable: false\n    },\n    {\n      code: \"GUARANTEE\",\n      pattern: /\\b(guarantee[ds]?|we promise|i promise|definitely (?:be|arrive|reach|resolved)|100% sure|without fail)\\b/i,\n      message: \"Promises an outcome BookLeaf cannot guarantee.\",\n      overridable: true\n    },\n    {\n      code: \"BLAME\",\n      pattern: /\\b(your fault|you should have|you failed to|blame)\\b/i,\n      message: \"Blames the author. The KB asks for empathy and ownership.\",\n      overridable: true\n    },\n    {\n      code: \"LEGAL_OR_REFUND\",\n      pattern: /\\b(legal action|lawsuit|compensation|refund(?:ed)?)\\b/i,\n      message: \"Mentions legal matters, refunds or compensation. Needs a manager decision.\",\n      overridable: true\n    },\n    {\n      code: \"VAGUE_DEFLECTION\",\n      pattern: /\\b(we are looking into it|please be patient|it will be done soon|as soon as possible)\\b/i,\n      message: \"Vague reassurance without a concrete next step or timeline (KB: be specific).\",\n      overridable: true\n    }\n  ];\n\n  // n8n/src/checker/check.js\n  var MIN_LENGTH = 40;\n  var MAX_LENGTH = 4e3;\n  var TEMPLATE_PLACEHOLDER = /\\{\\{[^}]*\\}\\}/g;\n  function judge(found, allowed, code, what, seen) {\n    const isAllowed = (v) => !(typeof v === \"number\" && Number.isNaN(v)) && allowed.has(v);\n    const issues = [];\n    let verified = 0;\n    for (const f of found) {\n      if (isAllowed(f.value)) verified += 1;\n      else if (!seen.has(f.raw)) {\n        seen.add(f.raw);\n        issues.push({ code, severity: \"BLOCK\", message: `${what} \"${f.raw}\" does not match any verified fact.`, excerpt: f.raw });\n      }\n    }\n    return { issues, verified };\n  }\n  function figureResults(text, allowed) {\n    const loose = findLoose(text);\n    const seen = /* @__PURE__ */ new Set();\n    const rules = [\n      [findMoney(text), allowed.money, \"UNSUPPORTED_AMOUNT\", \"Amount\"],\n      [findDates(text), allowed.dates, \"UNSUPPORTED_DATE\", \"Date\"],\n      [findDurations(text), allowed.durations, \"UNSUPPORTED_TIMELINE\", \"Timeline\"],\n      [findPercents(text), allowed.percents, \"UNSUPPORTED_PERCENT\", \"Percentage\"],\n      [findCopyCounts(text), allowed.counts, \"UNSUPPORTED_COUNT\", \"Copy count\"],\n      [loose.foreign, allowed.foreign, \"UNSUPPORTED_AMOUNT\", \"Amount\"],\n      [loose.shortDates, allowed.monthDays, \"UNSUPPORTED_DATE\", \"Date\"],\n      [loose.longDurations, allowed.durations, \"UNSUPPORTED_TIMELINE\", \"Timeline\"],\n      [loose.bare, allowed.figures, \"UNSUPPORTED_AMOUNT\", \"Figure\"]\n    ];\n    const results = rules.map(([found, set, code, what]) => judge(found, set, code, what, seen));\n    return {\n      issues: results.flatMap((r) => r.issues),\n      verified: results.reduce((n, r) => n + r.verified, 0)\n    };\n  }\n  function phraseIssues(text) {\n    return PHRASE_RULES.flatMap((rule) => {\n      const m = text.match(rule.pattern);\n      return m ? [{ code: rule.code, severity: \"BLOCK\", message: rule.message, excerpt: m[0] }] : [];\n    });\n  }\n  function placeholderIssues(text) {\n    const found = [...findPlaceholders(text), ...text.match(TEMPLATE_PLACEHOLDER) ?? []];\n    return found.map((p) => ({ code: \"PLACEHOLDER\", severity: \"BLOCK\", message: \"Unfilled placeholder in text.\", excerpt: p }));\n  }\n  function shapeIssues(text) {\n    const len = text.trim().length;\n    if (len < MIN_LENGTH) return [{ code: \"TOO_SHORT\", severity: \"WARN\", message: \"Email is very short.\" }];\n    if (len > MAX_LENGTH) return [{ code: \"TOO_LONG\", severity: \"WARN\", message: \"Email is very long.\" }];\n    return [];\n  }\n  function checkEmail({ text, facts, titles = [] }) {\n    const withoutPlaceholders = text.replace(/\\[CONFIRM:[^\\]]*\\]/gi, \" \").replace(TEMPLATE_PLACEHOLDER, \" \");\n    const scanText = wordsToDigits(stripExclusions(withoutPlaceholders, [...titles]));\n    const figures = figureResults(scanText, allowedValues(facts));\n    const issues = [\n      ...placeholderIssues(text),\n      ...figures.issues,\n      ...phraseIssues(withoutPlaceholders),\n      ...shapeIssues(text)\n    ];\n    return { passed: !issues.some((i) => i.severity === \"BLOCK\"), issues, verifiedFigures: figures.verified };\n  }\n\n  // n8n/src/pipeline/draft-check.js\n  var PROSE_KEYS = [\"subject\", \"greeting\", \"intro\", \"totalsParagraph\", \"payoutParagraph\", \"productionParagraph\", \"allPaidParagraph\", \"closing\"];\n  function proseText(sections) {\n    const paras = (sections.bookParagraphs ?? []).map((p) => p.text);\n    return [...PROSE_KEYS.slice(0, 3).map((k) => sections[k]), ...paras, ...PROSE_KEYS.slice(3).map((k) => sections[k])].filter((t) => typeof t === \"string\" && t.trim()).join(\"\\n\\n\");\n  }\n  var warn = (code, message) => ({ code, severity: \"WARN\", message });\n  function structureIssues(sections, facts) {\n    const published = facts.books.filter((b) => b.badge !== \"NONE\").map((b) => b.code);\n    const codes = (sections.bookParagraphs ?? []).map((p) => p.code);\n    const out = [];\n    const unknown = codes.filter((c) => !published.includes(c));\n    if (unknown.length) out.push(warn(\"UNKNOWN_BOOK\", `Paragraphs for unknown books were dropped: ${unknown.join(\", \")}`));\n    const missing = published.filter((c) => !codes.includes(c));\n    if (missing.length) out.push(warn(\"MISSING_BOOK\", `No paragraph for: ${missing.join(\", \")}`));\n    return out;\n  }\n  var countWords = (text) => text.split(/\\s+/).filter(Boolean).length;\n  function lengthIssues(words, length) {\n    const [min, max] = wordRange(length);\n    return words < min || words > max ? [warn(\"LENGTH\", `${words} words (target ${min}-${max})`)] : [];\n  }\n  function checkDraft(sections, facts, titles, length = \"standard\") {\n    const text = proseText(sections);\n    const r = checkEmail({ text, facts: facts.facts, titles });\n    const words = countWords(text);\n    const issues = [...r.issues, ...structureIssues(sections, facts), ...lengthIssues(words, length)];\n    return { passed: r.passed, issues, blocking: issues.filter((i) => i.severity === \"BLOCK\"), verifiedFigures: r.verifiedFigures, words };\n  }\n\n  // n8n/src/pipeline/after-ai.js\n  var AI_OUTCOMES = Object.freeze({ PASS: \"PASS\", REWRITE: \"REWRITE\", FAIL: \"FAIL\" });\n  var PARSERS = Object.freeze({ anthropic: parseResponse, openai: parseResponse2 });\n  var USAGE = Object.freeze({ anthropic: usageOf, openai: usageOf2 });\n  function detectProvider(json) {\n    if (!json || typeof json !== \"object\") return null;\n    if (json.type === \"message\" || json.type === \"error\" || Array.isArray(json.content)) return \"anthropic\";\n    if (json.object === \"response\" || Array.isArray(json.output)) return \"openai\";\n    return null;\n  }\n  function addUsage(previous, usage, model, prices) {\n    const cost = costUsd(usage, model, prices);\n    const prevCost = previous ? previous.cost_usd : 0;\n    return {\n      input_tokens: (previous?.input_tokens ?? 0) + totalInputTokens(usage),\n      output_tokens: (previous?.output_tokens ?? 0) + usage.outputTokens,\n      cost_usd: cost === null || prevCost === null ? null : Math.round((prevCost + cost) * 1e6) / 1e6\n    };\n  }\n  var rawUsage = (provider, r) => USAGE[provider](r);\n  function rewrite(ctx, job, messages, ai, issues) {\n    return { outcome: AI_OUTCOMES.REWRITE, rewrite: providerRequests({ system: ctx.prompt.system, messages }, job), ai, issues };\n  }\n  function failAi(code, detail, ai, issues = []) {\n    return { outcome: AI_OUTCOMES.FAIL, failure: failure(code, detail), ai, issues };\n  }\n  function afterAi({ response, ctx, job, attempt, previous }) {\n    const provider = detectProvider(response);\n    if (!provider) return failAi(\"AI_UNAVAILABLE\", \"The AI answer was not recognised.\", null);\n    const prices = job.settings.model_prices;\n    const parsed = PARSERS[provider](response);\n    if (!parsed.ok) {\n      const detail = `${provider}: ${parsed.error.code} ${parsed.error.message}`;\n      const spent = { provider, model: response.model ?? null, attempts: attempt, ...addUsage(previous, rawUsage(provider, response), response.model, prices) };\n      if (attempt >= 2) return failAi(\"AI_UNAVAILABLE\", detail, spent);\n      return rewrite(ctx, job, [{ role: \"user\", content: ctx.prompt.user }], spent, [{ code: parsed.error.code, message: detail }]);\n    }\n    const ai = { provider, model: parsed.model, sections: parsed.sections, attempts: attempt, ...addUsage(previous, parsed.usage, parsed.model, prices) };\n    const check = checkDraft(parsed.sections, ctx.facts, ctx.titles, job.length);\n    const withCheck = { ...ai, verified_figures: check.verifiedFigures, words: check.words, warnings: check.issues.filter((i) => i.severity !== \"BLOCK\") };\n    if (check.passed) return { outcome: AI_OUTCOMES.PASS, ai: withCheck, issues: check.issues };\n    if (attempt >= 2) {\n      const list = check.blocking.slice(0, 3).map((i) => i.excerpt ?? i.code).join(\", \");\n      return failAi(\"AI_FACT_CHECK_FAILED\", `Unsupported: ${list}.`, withCheck, check.issues);\n    }\n    const messages = [\n      { role: \"user\", content: ctx.prompt.user },\n      { role: \"assistant\", content: JSON.stringify(parsed.sections) },\n      { role: \"user\", content: feedbackMessage(check.blocking) }\n    ];\n    return rewrite(ctx, job, messages, withCheck, check.issues);\n  }\n\n  // n8n/src/pipeline/finalize.js\n  function aiColumns(ai) {\n    if (!ai) return {};\n    return {\n      ai_attempts: ai.attempts,\n      provider: ai.provider,\n      model: ai.model,\n      input_tokens: ai.input_tokens,\n      output_tokens: ai.output_tokens,\n      cost_usd: ai.cost_usd,\n      figures_verified: ai.verified_figures\n    };\n  }\n  function failedUpdate(job, f, extra = {}) {\n    return {\n      ...extra,\n      job_id: job.job_id,\n      status: \"FAILED\",\n      error_code: f.code,\n      error: String(f.message).slice(0, MAX_ERROR_LENGTH)\n    };\n  }\n\n  // n8n/workflows-src/code/summary.js\n  var item = (json) => [{ json }];\n  function checkDraft2({ response, ctx, job, attempt, previous }) {\n    const r = afterAi({ response, ctx, job, attempt, previous });\n    const out = { outcome: r.outcome, ok: r.outcome === AI_OUTCOMES.PASS, ai: r.ai, issues: r.issues };\n    if (r.outcome === AI_OUTCOMES.FAIL) return item({ ...out, update: failedUpdate(job, r.failure, aiColumns(r.ai)) });\n    if (r.outcome === AI_OUTCOMES.REWRITE) return item({ ...out, rewrite: r.rewrite });\n    return item(out);\n  }\n\n  // <stdin>\n  __bookleaf.main = checkDraft2;\n})();\nreturn run(__bookleaf.main);"
+      },
+      "notes": "Checks every figure",
+      "notesInFlow": true,
+      "position": [
+        1560,
+        0
+      ]
+    },
+    {
+      "id": "a7116e13-8c9c-4a0e-aee4-8149e27bd9d3",
+      "name": "AI Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// BookLeaf: generated by n8n/build.mjs. Logic: n8n/src (entry \"aiFailed\"). Edit the source and rebuild;\n// do not edit this node by hand.\nconst run = (main) => {\nreturn main({ job: $('When Called').first().json.job, rewriting: $('When Called').first().json.attempt > 1, anthropicError: $('Anthropic Answer').first(2).json, openaiError: $json, previous: $('When Called').first().json.attempt > 1 ? $('When Called').first().json.previous : null });\n};\n// ---- bundled from n8n/src ----\nconst __bookleaf = {};\n(() => {\n  // n8n/src/providers/sections.js\n  var REQUIRED = [\"subject\", \"greeting\", \"intro\", \"totalsParagraph\", \"payoutParagraph\", \"closing\"];\n  var OPTIONAL = [\"productionParagraph\", \"allPaidParagraph\"];\n  function normalizeSections(v) {\n    const bad = (message) => ({ ok: false, error: { code: \"INVALID_SHAPE\", message } });\n    if (typeof v !== \"object\" || v === null || Array.isArray(v)) return bad(\"output is not an object\");\n    const missing = REQUIRED.filter((k) => typeof v[k] !== \"string\");\n    if (missing.length) return bad(`missing or non-string: ${missing.join(\", \")}`);\n    const paras = v.bookParagraphs;\n    const okParas = Array.isArray(paras) && paras.every((p) => p && typeof p.code === \"string\" && typeof p.text === \"string\");\n    if (!okParas) return bad(\"bookParagraphs must be a list of {code, text}\");\n    const sections = Object.fromEntries(REQUIRED.map((k) => [k, v[k]]));\n    sections.bookParagraphs = paras.map((p) => ({ code: p.code, text: p.text }));\n    for (const k of OPTIONAL) if (typeof v[k] === \"string\") sections[k] = v[k];\n    return { ok: true, sections: orderKeys(sections) };\n  }\n  var ORDER = [\"subject\", \"greeting\", \"intro\", \"bookParagraphs\", \"totalsParagraph\", \"payoutParagraph\", \"productionParagraph\", \"allPaidParagraph\", \"closing\"];\n  var orderKeys = (s) => Object.fromEntries(ORDER.filter((k) => k in s).map((k) => [k, s[k]]));\n  function parseSectionsText(text) {\n    let parsed;\n    try {\n      parsed = JSON.parse(text);\n    } catch (e) {\n      return { ok: false, error: { code: \"INVALID_JSON\", message: `AI output is not valid JSON: ${e.message}` } };\n    }\n    return normalizeSections(parsed);\n  }\n\n  // n8n/src/providers/anthropic.js\n  var DEFAULT_MODEL = \"claude-sonnet-5-5\";\n  var err = (code, message) => ({ ok: false, error: { code, message } });\n  var usageOf = (json) => ({\n    inputTokens: json.usage?.input_tokens ?? 0,\n    outputTokens: json.usage?.output_tokens ?? 0,\n    cacheWriteTokens: json.usage?.cache_creation_input_tokens ?? 0,\n    cacheReadTokens: json.usage?.cache_read_input_tokens ?? 0\n  });\n  function checkStop(json) {\n    if (json.stop_reason === \"refusal\") return err(\"REFUSED\", \"The model declined to answer\");\n    if (json.stop_reason === \"max_tokens\") return err(\"TRUNCATED\", \"The answer hit the token limit\");\n    return null;\n  }\n  function parseResponse(json) {\n    if (typeof json !== \"object\" || json === null) return err(\"INVALID_RESPONSE\", \"Response is not an object\");\n    if (json.type === \"error\") return err(\"API_ERROR\", `${json.error?.type ?? \"error\"}: ${json.error?.message ?? \"\"}`);\n    const stop = checkStop(json);\n    if (stop) return stop;\n    const block = Array.isArray(json.content) ? json.content.find((b) => b.type === \"text\") : void 0;\n    if (!block) return err(\"EMPTY\", \"Response has no text block\");\n    const parsed = parseSectionsText(block.text);\n    if (!parsed.ok) return parsed;\n    return { ok: true, sections: parsed.sections, usage: usageOf(json), model: json.model ?? DEFAULT_MODEL };\n  }\n\n  // n8n/src/providers/openai.js\n  var DEFAULT_MODEL2 = \"gpt-4.1-mini\";\n  var err2 = (code, message) => ({ ok: false, error: { code, message } });\n  function usageOf2(json) {\n    const cached = json.usage?.input_tokens_details?.cached_tokens ?? 0;\n    return { inputTokens: (json.usage?.input_tokens ?? 0) - cached, outputTokens: json.usage?.output_tokens ?? 0, cacheWriteTokens: 0, cacheReadTokens: cached };\n  }\n  function outputText(json) {\n    const contents = (json.output ?? []).filter((o) => o.type === \"message\").flatMap((o) => o.content ?? []);\n    if (contents.some((c) => c.type === \"refusal\")) return err2(\"REFUSED\", \"The model declined to answer\");\n    const t = contents.find((c) => c.type === \"output_text\");\n    return t ? { ok: true, text: t.text } : err2(\"EMPTY\", \"Response has no output text\");\n  }\n  function parseResponse2(json) {\n    if (typeof json !== \"object\" || json === null) return err2(\"INVALID_RESPONSE\", \"Response is not an object\");\n    if (json.error) return err2(\"API_ERROR\", `${json.error.code ?? \"error\"}: ${json.error.message ?? \"\"}`);\n    if (json.status === \"incomplete\") return err2(\"TRUNCATED\", \"The answer was cut short\");\n    const text = outputText(json);\n    if (!text.ok) return text;\n    const parsed = parseSectionsText(text.text);\n    if (!parsed.ok) return parsed;\n    return { ok: true, sections: parsed.sections, usage: usageOf2(json), model: json.model ?? DEFAULT_MODEL2 };\n  }\n\n  // n8n/src/pipeline/errors.js\n  var ERROR_CODES = Object.freeze({\n    VALIDATION: { http: 400, retryable: false, message: \"The request is missing fields or has invalid values.\" },\n    INTEGRITY: { http: 422, retryable: false, message: \"The royalty figures do not add up, so no email was written.\" },\n    NO_RECIPIENT: { http: 422, retryable: false, message: \"No demo inbox is configured, so the email has nowhere safe to go.\" },\n    RATE_LIMITED: { http: 429, retryable: true, message: \"Too many emails were sent in the last hour.\" },\n    DATA_UNAVAILABLE: { http: 502, retryable: true, message: \"The author data could not be loaded.\" },\n    AI_UNAVAILABLE: { http: 502, retryable: true, message: \"Neither AI provider returned a usable draft.\" },\n    AI_FACT_CHECK_FAILED: { http: 422, retryable: true, message: \"The AI draft quoted figures that do not match the data, twice.\" },\n    EMAIL_FAILED: { http: 502, retryable: true, message: \"The email server did not accept the email.\" },\n    EMAIL_UNCERTAIN: {\n      http: 502,\n      retryable: false,\n      message: \"The workflow stopped while the email was being sent, so it may or may not have arrived. Check the inbox before sending it again.\"\n    },\n    TIMEOUT: { http: 504, retryable: true, message: \"The job did not finish in time (the stuck_job_minutes setting), so the sweeper stopped it.\" },\n    INTERNAL: { http: 500, retryable: true, message: \"An unexpected error stopped the workflow.\" }\n  });\n  var MAX_ERROR_LENGTH = 1e3;\n  function failure(code, detail, fields) {\n    const def = ERROR_CODES[code];\n    if (!def) throw new TypeError(`Unknown error code ${code}`);\n    const message = (detail ? `${def.message} ${detail}` : def.message).slice(0, MAX_ERROR_LENGTH);\n    const out = { ok: false, code, message, http_status: def.http, retryable: def.retryable };\n    return fields ? { ...out, fields } : out;\n  }\n\n  // n8n/src/pipeline/node-errors.js\n  var SECRET_LIKE = /\\b(sk-[A-Za-z0-9_-]{8,}|sk-ant-[A-Za-z0-9_-]{8,}|Bearer\\s+[A-Za-z0-9._-]{8,})/g;\n  var MAX_SUMMARY_LENGTH = 300;\n  function parseJsonOrUndefined(s) {\n    if (typeof s !== \"string\" || !/^\\s*[\"{[]/.test(s)) return void 0;\n    try {\n      return JSON.parse(s);\n    } catch {\n      return void 0;\n    }\n  }\n  function readable(message) {\n    const m = /^(\\d{3}) - ([\\s\\S]*)$/.exec(message);\n    if (!m) return message;\n    let body = parseJsonOrUndefined(m[2]);\n    if (typeof body === \"string\") body = parseJsonOrUndefined(body);\n    const inner = body?.error?.message ?? body?.message;\n    return typeof inner === \"string\" ? `${m[1]} ${inner}` : message;\n  }\n  function answerAsError(item2) {\n    const inner = item2.body && typeof item2.body === \"object\" ? item2.body.error ?? item2.body : {};\n    return { httpCode: String(item2.statusCode), message: typeof inner.message === \"string\" ? inner.message : \"\" };\n  }\n  function nodeErrorSummary(item2, label) {\n    const isObject = item2 && typeof item2 === \"object\";\n    const isAnswer = isObject && item2.error === void 0 && Number.isInteger(item2.statusCode);\n    const e = isAnswer ? answerAsError(item2) : isObject ? item2.error ?? item2 : {};\n    const message = typeof e.message === \"string\" ? readable(e.message) : \"\";\n    const code = e.httpCode && !message.startsWith(String(e.httpCode)) ? String(e.httpCode) : \"\";\n    const parts = [code, message, e.description].filter((p) => typeof p === \"string\" && p.trim());\n    const text = parts.join(isAnswer ? \" \" : \" - \").replace(SECRET_LIKE, \"[redacted]\").replace(/\\s+/g, \" \").trim();\n    return `${label}: ${text || \"unknown error\"}`.slice(0, MAX_SUMMARY_LENGTH);\n  }\n\n  // n8n/src/pipeline/after-ai.js\n  var AI_OUTCOMES = Object.freeze({ PASS: \"PASS\", REWRITE: \"REWRITE\", FAIL: \"FAIL\" });\n  var PARSERS = Object.freeze({ anthropic: parseResponse, openai: parseResponse2 });\n  var USAGE = Object.freeze({ anthropic: usageOf, openai: usageOf2 });\n  function aiUnavailable({ rewriting, anthropicError, openaiError }) {\n    const detail = `${nodeErrorSummary(anthropicError, \"anthropic\")} | ${nodeErrorSummary(openaiError, \"openai\")}`;\n    return failure(\"AI_UNAVAILABLE\", rewriting ? `The rewrite failed. ${detail}` : detail);\n  }\n\n  // n8n/src/pipeline/finalize.js\n  function aiColumns(ai) {\n    if (!ai) return {};\n    return {\n      ai_attempts: ai.attempts,\n      provider: ai.provider,\n      model: ai.model,\n      input_tokens: ai.input_tokens,\n      output_tokens: ai.output_tokens,\n      cost_usd: ai.cost_usd,\n      figures_verified: ai.verified_figures\n    };\n  }\n  function failedUpdate(job, f, extra = {}) {\n    return {\n      ...extra,\n      job_id: job.job_id,\n      status: \"FAILED\",\n      error_code: f.code,\n      error: String(f.message).slice(0, MAX_ERROR_LENGTH)\n    };\n  }\n\n  // n8n/workflows-src/code/summary.js\n  var item = (json) => [{ json }];\n  function aiFailed({ job, rewriting, anthropicError, openaiError, previous }) {\n    const update = failedUpdate(job, aiUnavailable({ rewriting, anthropicError, openaiError }), aiColumns(previous));\n    return item({ outcome: AI_OUTCOMES.FAIL, ok: false, update });\n  }\n\n  // <stdin>\n  __bookleaf.main = aiFailed;\n})();\nreturn run(__bookleaf.main);"
+      },
+      "notes": "Both providers failed",
+      "notesInFlow": true,
+      "position": [
+        1560,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Call Anthropic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Anthropic": {
+      "main": [
+        [
+          {
+            "node": "Anthropic Answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Anthropic Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Answer": {
+      "main": [
+        [
+          {
+            "node": "Check Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait (Anthropic)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call OpenAI (fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait (Anthropic)": {
+      "main": [
+        [
+          {
+            "node": "Call Anthropic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenAI (fallback)": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OpenAI Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Answer": {
+      "main": [
+        [
+          {
+            "node": "Check Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Call OpenAI (fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

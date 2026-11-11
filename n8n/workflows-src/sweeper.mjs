@@ -1,6 +1,6 @@
 import { SWEEP_STUCK } from '../src/pipeline/sql-failures.js';
 import { pg, schedule, withNote } from './lib/nodes.mjs';
-import { TUNING } from './lib/tuning.mjs';
+import { TUNING } from '../src/pipeline/tuning.js';
 
 /**
  * Every minute (TUNING): a job still QUEUED/PROCESSING after the stuck_job_minutes setting becomes

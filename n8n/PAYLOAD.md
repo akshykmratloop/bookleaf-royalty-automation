@@ -229,8 +229,8 @@ written with `n8n/tools/settings-sql.mjs` and never committed. Job status reads 
 | `stuck_job_minutes` | 10 | The sweeper's `TIMEOUT` (`EMAIL_UNCERTAIN` for a job stuck at stage `sending`) |
 | `alert_email` | *(per environment)* | Who the error workflow emails about an unexpected error (empty = nobody) |
 
-Retries (AI requests only: an email is sent once, never retried) and the sweeper's schedule are node
-settings, fixed at build time in `n8n/workflows-src/lib/tuning.mjs`.
+AI retries (only a 429, a 5xx or a timeout; an email is sent once, never retried) and the sweeper's
+schedule are fixed at build time in `n8n/src/pipeline/tuning.js`.
 
 ## Upgrade path (paid Bubble plan): push instead of poll
 

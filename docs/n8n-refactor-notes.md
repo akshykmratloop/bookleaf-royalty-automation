@@ -600,3 +600,42 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
 - **Release engineer:** 03 is not in production yet, so it was edited in place (its function is `CREATE OR
   REPLACE`; re-running it on a database that already has 03 updates the function only). Workflows and 03 must go
   out together: the new workflows send `fingerprint_of`, which the old function refuses, and vice versa.
+
+## Fix 2 — one Write Draft sub-workflow; AI retries only what can pass; named fallback outputs (MEDIUM ×2, LOW)
+
+- **Changed:** new sub-workflow **BookLeaf - Write Draft** (`n8n/workflows-src/write-draft.mjs`, 9 nodes): When
+  Called (job, ctx, request, attempt, previous) → Call Anthropic → Anthropic Answer (Switch: Answer / Retry /
+  Fallback) → Wait (Anthropic) loops back, Fallback → Call OpenAI (fallback) → OpenAI Answer (Answer / Retry /
+  Give up) → Wait (OpenAI) loops back, Give up → AI Failed; both Answers → Check Draft. Royalty Summary calls it as
+  **Write Draft** (attempt 1, the context's requests) and **Rewrite Draft** (attempt 2, the checker's requests, the
+  first draft's usage). Gone from Royalty Summary: the four HTTP nodes, Check Draft, Check Rewrite (byte-identical
+  copies), AI Failed and its `$('Stage: Rewriting').isExecuted` lookup.
+- **Retries:** the HTTP nodes no longer use n8n's retry. They return the full answer whatever the status
+  (`fullResponse` + `neverError`); a request with no answer (timeout, refused) goes to the error output. Both go
+  to the answer Switch: 2xx → Answer; 429, 5xx or no answer, with tries left → Retry (Wait: Retry-After when sent,
+  else 2 s doubling, at most 10 s); anything else (400/401/404: a bad key, the drills' missing model) → straight
+  to the fallback. `TUNING` moved to `n8n/src/pipeline/tuning.js` (fix 5 reads it in `readSettings`):
+  `aiRetries` 2 → **1**, `aiRetryBaseSeconds` 2, `aiRetryMaxWaitSeconds` 10.
+- **Named fallback outputs (LOW):** every Switch now has `fallbackOutput: 'extra'` with a name. Outcome →
+  `Unexpected` → **Respond 500** (INTERNAL); Draft OK? → `Unexpected` → **Stop: Unexpected** (Stop and Error: the
+  error workflow fails the job); approve-draft's Action → `Unexpected` → **Respond 500**.
+- **Builders:** `switchRules(name, left, cases, fallback)` and `switchWhen(name, cases, fallback)` share one
+  `switchNode`; `http()` always returns the full answer and never retries; new `wait()` (fixed `webhookId`) and
+  `stopAndError()`; `executeWorkflow()` takes one expression per input; graph.mjs resolves a fallback output by name.
+  `nodeErrorSummary` reads a full answer (`404 model: x`).
+- **Tests (written first):** `n8n/tests/write-draft.test.js` (inputs, one copy of each node, no node-level retry,
+  wiring of both outputs, each Switch's routing for 200/429/5xx/529/timeout/4xx and with no tries left, the wait
+  for each case, Check Draft for draft and rewrite, AI Failed for both); royalty-summary and approve-draft wiring
+  and fallback outputs; no HTTP node outside Write Draft; `nodeErrorSummary` of a full answer (RED first).
+- **Live checks (local):** contracts 40/40. In Write Draft's executions the `ai_down` drill now ends in 1.5 s
+  (Anthropic 404 → OpenAI 404 → AI Failed, no waits; before: 3 tries × 2 s per provider) and `primary_down` goes
+  Anthropic → OpenAI → Check Draft. The Retry/Wait path is covered by unit tests only (no drill makes a provider
+  answer 5xx); n8n sleeps inside the execution for a time-interval Wait under 65 s (`MAX_IN_PROCESS_WAIT_MS`,
+  `base-execute-context.js putExecutionToWait`), so no resume webhook or saved waiting execution is involved.
+- **Sizes:** working nodes 68 → 75 (royalty-summary 26, approve-draft 19, write-draft 9). Code 12 → 11 nodes,
+  197.8 → **164.2 KB** (the second 34 KB fact-check copy is gone).
+- **Deviations:** the design's AI retries (2 × 2 s on any error) became 1 retry on transient errors only, because
+  the fallback provider is the real second chance and fix 5 checks the worst-case AI time against
+  `stuck_job_minutes`. Each Write Draft call is its own execution (saved like any other).
+- **Release engineer:** a new workflow, **BookLeaf - Write Draft**; deploy.mjs publishes it before Royalty Summary
+  (it uses the existing Anthropic and OpenAI credentials). No migration or setting.

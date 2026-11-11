@@ -22,16 +22,25 @@ function readable(message) {
   return typeof inner === 'string' ? `${m[1]} ${inner}` : message;
 }
 
+/** A full HTTP answer ({statusCode, body}, from a node that never errors on a status) read as an error. */
+function answerAsError(item) {
+  const inner = item.body && typeof item.body === 'object' ? item.body.error ?? item.body : {};
+  return { httpCode: String(item.statusCode), message: typeof inner.message === 'string' ? inner.message : '' };
+}
+
 /**
- * One-line, secret-free summary of an n8n node error item ({error:{message, description, httpCode}}).
- * @param {unknown} item json of an error-output item @param {string} label e.g. "anthropic"
+ * One-line, secret-free summary of an n8n node error item ({error:{message, description, httpCode}}) or
+ * of a full HTTP answer with a failing status ({statusCode, body}).
+ * @param {unknown} item json of an error-output item or a full answer @param {string} label e.g. "anthropic"
  * @returns {string}
  */
 export function nodeErrorSummary(item, label) {
-  const e = item && typeof item === 'object' ? item.error ?? item : {};
+  const isObject = item && typeof item === 'object';
+  const isAnswer = isObject && item.error === undefined && Number.isInteger(item.statusCode);
+  const e = isAnswer ? answerAsError(item) : (isObject ? item.error ?? item : {});
   const message = typeof e.message === 'string' ? readable(e.message) : '';
   const code = e.httpCode && !message.startsWith(String(e.httpCode)) ? String(e.httpCode) : '';
   const parts = [code, message, e.description].filter((p) => typeof p === 'string' && p.trim());
-  const text = parts.join(' - ').replace(SECRET_LIKE, '[redacted]').replace(/\s+/g, ' ').trim();
+  const text = parts.join(isAnswer ? ' ' : ' - ').replace(SECRET_LIKE, '[redacted]').replace(/\s+/g, ' ').trim();
   return `${label}: ${text || 'unknown error'}`.slice(0, MAX_SUMMARY_LENGTH);
 }

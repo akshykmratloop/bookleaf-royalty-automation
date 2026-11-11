@@ -42,7 +42,7 @@ describe('exportable', () => {
 });
 
 describe('committed export (n8n/export)', () => {
-  it('holds exactly the six workflows, one file each', () => {
+  it('holds exactly the built workflows, one file each', () => {
     expect(readdirSync(DIR).filter((f) => f.endsWith('.json')).sort()).toEqual(WORKFLOW_SOURCES.map((n) => `${n}.json`).sort());
   });
   it('matches the committed build (re-export after every deploy of a changed workflow)', () => {

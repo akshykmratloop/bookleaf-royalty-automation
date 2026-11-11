@@ -13,6 +13,8 @@ function outputIndex(from, output) {
   if (from.type === 'n8n-nodes-base.if' && output in IF_OUTPUTS) return IF_OUTPUTS[output];
   if (output === 'error' && from.onError === 'continueErrorOutput') return ERROR_OUTPUT;
   const rules = from.parameters?.mode === 'rules' ? from.parameters.rules.values : [];
+  const fallback = from.parameters?.options?.fallbackOutput === 'extra' ? from.parameters.options.renameFallbackOutput : undefined;
+  if (output === fallback) return rules.length;
   const i = rules.findIndex((r) => r.outputKey === output);
   if (i < 0) throw new Error(`Node "${from.name}" has no output named "${output}"`);
   return i;
@@ -20,7 +22,7 @@ function outputIndex(from, output) {
 
 /**
  * Edges with every output as an index. Names: 'true'/'false' (IF), 'error' (error output), or a
- * Switch's output name, so the source reads like the canvas.
+ * Switch's output name (its fallback output last), so the source reads like the canvas.
  * @param {Object[]} nodes @param {[string, string, (number|string)?][]} edges @returns {[string, string, number][]}
  */
 export function resolveEdges(nodes, edges) {

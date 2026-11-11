@@ -49,20 +49,31 @@ const filter = (id, left, operator, right = '') => ({
 export const ifTrue = (name, left, operator) => node(name, 'if', 2.2, { conditions: filter(`${name}/condition`, left, operator), options: {} });
 
 /**
- * Switch 3.2 in Rules mode: one named output per case, in order, taken when `left` equals the case's
- * value (no fallback output: nothing else can come).
- * @param {string} name @param {string} left expression tested @param {{output:string, equals:string}[]} cases
+ * Switch 3.2 in Rules mode: one named output per rule, in order (the first rule that matches wins), and a
+ * named fallback output last for anything no rule matches.
+ * @param {string} name @param {{output:string, conditions:Object}[]} rules @param {string} fallback
  */
-export const switchRules = (name, left, cases) => node(name, 'switch', 3.2, {
+const switchNode = (name, rules, fallback) => node(name, 'switch', 3.2, {
   mode: 'rules',
-  rules: {
-    values: cases.map((c) => ({
-      conditions: filter(`${name}/${c.output}`, left, { type: 'string', operation: 'equals' }, c.equals),
-      renameOutput: true, outputKey: c.output,
-    })),
-  },
-  options: {},
+  rules: { values: rules.map((r) => ({ conditions: r.conditions, renameOutput: true, outputKey: r.output })) },
+  options: { fallbackOutput: 'extra', renameFallbackOutput: fallback },
 });
+
+/**
+ * A Switch on one value: each case's output is taken when `left` equals its value.
+ * @param {string} name @param {string} left expression tested @param {{output:string, equals:string}[]} cases @param {string} fallback
+ */
+export const switchRules = (name, left, cases, fallback) => switchNode(name, cases.map((c) => ({
+  output: c.output, conditions: filter(`${name}/${c.output}`, left, { type: 'string', operation: 'equals' }, c.equals),
+})), fallback);
+
+/**
+ * A Switch on conditions: each case's output is taken when its `when` expression is true.
+ * @param {string} name @param {{output:string, when:string}[]} cases @param {string} fallback
+ */
+export const switchWhen = (name, cases, fallback) => switchNode(name, cases.map((c) => ({
+  output: c.output, conditions: filter(`${name}/${c.output}`, c.when, IS_TRUE),
+})), fallback);
 
 /**
  * Webhook answered by a Respond node. n8n checks the X-BookLeaf-Key header itself (Header Auth with
@@ -83,21 +94,31 @@ export const pg = (name, query, paramExpr, extra = {}) => node(name, 'postgres',
 }, { credentials: credentialRef('postgres'), ...extra });
 
 /**
- * HTTP Request with a JSON body and a credential. `timeout`: milliseconds, or an expression giving them.
- * `retry` = extra tries after the first.
- * @param {{method:string, url:string, credential:string, authType:string, body?:string, headers?:Object, timeout:number|string, retry?:number, waitMs?:number, errorOutput?:boolean}} o
+ * HTTP Request with a JSON body and a credential that never retries on its own. Every answer, whatever
+ * its status, comes out as {statusCode, headers, body} on the first output, so the workflow decides what
+ * to retry; a request that gets no answer (a timeout, a refused connection) goes to the error output.
+ * @param {{method:string, url:string, credential:string, authType:string, body:string, headers?:Object, timeout:string}} o
+ *   `timeout`: an expression giving milliseconds
  */
 export function http(name, o) {
   const parameters = {
     method: o.method, url: o.url, authentication: 'genericCredentialType', genericAuthType: o.authType,
     sendHeaders: Boolean(o.headers), headerParameters: { parameters: Object.entries(o.headers ?? {}).map(([k, v]) => ({ name: k, value: v })) },
-    sendBody: Boolean(o.body), ...(o.body ? { contentType: 'json', specifyBody: 'json', jsonBody: `={{ ${o.body} }}` } : {}),
-    options: { timeout: o.timeout },
+    sendBody: true, contentType: 'json', specifyBody: 'json', jsonBody: `={{ ${o.body} }}`,
+    options: { timeout: o.timeout, response: { response: { fullResponse: true, neverError: true } } },
   };
-  const retry = o.retry ? { retryOnFail: true, maxTries: o.retry + 1, waitBetweenTries: o.waitMs ?? 1000 } : {};
-  const onError = o.errorOutput ? { onError: 'continueErrorOutput' } : {};
-  return node(name, 'httpRequest', 4.2, parameters, { credentials: credentialRef(o.credential), ...retry, ...onError });
+  return node(name, 'httpRequest', 4.2, parameters, { credentials: credentialRef(o.credential), onError: 'continueErrorOutput' });
 }
+
+/**
+ * Wait 1.1 for `seconds` (an expression). Under 65 s n8n sleeps inside the running execution (no
+ * resume webhook is used); the fixed webhookId keeps the deployed node equal to the build.
+ */
+export const wait = (name, seconds) => node(name, 'wait', 1.1, { resume: 'timeInterval', amount: `={{ ${seconds} }}`, unit: 'seconds' },
+  { webhookId: stableUuid(`wait/${name}`) });
+
+/** Stop and Error: fails the run on purpose with `message`, so the workflow's error workflow takes over. */
+export const stopAndError = (name, message) => node(name, 'stopAndError', 1, { errorType: 'errorMessage', errorMessage: message });
 
 /**
  * Send Email (SMTP), one try: when the server's answer is lost, a second try could send twice. n8n gives
@@ -139,18 +160,20 @@ export const subWorkflowTrigger = (name, inputs) => node(name, 'executeWorkflowT
 const inputColumn = ({ name, type }) => ({ id: name, displayName: name, required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type });
 
 /**
- * Execute Workflow: runs a published sub-workflow once with this item and waits for it. A failure in
- * the sub-workflow fails this node, so the calling workflow's error workflow handles it.
+ * Execute Workflow: runs a published sub-workflow once with this item and waits for it; its last node's
+ * output comes back. A failure in the sub-workflow fails this node, so the calling workflow's error
+ * workflow handles it.
  * @param {string} name @param {{name:string, inputs:{name:string, type:string}[]}} target the sub-workflow's name and inputs
- * @param {string} src expression for an object holding every input
+ * @param {string|Record<string, string>} src expression for an object holding every input, or one expression per input
  */
 export function executeWorkflow(name, target, src) {
   const id = workflowPlaceholder(target.name);
+  const valueOf = (input) => (typeof src === 'string' ? `={{ ${src}.${input} }}` : `={{ ${src[input]} }}`);
   return node(name, 'executeWorkflow', 1.2, {
     source: 'database',
     workflowId: { __rl: true, mode: 'list', value: id, cachedResultName: target.name, cachedResultUrl: `/workflow/${id}` },
     workflowInputs: {
-      mappingMode: 'defineBelow', value: Object.fromEntries(target.inputs.map((i) => [i.name, `={{ ${src}.${i.name} }}`])),
+      mappingMode: 'defineBelow', value: Object.fromEntries(target.inputs.map((i) => [i.name, valueOf(i.name)])),
       matchingColumns: [], schema: target.inputs.map(inputColumn), attemptToConvertTypes: false, convertFieldsToString: true,
     },
     mode: 'once', options: { waitForSubWorkflow: true },

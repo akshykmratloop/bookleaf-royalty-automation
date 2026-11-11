@@ -13,15 +13,15 @@ listed in [`n8n/PAYLOAD.md`](../n8n/PAYLOAD.md#error-codes-error_code).
 | Failure | How it is detected | Answer or job result |
 |---|---|---|
 | Missing or wrong key | n8n Header Auth on the webhook | 403 `Authorization data is wrong!` (plain text); no execution, no job |
-| Invalid payload (bad id, bad date, too long) | Field-by-field validation in Prepare Job | 400 `VALIDATION` with the list of fields; no job |
+| Invalid payload (bad id, bad date, too long) | Field-by-field validation in Validate Body | 400 `VALIDATION` with the list of fields; no job |
 | No safe recipient | Neither `demo_inbox` nor the `default_demo_inbox` setting | 422 `NO_RECIPIENT`; no job |
-| Missing or invalid server setting | Load Settings, checked against the settings schema | 500 `INTERNAL` naming the setting (never its value); no job |
+| Missing or invalid server setting | Check Settings, against the settings schema, before the body is read | 500 `INTERNAL` naming the setting (never its value); no job |
 | Duplicate request | `enqueue_royalty_job` (one advisory lock; same author + fingerprint within `duplicate_window_minutes`) | 200 with the first job's id and `duplicate: true` |
 | Too many sends | `enqueue_royalty_job`: `max_sends_per_hour` jobs in the last hour | 429 `RATE_LIMITED`, naming the limit |
 | Figures do not add up (earned is not copies x rate, paid + pending is not earned) | Integrity check before any AI call | FAILED `INTEGRITY`, naming the book and rule; no AI call |
 | Author data withheld | The `data_down` drill | FAILED `DATA_UNAVAILABLE` |
-| AI down, timeout (`ai_timeout_ms`, 45 s) or API error | HTTP error from the provider | Each call is retried twice, 2 s apart; then the OpenAI fallback; if both fail, FAILED `AI_UNAVAILABLE` naming both providers' errors |
-| AI refusal, truncated, empty or malformed answer | Stop reason, parser and shape check | One more try (the rewrite step, Anthropic then OpenAI); unusable twice: FAILED `AI_UNAVAILABLE` |
+| AI down, timeout (`ai_timeout_ms`, 45 s) or API error | The provider's status, read by the answer Switch in Write Draft | Only a 429, a 5xx or no answer (timeout) is tried once more, after 2 s (or the provider's Retry-After, at most 10 s); a 4xx (bad key, unknown model) goes straight to the OpenAI fallback, which works the same way; if both fail, FAILED `AI_UNAVAILABLE` naming both providers' last answers |
+| AI refusal, truncated, empty or malformed answer | Stop reason, parser and shape check | One more try (Rewrite Draft: the same sub-workflow, Anthropic then OpenAI); unusable twice: FAILED `AI_UNAVAILABLE` |
 | Fact-check failure (wrong figure, banned phrase, placeholder) | Checker on the finished text | One rewrite with the checker's notes (Anthropic, then OpenAI). If still blocked: FAILED `AI_FACT_CHECK_FAILED`. Nothing is sent. |
 | SMTP refused or unreachable | Send Email's error output | FAILED `EMAIL_FAILED`, ending with the server's own message. Tried once, never retried. The email stays on the job. |
 | Unexpected error in a run (a bug, a database or SMTP outage) | n8n runs the Error Handler workflow | The job owned by that execution becomes FAILED `INTERNAL` (naming the node and message), or `EMAIL_UNCERTAIN` if it stopped while sending. `alert_email` gets an email. |

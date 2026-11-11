@@ -46,7 +46,8 @@ describe('callers of Deliver Email', () => {
   it('each hands its emails to Deliver Email (database source, once, waiting) and sends none itself', () => {
     for (const wf of CALLERS) {
       expect(ofType(wf, 'emailSend'), wf).toEqual([]);
-      expect(ofType(wf, 'executeWorkflow').map((n) => n.name), wf).toEqual(['Deliver Email']);
+      expect(ofType(wf, 'executeWorkflow').filter((n) => n.parameters.workflowId.cachedResultName === DELIVER_EMAIL.name).map((n) => n.name), wf)
+        .toEqual(['Deliver Email']);
       expect(callOf(wf), wf).toMatchObject({
         typeVersion: 1.2, notesInFlow: true,
         parameters: {

@@ -144,6 +144,7 @@ Server settings (sender, limits, models, prices, timeouts) live next to it in `b
 | Workflow | Job |
 |---|---|
 | BookLeaf - Royalty Summary | The 202 webhook and the whole pipeline: intake, ledger, data and facts, AI writer, fact check, render and deliver, record. |
+| BookLeaf - Write Draft | One AI draft, fact-checked: Anthropic, OpenAI when it fails, retrying only a 429, 5xx or timeout. Called twice by Royalty Summary (the draft, then at most one rewrite). |
 | BookLeaf - Deliver Email | The one place an email is sent: saves it on the job (stage `sending`), sends once, records SENT or EMAIL_FAILED. Called by Royalty Summary and Approve Draft. |
 | BookLeaf - Job Status | The polled `GET /jobs`. Reads no settings and saves no successful run. |
 | BookLeaf - Approve Draft | Check, send or discard a draft. |
@@ -152,12 +153,12 @@ Server settings (sender, limits, models, prices, timeouts) live next to it in `b
 
 The workflows are generated from `n8n/workflows-src` by `n8n/build.mjs` and deployed with
 `n8n/deploy.mjs`, which creates the credentials from local secret files and publishes each workflow
-(Deliver Email and the Error Handler before the workflows that name them).
+(Deliver Email, Write Draft and the Error Handler before the workflows that name them).
 
-**Import-ready copy.** `n8n/export/` holds the six workflows as deployed on the local n8n, written by
+**Import-ready copy.** `n8n/export/` holds the seven workflows as deployed on the local n8n, written by
 `node n8n/tools/export.mjs --env .secrets/n8n-local.env`. Credential ids are `null`, so
 `n8n import:workflow --separate --input=n8n/export` links each node to the credential with the same
 name and type on the target instance (it must exist there first; with none or two of that name the
 node stays unlinked). Workflow ids are kept, so the error workflow and the Deliver Email calls still
-point at the imported workflows. Imported workflows are inactive until published. A unit test checks
+point at the imported workflows (the Deliver Email and Write Draft calls too). Imported workflows are inactive until published. A unit test checks
 that the export matches the committed build and holds no secret.

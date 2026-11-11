@@ -23,7 +23,7 @@ const ENTRY_FILES = ['code/settings.js', 'code/summary.js', 'code/status.js', 'c
  * Build and deploy order. A workflow another one names (error workflow, sub-workflow) comes first, so
  * deploy.mjs knows its id, and it is published before anything can call it.
  */
-export const WORKFLOW_SOURCES = ['error-handler', 'deliver-email', 'royalty-summary', 'job-status', 'sweeper', 'approve-draft'];
+export const WORKFLOW_SOURCES = ['error-handler', 'deliver-email', 'write-draft', 'royalty-summary', 'job-status', 'sweeper', 'approve-draft'];
 export const SETTINGS = Object.freeze({
   executionOrder: 'v1', saveDataErrorExecution: 'all', saveDataSuccessExecution: 'all',
   saveManualExecutions: true, callerPolicy: 'workflowsFromSameOwner',

@@ -33,15 +33,16 @@ export function context({ validated, jobId }) {
 }
 
 /**
- * Neither provider answered, for the first draft or for the rewrite (`previous`: the first draft's AI
- * usage, recorded with the failure).
+ * Neither provider gave a usable answer, for the first draft or for the rewrite (`previous`: the first
+ * draft's AI usage, recorded with the failure). The FAIL outcome is what the caller's Switch routes on.
  */
 export function aiFailed({ job, rewriting, anthropicError, openaiError, previous }) {
-  return item({ update: failedUpdate(job, aiUnavailable({ rewriting, anthropicError, openaiError }), aiColumns(previous)) });
+  const update = failedUpdate(job, aiUnavailable({ rewriting, anthropicError, openaiError }), aiColumns(previous));
+  return item({ outcome: AI_OUTCOMES.FAIL, ok: false, update });
 }
 
 /**
- * Fact-check a draft (attempt 1: Check Draft) or its rewrite (attempt 2: Check Rewrite). outcome PASS
+ * Fact-check a draft (attempt 1) or its rewrite (attempt 2): Write Draft's Check Draft. outcome PASS
  * (ok), REWRITE (`rewrite` holds both providers' bodies) or FAIL (`update` fails the job).
  */
 export function checkDraft({ response, ctx, job, attempt, previous }) {

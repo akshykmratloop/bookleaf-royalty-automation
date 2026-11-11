@@ -68,7 +68,7 @@
       "typeVersion": 1,
       "parameters": {
         "content": "## Discard or check\nCloses the draft, or answers a preview.",
-        "height": 494,
+        "height": 694,
         "width": 480
       },
       "position": [
@@ -362,11 +362,31 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Unexpected"
+        }
       },
       "position": [
         2340,
         0
+      ]
+    },
+    {
+      "id": "8062d21b-444f-46a2-a250-fb0480cee5c0",
+      "name": "Respond 500",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\"error\":{\"code\":\"INTERNAL\",\"message\":\"An unexpected error stopped the workflow. Decide gave an unexpected action.\",\"retryable\":true}} }}",
+        "options": {
+          "responseCode": "={{ 500 }}"
+        }
+      },
+      "position": [
+        2600,
+        1000
       ]
     },
     {
@@ -724,6 +744,13 @@
         [
           {
             "node": "Respond Answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 500",
             "type": "main",
             "index": 0
           }

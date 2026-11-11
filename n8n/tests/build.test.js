@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { WORKFLOW_SOURCES } from '../build.mjs';
 import { CREDENTIALS, credentialRef, placeholderId } from '../workflows-src/lib/credentials.mjs';
 import { LOAD_SETTINGS } from '../src/pipeline/sql.js';
-import { TUNING } from '../workflows-src/lib/tuning.mjs';
+import { TUNING } from '../src/pipeline/tuning.js';
 import { payloadFor } from '../../tests/fixtures/payloads.js';
 import { SETTINGS } from './pipeline/settings-fixture.js';
 import { built, nodeOf, ofType, outputsOf, runCode } from './built.js';
@@ -58,13 +58,11 @@ describe('built workflows', () => {
     }
     expect(JSON.stringify(built['job-status'])).not.toContain('bookleaf_settings');
   });
-  it('the four AI calls time out after ai_timeout_ms and retry as tuned at build time', () => {
-    const ai = ofType('royalty-summary', 'httpRequest');
-    expect(ai.map((n) => n.name)).toEqual(['Call Anthropic', 'Call OpenAI (fallback)', 'Rewrite (Anthropic)', 'Rewrite (OpenAI fallback)']);
-    for (const n of ai) {
-      expect(n.parameters.options.timeout, n.name).toBe("={{ $('Build Context').first().json.job.settings.ai_timeout_ms }}");
-      expect(n, n.name).toMatchObject({ retryOnFail: true, maxTries: TUNING.aiRetries + 1, waitBetweenTries: TUNING.aiRetryWaitMs });
-    }
+  it('the two AI calls live only in Write Draft, and no HTTP node anywhere retries on its own', () => {
+    const http = WORKFLOW_SOURCES.flatMap((wf) => ofType(wf, 'httpRequest').map((n) => `${wf}/${n.name}`));
+    expect(http).toEqual(['write-draft/Call Anthropic', 'write-draft/Call OpenAI (fallback)']);
+    for (const wf of WORKFLOW_SOURCES) for (const n of ofType(wf, 'httpRequest')) expect(n.retryOnFail, n.name).toBeUndefined();
+    expect(TUNING.aiRetries).toBeGreaterThanOrEqual(1);
   });
   it('Send Email takes the From line from the settings; no deploy-time sender placeholder is left', () => {
     const sends = WORKFLOW_SOURCES.flatMap((wf) => ofType(wf, 'emailSend')).filter((n) => n.name !== 'Send Alert');
