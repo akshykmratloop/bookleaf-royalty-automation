@@ -21,10 +21,12 @@ describe('failure drills end as FAILED with a specific code, never silently', ()
     expect(jobs.ai).toMatchObject({ status: 'FAILED', error_code: 'AI_UNAVAILABLE', sent_to: null });
     expect(jobs.ai.error).toMatch(/anthropic: .*openai: /);
   });
-  it('email down (SMTP unreachable) → EMAIL_FAILED, the draft is kept for the log', () => {
-    expect(jobs.email).toMatchObject({ status: 'FAILED', error_code: 'EMAIL_FAILED', sent_to: null });
+  it('email down (SMTP unreachable) → EMAIL_FAILED with the server\'s own message, the draft is kept for the log', () => {
+    expect(jobs.email).toMatchObject({ status: 'FAILED', stage: 'failed', error_code: 'EMAIL_FAILED', sent_to: null });
+    expect(jobs.email.error).toMatch(/^The email server did not accept the email\. smtp: .*ECONNREFUSED/);
     expect(jobs.email.subject).toBeTruthy();
     expect(jobs.email.ai_attempts).toBeGreaterThanOrEqual(1);
+    expect(['anthropic', 'openai']).toContain(jobs.email.provider);
   });
   it('data down → DATA_UNAVAILABLE before any AI call', () => {
     expect(jobs.data).toMatchObject({ status: 'FAILED', error_code: 'DATA_UNAVAILABLE', ai_attempts: 0 });

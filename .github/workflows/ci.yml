@@ -1,0 +1,49 @@
+# The gates that need no n8n: unit tests, the build check (the committed workflows match their sources) and the
+# ledger SQL on real Postgres 16. The contract suite needs a live n8n with AI keys and SMTP, so it runs locally
+# before every commit (npm run test:contract -- --env .secrets/n8n-local.env), not here.
+name: CI
+
+on:
+  push:
+    branches: [main, 'refactor/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: n8n
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U n8n" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      BOOKLEAF_PG_DIRECT: '1'
+      PGHOST: localhost
+      PGPORT: '5432'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Unit tests
+        run: npm test
+      - name: Built workflows match their sources
+        run: node n8n/build.mjs --check
+      - name: Postgres client
+        run: psql --version && pg_dump --version
+      - name: Ledger SQL on Postgres 16
+        run: npm run test:db

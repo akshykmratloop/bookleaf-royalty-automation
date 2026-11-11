@@ -2,8 +2,40 @@
   "name": "BookLeaf - Stuck Job Sweeper",
   "nodes": [
     {
-      "id": "55a7a795-a607-4bdd-a537-7e9f00f56030",
-      "name": "Every 5 Minutes",
+      "id": "f19a5efa-bc53-492c-aae4-24df93794cc0",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## BookLeaf stuck job sweeper\nFails any job still QUEUED/PROCESSING `stuck_job_minutes` (a setting, 10) after it started: EMAIL_UNCERTAIN if it stopped while sending, TIMEOUT otherwise. Drafts are never touched. Only failed sweeps are saved.",
+        "height": 160,
+        "width": 480,
+        "color": 5
+      },
+      "position": [
+        -60,
+        -294
+      ]
+    },
+    {
+      "id": "ffae6c6e-1fa6-4708-a0ec-cc5185ef3f07",
+      "name": "Sweep",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Sweep\nEvery minute; a sweep that finds nothing changes nothing.",
+        "height": 294,
+        "width": 480,
+        "color": 7
+      },
+      "position": [
+        -60,
+        -94
+      ]
+    },
+    {
+      "id": "4dff84af-29f8-408b-ace4-724b33013554",
+      "name": "Every Minute",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "parameters": {
@@ -11,7 +43,7 @@
           "interval": [
             {
               "field": "minutes",
-              "minutesInterval": 5
+              "minutesInterval": 1
             }
           ]
         }
@@ -28,7 +60,7 @@
       "typeVersion": 2.6,
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE royalty_jobs\nSET status = 'FAILED', stage = 'failed', stage_at = now(), error_code = 'TIMEOUT',\n    error = 'The job did not finish within 10 minutes, so it was stopped. Send it again if needed.',\n    completed_at = now(), updated_at = now()\nWHERE status IN ('QUEUED', 'PROCESSING')\n  AND (CASE WHEN drafted_at IS NULL THEN created_at ELSE stage_at END) < now() - interval '10 minutes'\nRETURNING job_id::text AS job_id, log_id, author_id",
+        "query": "WITH s AS (SELECT bookleaf_setting('stuck_job_minutes')::int AS minutes)\nUPDATE royalty_jobs AS j\nSET status = 'FAILED', stage = 'failed', stage_at = now(),\n    error_code = CASE WHEN j.stage = 'sending' THEN 'EMAIL_UNCERTAIN' ELSE 'TIMEOUT' END,\n    error = CASE WHEN j.stage = 'sending'\n      THEN 'The workflow stopped while the email was being sent, so it may or may not have arrived. Check the inbox before sending it again.' || format(' It was still sending %s minutes after it started, so it was stopped.', s.minutes)\n      ELSE format('The job did not finish within %s minutes, so it was stopped. Send it again if needed.', s.minutes) END,\n    completed_at = now(), updated_at = now()\nFROM s\nWHERE status IN ('QUEUED', 'PROCESSING')\n  AND (CASE WHEN j.drafted_at IS NULL THEN j.created_at ELSE j.stage_at END) < now() - make_interval(mins => s.minutes)\nRETURNING j.job_id::text AS job_id, j.log_id, j.author_id, j.error_code",
         "options": {}
       },
       "credentials": {
@@ -37,6 +69,8 @@
           "name": "BookLeaf Postgres (bookleaf db)"
         }
       },
+      "notes": "TIMEOUT or EMAIL_UNCERTAIN",
+      "notesInFlow": true,
       "position": [
         260,
         0
@@ -44,7 +78,7 @@
     }
   ],
   "connections": {
-    "Every 5 Minutes": {
+    "Every Minute": {
       "main": [
         [
           {
@@ -59,8 +93,9 @@
   "settings": {
     "executionOrder": "v1",
     "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
+    "saveDataSuccessExecution": "none",
     "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "__WORKFLOW_BookLeaf - Error Handler__"
   }
 }

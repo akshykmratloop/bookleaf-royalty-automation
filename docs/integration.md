@@ -1,40 +1,47 @@
 # How Bubble and n8n work together
 
-Bubble is the app people use. n8n does the slow, risky work: fetch data, call the AI, check the
-result, send the email. They talk over two HTTP calls and one status record.
+Bubble is the app people use. n8n does the slow, risky work: check the data, call the AI, check
+the result, send the email. Bubble makes every call; n8n never calls Bubble.
 
 The exact request and response shapes are in [`n8n/PAYLOAD.md`](../n8n/PAYLOAD.md). This page
 explains the flow and the reasons behind it.
 
 ## The webhook contract (summary)
 
-- `POST /webhook/royalty-summary`, JSON body.
-- Core fields: `author_id` (Bubble id), `mode` (`single` or `bulk`), `log_id` (the
-  NotificationLog row), `requested_by`, and optionally `reference_date`.
-- In **pull** mode the body also carries the author's data (`payload`: author and books), because
-  n8n cannot read Bubble.
+- `POST /webhook/royalty-summary`, JSON body: `author_id` (Bubble id), `mode` (`single` or `bulk`),
+  `log_id` (the NotificationLog row), `requested_by`, optional `reference_date`, `demo_inbox`,
+  writing options (`delivery`, `tone`, `length`, `note`, `sign_off`) and `drills`, plus the author's
+  data (`author`, `books`): n8n never reads Bubble's database.
+- Emails go only to a configured demo inbox: `demo_inbox` must be the `default_demo_inbox` setting or
+  one of `allowed_demo_inboxes`. Any other address gets **422** `RECIPIENT_NOT_ALLOWED` and no job, so
+  the webhook key alone cannot make n8n email an outside address.
 - Every field is checked for type, length and format. Bad input gets **400** with a list of
-  errors. A missing or wrong key gets **401**.
-- Success is **202 Accepted** with a `job_id`. The email is not sent yet. The caller then
-  waits for the result (push) or asks for it (pull).
+  errors. A missing or wrong `X-BookLeaf-Key` gets **403** from n8n before any workflow runs.
+- Success is **202 Accepted** with `{job_id, status, duplicate: false}`. The email is not sent yet:
+  Bubble polls `GET /webhook/royalty-summary/jobs?ids=…` for the result.
+- `delivery: "draft"` stops at a checked draft; `POST /webhook/royalty-summary/approve` then checks,
+  sends or discards it.
 
 ## Job lifecycle
 
 ```mermaid
 stateDiagram-v2
-  [*] --> QUEUED: webhook accepted
-  QUEUED --> PROCESSING: worker starts
-  PROCESSING --> SENT: email delivered
-  PROCESSING --> FAILED: any error, with reason
+  [*] --> QUEUED: enqueue_royalty_job (202)
+  QUEUED --> PROCESSING: the workflow starts writing
+  PROCESSING --> SENT: Deliver Email, SMTP accepted
+  PROCESSING --> FAILED: a coded failure, the error workflow, or the sweeper
+  PROCESSING --> DRAFTED: delivery = draft
+  DRAFTED --> PROCESSING: approve (send), claimed by one click
+  DRAFTED --> DISCARDED: approve (discard)
   QUEUED --> FAILED: sweeper (never started)
-  PROCESSING --> FAILED: sweeper (stuck)
   SENT --> [*]
   FAILED --> [*]
+  DISCARDED --> [*]
 ```
 
 A retry from the admin creates a new job. It does not re-open an old one, so the history stays true.
 
-## Single send, push mode (Bubble paid plan)
+## Single send
 
 ```mermaid
 sequenceDiagram
@@ -46,40 +53,19 @@ sequenceDiagram
   participant SMTP
   Admin->>Bub: Generate & Send (button disabled)
   Bub->>Bub: Create NotificationLog (Queued)
-  Bub->>N8: POST webhook {author_id, log_id}
-  N8->>PG: INSERT job ON CONFLICT (idem_key)
+  Bub->>N8: POST webhook {author_id, log_id, author, books}
+  N8->>PG: enqueue_royalty_job (locked: duplicate, hourly cap, insert)
   N8-->>Bub: 202 {job_id}
-  N8->>Bub: Data API: author, books, royalties
-  N8->>N8: integrity check, build facts
-  N8->>AI: prompt + facts
+  N8->>N8: integrity check, facts, prompt
+  N8->>AI: prompt + facts (Anthropic, OpenAI if it fails)
   AI-->>N8: JSON sections
-  N8->>N8: fact check (retry once if blocked)
-  N8->>SMTP: send HTML + text
-  N8->>PG: job SENT
-  N8->>Bub: Workflow API notification_result
-  Bub->>Bub: Log = Sent, email preview saved
-  Bub-->>Admin: Sent
-```
-
-## Single send, pull mode (Bubble free plan)
-
-The free plan has no incoming API, so n8n cannot call Bubble. Bubble does all the talking.
-
-```mermaid
-sequenceDiagram
-  actor Admin
-  participant Bub as Bubble
-  participant N8 as n8n
-  participant PG as Postgres
-  Admin->>Bub: Generate & Send
-  Bub->>Bub: Create NotificationLog (Queued)
-  Bub->>N8: POST webhook {author_id, log_id, payload}
-  N8->>PG: INSERT job
-  N8-->>Bub: 202 {job_id}
-  Note over N8: same pipeline as push mode,<br/>using the payload instead of the Data API
-  loop every few seconds, up to a time limit
+  N8->>N8: fact check (one rewrite with the checker's notes if blocked)
+  N8->>PG: Deliver Email: save the email, stage sending
+  N8->>SMTP: send HTML + text, once
+  N8->>PG: job SENT (or FAILED, EMAIL_FAILED)
+  loop every few seconds
     Bub->>N8: GET /jobs?ids=job_id
-    N8-->>Bub: status, error, subject, html, cost
+    N8-->>Bub: status, stage, error, subject, cost
   end
   Bub->>Bub: Log = Sent or Failed
 ```
@@ -93,63 +79,91 @@ sequenceDiagram
   participant N8 as n8n
   Admin->>Bub: Bulk send (authors with pending money)
   Bub->>Bub: Create one Queued log per author, one batch_id
-  Bub->>Bub: Schedule a backend workflow per author {{VERIFY}}
   loop each author
-    Bub->>N8: POST webhook (mode=bulk)
+    Bub->>N8: POST webhook (mode=bulk, batch_id)
     N8-->>Bub: 202 {job_id}
   end
-  Note over Bub,N8: Push: n8n calls back per job.<br/>Pull: Bubble polls /jobs for all job ids in one call.
+  Bub->>N8: GET /jobs?ids=<up to 50 job ids> (one call per poll)
   Bub-->>Admin: progress x / N, Retry failed
 ```
 
 Each author is a separate job. One failure never stops the others.
 
-## Why pull mode exists
+## Why Bubble polls
 
-- Bubble's free plan has no app API. n8n can neither read Bubble data nor call a Bubble workflow.
+- Bubble's free plan has no Data API and no Workflow API: n8n can neither read Bubble data nor call
+  a Bubble workflow. So Bubble sends the data with the request and asks for the result.
 - Bubble's API Connector call times out at about 50 seconds. An AI email takes 10 to 30 seconds
-  and can run longer with a retry. So the webhook must not wait for the email.
-- The answer to both is the same: reply **202 at once**, keep the job in a database, let
-  Bubble ask for the result. Push mode is faster and simpler for the user, but pull mode keeps
-  the whole product working on any Bubble plan, including after a trial ends. The mode is the
-  `callback_mode` setting in Bubble, and `CALLBACK_MODE` in n8n.
+  and can run longer with a rewrite. So the webhook answers **202 at once** and keeps the job in
+  Postgres.
+- On a paid Bubble plan, n8n could push each result back instead; that upgrade path is described
+  in `n8n/PAYLOAD.md`. It was removed from the workflows to keep one tested path.
 
 ## Authentication
 
 | Direction | How |
 |---|---|
-| Bubble to n8n | Header `X-BookLeaf-Key`. The key is stored in Bubble's API Connector marked "Private", so it is applied on Bubble's server and never reaches the browser. |
-| n8n to Bubble | A Bubble API token, held only in n8n credentials, sent as a Bearer token. |
+| Bubble to n8n | Header `X-BookLeaf-Key`. The key is stored in Bubble's API Connector marked "Private", so it is applied on Bubble's server and never reaches the browser. n8n checks it itself (Header Auth with the credential "BookLeaf Webhook Key" on all three webhooks): a missing or wrong key gets 403 and no workflow runs. |
+| n8n to Bubble | None. n8n never calls Bubble. |
 
-**Key rotation:** n8n accepts two keys at once, `current` and `next`. To rotate: add `next` in
-n8n, change the key in Bubble, then promote `next` to `current`. There is no downtime.
+**Key rotation:** n8n checks one key. To rotate: put a new key in `.secrets/webhook.env`, run
+`n8n/deploy.mjs` (n8n switches at once), then change the key in Bubble. Calls in between get 403,
+so rotate when no one is sending.
 
-Keys are compared in constant time and never written to logs. {{VERIFY}}
+The key is compared as a plain string, not in constant time. It does not appear in n8n's logs at
+the default log level. The three webhook workflows save no successful run, because a saved run
+holds the request headers (key included). Failed runs are still saved for the error handler, so the
+key remains in a failed run's data, which only n8n users can open and n8n deletes after 14 days.
+n8n's execution-data redaction needs an Enterprise licence. Write Draft and Deliver Email get no
+headers and keep their successful runs, so each AI call and each send stays visible in n8n.
 
 ## Idempotency (a double click must not send two emails)
 
 1. **In the UI:** the button is disabled while a send is in flight.
-2. **In n8n:** each job gets `idem_key = author + data fingerprint + 10-minute window`. The
-   `royalty_jobs.idem_key` column has a **unique index**, and the insert is
-   `INSERT ... ON CONFLICT (idem_key)`. A second request in the same window returns the first
-   job's id. Bubble marks the extra log row `Duplicate`.
-3. **On the callback:** applying a result is idempotent per job id, so a retried callback cannot
-   change a finished log twice.
+2. **On enqueue:** each request gets a fingerprint (a SHA-256 of everything that shapes the email).
+   The Postgres function `enqueue_royalty_job` holds one advisory lock while it decides, so
+   simultaneous requests are handled one at a time: the same author and fingerprint within the
+   last `duplicate_window_minutes` (10, sliding) returns the first job's id (HTTP 200,
+   `duplicate: true`); otherwise the hourly cap (`max_sends_per_hour`, exact) or a new job. Two
+   clicks at the same moment can never both create a job. Bubble marks the extra log row `Duplicate`.
+3. **On approval:** Claim Draft moves a draft to PROCESSING in one statement, so only one click
+   sends it; the others get `ALREADY_SENT`.
+4. **On send:** Deliver Email tries SMTP once. A second try after a lost answer could email the
+   author twice, so a failure is recorded (`EMAIL_FAILED`) instead.
 
-The fingerprint is a hash of the author's figures. If the data changes (a payout is recorded),
-the key changes and a new email is allowed immediately.
+The fingerprint covers the author's figures and the writing options. If the data changes (a payout
+is recorded), the fingerprint changes and a new email is allowed immediately.
 
 ## The job ledger
 
-One Postgres table, `royalty_jobs` (see `infra/db/init/01-bookleaf.sql`): job id, idempotency
-key, Bubble log id, status, error code and message, the subject and HTML sent, recipient,
-figures verified, AI attempts, provider, model, tokens, cost, callback status, timestamps.
+One Postgres table, `royalty_jobs` (see `infra/db/init/01-bookleaf.sql`): job id, fingerprint and the
+n8n execution id that owns the job (the enqueue's, then the approval's once a draft is claimed), Bubble
+log id, status and stage, error code and message, the subject and HTML, recipient, figures verified,
+AI attempts, provider, model, tokens, cost, timestamps. `callback_status` is always `NOT_NEEDED`.
 
-It is the source of truth for a send. Bubble's log is a copy for the user. If a callback fails,
-the result is still in the ledger and can be delivered later.
+It is the source of truth for a send. Bubble's log is a copy for the user, refreshed by polling.
+Server settings (sender, limits, models, prices, timeouts) live next to it in `bookleaf_settings`.
 
-## Callback delivery
+## The n8n workflows
 
-Push mode: n8n retries the callback 3 times with growing waits. If Bubble is still down, the job
-keeps `callback_status = FAILED` and the result is held. The next time Bubble asks (page load
-or poll) it is reconciled. {{VERIFY}}
+| Workflow | Job |
+|---|---|
+| BookLeaf - Royalty Summary | The 202 webhook and the whole pipeline: intake, ledger, data and facts, AI writer, fact check, render and deliver, record. |
+| BookLeaf - Write Draft | One AI draft, fact-checked: Anthropic, OpenAI when it fails, retrying only a 429, 5xx or timeout. Called twice by Royalty Summary (the draft, then at most one rewrite). |
+| BookLeaf - Deliver Email | The one place an email is sent: saves it on the job (stage `sending`), sends once, records SENT or EMAIL_FAILED. Called by Royalty Summary and Approve Draft. |
+| BookLeaf - Job Status | The polled `GET /jobs`. Reads no settings and saves no successful run. |
+| BookLeaf - Approve Draft | Check, send or discard a draft. |
+| BookLeaf - Error Handler | Error workflow of Royalty Summary, Approve Draft, Job Status and the sweeper: fails the job by its execution id and emails `alert_email` (the last known address when the database is down). |
+| BookLeaf - Stuck Job Sweeper | Every minute: fails jobs not finished `stuck_job_minutes` after they started. |
+
+The workflows are generated from `n8n/workflows-src` by `n8n/build.mjs` and deployed with
+`n8n/deploy.mjs`, which creates the credentials from local secret files and publishes each workflow
+(Deliver Email, Write Draft and the Error Handler before the workflows that name them).
+
+**Import-ready copy.** `n8n/export/` holds the seven workflows as deployed on the local n8n, written by
+`node n8n/tools/export.mjs --env .secrets/n8n-local.env`. Credential ids are `null`, so
+`n8n import:workflow --separate --input=n8n/export` links each node to the credential with the same
+name and type on the target instance (it must exist there first; with none or two of that name the
+node stays unlinked). Workflow ids are kept, so the error workflow and the Deliver Email calls still
+point at the imported workflows (the Deliver Email and Write Draft calls too). Imported workflows are inactive until published. A unit test checks
+that the export matches the committed build and holds no secret.

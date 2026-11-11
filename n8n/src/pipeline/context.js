@@ -1,11 +1,10 @@
-import { bundleFromBubble } from '../bubble-client.js';
 import { buildFacts } from '../facts.js';
 import { checkIntegrity } from '../integrity.js';
 import { buildPrompt } from '../prompt.js';
 import * as anthropic from '../providers/anthropic.js';
 import * as openai from '../providers/openai.js';
 import { sectionsSchema } from '../providers/schema.js';
-import { validateBundle } from '../validate.js';
+import { CrashDrillError } from './drills.js';
 import { failure } from './errors.js';
 
 /**
@@ -21,34 +20,35 @@ export const DRILL_MODEL = 'bookleaf-drill-model-does-not-exist';
  * @property {{anthropic:Object, openai:Object}} requests HTTP bodies for the two provider nodes
  */
 
-function loadBundle(job, bubble) {
+/** The author data came with the request (validated in Prepare Job); the data_down drill withholds it. */
+function loadBundle(job) {
   if (job.drills.data_down) return failure('DATA_UNAVAILABLE', 'Failure drill: the data source was switched off.');
-  if (job.bundle) return { ok: true, value: job.bundle };
-  if (!bubble) return failure('DATA_UNAVAILABLE', 'No data came back from Bubble.');
-  const mapped = bundleFromBubble(bubble);
-  if (!mapped.ok) return failure('DATA_UNAVAILABLE', mapped.errors[0].message);
-  const valid = validateBundle(mapped.value);
-  return valid.ok ? valid : failure('DATA_UNAVAILABLE', `Bubble data is incomplete: ${valid.errors[0].path} ${valid.errors[0].message}.`);
+  return { ok: true, value: job.bundle };
 }
 
-/** @param {{system:string, user?:string, messages?:Object[]}} prompt @param {import('./prepare.js').Job} job */
+/**
+ * The bodies of the two AI nodes: model, effort and token limit from the ai_primary / ai_fallback settings.
+ * @param {{system:string, user?:string, messages?:Object[]}} prompt @param {import('./prepare.js').Job} job
+ */
 export function providerRequests(prompt, job) {
   const { ai_down: allDown, primary_down: primaryDown } = job.drills;
-  const { config } = job;
-  const primaryModel = allDown || primaryDown ? DRILL_MODEL : config.primaryModel;
+  const { ai_primary: primary, ai_fallback: fallback } = job.settings;
+  const primaryModel = allDown || primaryDown ? DRILL_MODEL : primary.model;
   return {
-    anthropic: anthropic.buildRequest({ ...prompt, schema: sectionsSchema, model: primaryModel, effort: config.effort }).body,
-    openai: openai.buildRequest({ ...prompt, model: allDown ? DRILL_MODEL : config.fallbackModel }).body,
+    anthropic: anthropic.buildRequest({ ...prompt, schema: sectionsSchema, model: primaryModel, effort: primary.effort, maxTokens: primary.max_tokens }).body,
+    openai: openai.buildRequest({ ...prompt, model: allDown ? DRILL_MODEL : fallback.model, maxTokens: fallback.max_tokens }).body,
   };
 }
 
 /**
  * After the job is accepted: data, integrity check, facts, prompt and the two provider requests.
- * @param {import('./prepare.js').Job} job @param {{author:unknown, books:unknown, royalties:unknown}|null} [bubble]
+ * @param {import('./prepare.js').Job} job
  * @returns {{ok:true, ctx:Context}|import('./errors.js').Failure}
+ * @throws {CrashDrillError} on the crash drill
  */
-export function buildContext(job, bubble = null) {
-  const loaded = loadBundle(job, bubble);
+export function buildContext(job) {
+  if (job.drills.crash) throw new CrashDrillError();
+  const loaded = loadBundle(job);
   if (!loaded.ok) return loaded;
   const bundle = loaded.value;
   const issues = checkIntegrity(bundle, job.reference_date);

@@ -1,14 +1,18 @@
 /** HTTP helpers for the contract suite. The webhook key is read from .secrets/webhook.env, never printed. */
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readEnvFile } from '../../n8n/tools/env-file.mjs';
+import { readEnvFile, requireKeys } from '../../n8n/tools/env-file.mjs';
+import { n8nApi } from '../../n8n/tools/n8n-api.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
-const target = readEnvFile(process.env.CONTRACT_ENV_FILE ?? join(ROOT, '.secrets/n8n-local.env'));
+const ENV_FILE = process.env.CONTRACT_ENV_FILE ?? join(ROOT, '.secrets/n8n-local.env');
+const target = requireKeys(readEnvFile(ENV_FILE), ['N8N_BASE_URL', 'N8N_API_KEY'], ENV_FILE);
 export const BASE_URL = target.N8N_BASE_URL.replace(/\/+$/, '');
 export const KEY = readEnvFile(join(ROOT, '.secrets/webhook.env')).BOOKLEAF_WEBHOOK_KEY;
 export const DEMO_INBOX = process.env.CONTRACT_DEMO_INBOX || 'akshykmr@loopmethods.com';
 export const POLL_LIMIT_MS = 90_000;
+/** The same n8n's public API (to read executions); its key comes from the same env file, never printed. */
+export const N8N_API = n8nApi({ baseUrl: BASE_URL, apiKey: target.N8N_API_KEY });
 
 const headers = (key) => ({ 'content-type': 'application/json', ...(key === null ? {} : { 'X-BookLeaf-Key': key }) });
 

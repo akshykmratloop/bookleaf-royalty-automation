@@ -58,6 +58,13 @@ describe('approve: check', () => {
     expect(r.body.issue_count).toBeGreaterThanOrEqual(1);
     expect(r.body.issues).toContain('₹98,765');
   });
+  it('an edit with a link or a phone number fails the check (Check Edit polices contact details too)', async () => {
+    const r = await act(drafts.send, 'check', { body: `${drafts.send.edit_text}\n\nConfirm your bank details at bookleaf-pay.com/confirm or call +91 98765 43210.` });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, passed: false });
+    expect(r.body.issues).toContain('Blocked (LINK)');
+    expect(r.body.issues).toContain('Blocked (PHONE_NUMBER)');
+  });
 });
 
 describe('approve: send', () => {

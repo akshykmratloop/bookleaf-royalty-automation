@@ -4,18 +4,17 @@
  *   node n8n/deploy.mjs [--env .secrets/n8n-local.env]
  * The env file gives N8N_BASE_URL, N8N_API_KEY and the bookleaf DB settings (BOOKLEAF_DB_*; the
  * password falls back to AWS SSM). SMTP comes from bubble/.env, AI keys from the parent repo's .env,
- * the webhook key(s) from .secrets/webhook.env (generated once; BOOKLEAF_WEBHOOK_KEY_NEXT is accepted
- * too during a key rotation). Workflows get only SHA-256 hashes of the keys. No secret value is ever printed.
+ * the webhook key from .secrets/webhook.env (generated once) into the "BookLeaf Webhook Key"
+ * credential that the webhooks' Header Auth checks. No secret value is ever printed.
  */
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildWorkflow, WORKFLOW_SOURCES } from './build.mjs';
 import { CREDENTIALS, placeholderId } from './workflows-src/lib/credentials.mjs';
-import { KEY_HASHES_PLACEHOLDER, SMTP_FROM_PLACEHOLDER } from './workflows-src/lib/nodes.mjs';
-import { keyHashesFor } from './src/pipeline/auth.js';
+import { workflowPlaceholder } from './workflows-src/lib/flow-nodes.mjs';
 import { readEnvFile, requireKeys } from './tools/env-file.mjs';
 import { n8nApi } from './tools/n8n-api.mjs';
-import { aiKeys, credentialData, databaseSettings, smtpSettings, webhookKeys } from './tools/secrets.mjs';
+import { aiKeys, credentialData, databaseSettings, smtpSettings, webhookKey } from './tools/secrets.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const argValue = (flag, dflt) => {
@@ -41,13 +40,12 @@ async function upsertCredentials(api, data) {
   return ids;
 }
 
-/** Swaps build placeholders (credential ids, error workflow id, sender address, key hashes) for real values. */
-function resolvePlaceholders(wf, credIds, workflowIds, { smtpFrom, keyHashes }) {
+/** Swaps build placeholders (credential ids, error workflow id) for real values. */
+function resolvePlaceholders(wf, credIds, workflowIds) {
   let text = JSON.stringify(wf);
   for (const [key, id] of Object.entries(credIds)) text = text.split(placeholderId(key)).join(id);
-  for (const [name, id] of Object.entries(workflowIds)) text = text.split(`__WORKFLOW_${name}__`).join(id);
-  text = text.split(SMTP_FROM_PLACEHOLDER).join(smtpFrom).split(KEY_HASHES_PLACEHOLDER).join(keyHashes);
-  const left = text.match(/__(CREDENTIAL|WORKFLOW)_[^"]*__|__WEBHOOK_KEY_HASHES__/);
+  for (const [name, id] of Object.entries(workflowIds)) text = text.split(workflowPlaceholder(name)).join(id);
+  const left = text.match(/__(CREDENTIAL|WORKFLOW)_[^"]*__/);
   if (left) throw new Error(`Unresolved placeholder ${left[0]} in ${wf.name}`);
   return JSON.parse(text);
 }
@@ -81,20 +79,20 @@ async function main() {
   const { N8N_BASE_URL: baseUrl, N8N_API_KEY: apiKey } = requireKeys(target, ['N8N_BASE_URL', 'N8N_API_KEY'], envPath);
   const smtp = smtpSettings(join(ROOT, '.env'));
   const data = credentialData({
-    db: databaseSettings(target), smtp, ai: aiKeys(join(ROOT, '..', '.env')), n8nApiKey: apiKey, bubbleToken: target.BUBBLE_API_TOKEN,
+    db: databaseSettings(target), smtp, ai: aiKeys(join(ROOT, '..', '.env')),
+    webhookKey: webhookKey(join(ROOT, '.secrets', 'webhook.env')),
   });
-  const keyHashes = keyHashesFor(webhookKeys(join(ROOT, '.secrets', 'webhook.env')));
   const api = n8nApi({ baseUrl, apiKey });
   console.log(`deploying to ${new URL(baseUrl).host}`);
   const credIds = await upsertCredentials(api, data);
   const existing = await api.listAll('/workflows');
   const workflowIds = {};
   for (const name of WORKFLOW_SOURCES) {
-    const wf = resolvePlaceholders(await buildWorkflow(name), credIds, workflowIds, { smtpFrom: smtp.user, keyHashes });
+    const wf = resolvePlaceholders(await buildWorkflow(name), credIds, workflowIds);
     workflowIds[wf.name] = await upsertWorkflow(api, wf, existing);
   }
   await waitForWebhooks(baseUrl);
-  console.log(`done: ${Object.keys(workflowIds).length} workflows live at ${baseUrl}/webhook/royalty-summary (${keyHashes.split(',').length} webhook key(s) accepted)`);
+  console.log(`done: ${Object.keys(workflowIds).length} workflows live at ${baseUrl}/webhook/royalty-summary`);
 }
 
 main().catch((e) => {

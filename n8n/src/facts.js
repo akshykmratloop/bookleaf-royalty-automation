@@ -1,6 +1,6 @@
 import { badgeFor, BADGE_LABELS, statusTextFor } from './badge.js';
 import { formatDate, payoutDeadlineFor, parseIso, toIsoDate } from './dates.js';
-import { PAYOUT_THRESHOLD_RUPEES, KB_FACTS } from './kb.js';
+import { KB_FACTS, KB_TEXT, PAYOUT_THRESHOLD_RUPEES } from './kb.js';
 import { formatInr, toPaise } from './money.js';
 
 const rec = (book, field) => ({ kind: 'RECORD', book, field });
@@ -56,7 +56,7 @@ export function buildFacts(bundle, referenceDate) {
     money('totals.earned', 'Total royalty earned', totals.earned, derived('sum of earned over published books')),
     money('totals.paid', 'Total royalty paid', totals.paid, derived('sum of paid over published books')),
     money('totals.pending', 'Total royalty pending', totals.pending, derived('sum of pending over published books')),
-    dateFact('payout.next_date', 'Next payout cycle closes by', nextPayoutDate, derived('end of current quarter + 45 days')),
+    dateFact('payout.next_date', 'Next payout cycle closes by', nextPayoutDate, derived(`end of current quarter + ${KB_TEXT.payoutWindow}`)),
     dateFact('reference.date', 'Figures as of', referenceDate, derived('reference date')),
     count('author.book_count', 'Number of books', bundle.books.length, derived('count of books')),
     ...KB_FACTS,

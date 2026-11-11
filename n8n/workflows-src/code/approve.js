@@ -1,31 +1,20 @@
 /** Entry points for the approve-draft workflow's Code nodes. All logic lives in n8n/src/pipeline. */
-import { approvedFailedUpdate, approvedSentUpdate, claimOutcome, decideApproval, discardOutcome } from '../../src/pipeline/approve.js';
+import { decideApproval, editCheck } from '../../src/pipeline/approve.js';
 import { validateApprove } from '../../src/pipeline/approve-request.js';
-import { authFailure, isAuthorized } from '../../src/pipeline/auth.js';
-import { readConfig } from '../../src/pipeline/config.js';
 import { errorBody } from '../../src/pipeline/errors.js';
 
 const item = (json) => [{ json }];
-const rejected = (f) => item({ route: 0, http_status: f.http_status, response: errorBody(f) });
+const rejected = (f) => item({ ok: false, http_status: f.http_status, response: errorBody(f) });
 
-/** Key, server settings and body. route 0 = reject (403/400/500), 1 = load the draft. */
-export function parseApprove({ body, headers, keyHashes, env }) {
-  if (!isAuthorized(headers, keyHashes)) return rejected(authFailure());
-  const cfg = readConfig(env);
-  if (!cfg.ok) return rejected(cfg);
+/** The body, with the settings Check Settings passed on. ok: load the draft; not ok: the 400 answer. */
+export function parseApprove({ body, settings }) {
   const r = validateApprove(body);
   if (!r.ok) return rejected(r);
-  return item({ route: 1, job_id: r.value.job_id, request: r.value, config: cfg.config, params: JSON.stringify({ job_id: r.value.job_id }) });
+  return item({ ok: true, job_id: r.value.job_id, request: r.value, settings, params: JSON.stringify({ job_id: r.value.job_id }) });
 }
 
-/** routes: 0 answer now, 1 discard, 2 claim and send (approve.js APPROVE_ROUTES). */
-export const decide = ({ request, row, config }) => item(decideApproval({ request, row, config }));
+/** Check Edit: the edited text fact-checked (only BookLeaf's own addresses allowed), or null when the answer does not depend on it. */
+export const checkEdit = ({ request, row, settings }) => item({ check: editCheck({ request, row, settings }) });
 
-export const discarded = ({ row, jobId }) => item(discardOutcome({ row, jobId }));
-
-/** route 0 = nothing claimed (another click won), 1 = claimed: answer, then send. */
-export const claimed = ({ row, decided }) => item(claimOutcome({ row, decided }));
-
-export const approvedSent = ({ jobId, email }) => item({ update: approvedSentUpdate(jobId, email) });
-
-export const approvedFailed = ({ jobId, email, error }) => item({ update: approvedFailedUpdate(jobId, email, error) });
+/** `action`: answer now, discard, or claim (by this execution) and send (approve.js APPROVE_ACTIONS). */
+export const decide = ({ request, row, settings, executionId, check }) => item(decideApproval({ request, row, settings, executionId, check }));

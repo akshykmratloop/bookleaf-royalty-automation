@@ -3,8 +3,12 @@ import { validatedBundleFromPayload } from '../payload.js';
 import { readStyle } from './style.js';
 
 const ID = /^[A-Za-z0-9_-]+$/;
-/** primary_down fails only the primary AI provider (Anthropic), so the OpenAI fallback writes the email. */
-const DRILLS = Object.freeze(['ai_down', 'email_down', 'data_down', 'primary_down']);
+/**
+ * Failure drills a request may force (with the allow_drills setting). primary_down fails only the
+ * primary AI provider (Anthropic), so the OpenAI fallback writes the email; crash makes Build Context
+ * throw, so the error workflow fails the job.
+ */
+export const DRILLS = Object.freeze(['ai_down', 'email_down', 'data_down', 'primary_down', 'crash']);
 export const MAX_ATTEMPT = 20;
 
 /**
@@ -12,10 +16,10 @@ export const MAX_ATTEMPT = 20;
  * @property {string} author_id @property {string|null} log_id @property {string|null} batch_id
  * @property {string} requested_by @property {'single'|'bulk'} mode @property {string|null} reference_date
  * @property {string|null} demo_inbox @property {number} attempt
- * @property {{ai_down:boolean, email_down:boolean, data_down:boolean, primary_down:boolean}} drills
+ * @property {{ai_down:boolean, email_down:boolean, data_down:boolean, primary_down:boolean, crash:boolean}} drills
  * @property {'send'|'draft'} delivery @property {'warm'|'formal'|'concise'} tone
  * @property {'short'|'standard'|'detailed'} length @property {string} note @property {string} sign_off
- * @property {import('../types.js').AuthorBundle|null} bundle null when DATA_SOURCE=bubble
+ * @property {import('../types.js').AuthorBundle} bundle the author and books sent with the request
  */
 
 const optional = (v) => v === undefined || v === null || v === '';
@@ -54,26 +58,26 @@ function readHeader(ctx, body) {
   };
 }
 
+/** The author and books sent with the request. @returns {import('../types.js').AuthorBundle|undefined} undefined after an error */
+function readBundle(ctx, body) {
+  if (!isObject(body.author)) return ctx.fail('author', 'REQUIRED', 'is required: n8n reads the author data from the request');
+  if (!Array.isArray(body.books)) return ctx.fail('books', 'REQUIRED', 'must be a list of books');
+  const r = validatedBundleFromPayload(body);
+  if (r.ok) return r.value;
+  ctx.errors.push(...r.errors);
+  return undefined;
+}
+
 /**
- * Validates the royalty-summary webhook body (contract: n8n/PAYLOAD.md).
- * In payload mode the author and books are required and validated; in bubble mode they are ignored.
- * @param {unknown} body @param {{dataSource:'payload'|'bubble'}} opts
+ * Validates the royalty-summary webhook body (contract: n8n/PAYLOAD.md), the author and books included.
+ * @param {unknown} body
  * @returns {{ok:true, value:EnqueueRequest}|{ok:false, errors:import('../types.js').ValidationError[]}}
  */
-export function validateRequest(body, { dataSource }) {
+export function validateRequest(body) {
   if (!isObject(body)) return { ok: false, errors: [{ path: '', code: 'TYPE', message: 'body must be a JSON object' }] };
   const ctx = makeCtx();
   const header = readHeader(ctx, body);
-  let bundle = null;
-  if (dataSource === 'payload') {
-    if (!isObject(body.author)) ctx.fail('author', 'REQUIRED', 'is required when n8n reads data from the payload');
-    else if (!Array.isArray(body.books)) ctx.fail('books', 'REQUIRED', 'must be a list of books');
-    else {
-      const r = validatedBundleFromPayload(body);
-      if (r.ok) bundle = r.value;
-      else ctx.errors.push(...r.errors);
-    }
-  }
+  const bundle = readBundle(ctx, body);
   if (ctx.errors.length) return { ok: false, errors: ctx.errors };
   return { ok: true, value: { ...header, bundle } };
 }

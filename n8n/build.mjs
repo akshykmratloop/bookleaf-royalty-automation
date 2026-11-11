@@ -12,13 +12,19 @@ import { build } from 'esbuild';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { sha256Hex } from './src/pipeline/sha256.js';
-import { assertEdges, connectionsFrom, layout } from './workflows-src/lib/graph.mjs';
+import { canvas } from './workflows-src/lib/canvas.mjs';
+import { assertEdges, connectionsFrom, resolveEdges } from './workflows-src/lib/graph.mjs';
+import { workflowPlaceholder } from './workflows-src/lib/flow-nodes.mjs';
+import { stableUuid } from './workflows-src/lib/nodes.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, 'workflows');
-const ENTRY_FILES = ['code/summary.js', 'code/status.js', 'code/approve.js'].map((f) => join(HERE, 'workflows-src', f));
-export const WORKFLOW_SOURCES = ['error-handler', 'royalty-summary', 'job-status', 'sweeper', 'approve-draft'];
+const ENTRY_FILES = ['code/settings.js', 'code/summary.js', 'code/status.js', 'code/approve.js', 'code/handler.js'].map((f) => join(HERE, 'workflows-src', f));
+/**
+ * Build and deploy order. A workflow another one names (error workflow, sub-workflow) comes first, so
+ * deploy.mjs knows its id, and it is published before anything can call it.
+ */
+export const WORKFLOW_SOURCES = ['error-handler', 'deliver-email', 'write-draft', 'royalty-summary', 'job-status', 'sweeper', 'approve-draft'];
 export const SETTINGS = Object.freeze({
   executionOrder: 'v1', saveDataErrorExecution: 'all', saveDataSuccessExecution: 'all',
   saveManualExecutions: true, callerPolicy: 'workflowsFromSameOwner',
@@ -42,6 +48,8 @@ async function bundle(entry) {
     stdin: { contents: `import { ${entry} as main } from ${JSON.stringify(file)};\n__bookleaf.main = main;`, resolveDir: HERE, loader: 'js' },
     bundle: true, write: false, format: 'iife', platform: 'neutral',
     target: 'es2022', legalComments: 'none', charset: 'utf8', logLevel: 'silent',
+    // `const X = Object.freeze({...})` that a node never reads is dropped (n8n/src never freezes as a bare statement).
+    pure: ['Object.freeze'],
   });
   const text = r.outputFiles[0].text;
   // A module namespace object (`import * as x` used dynamically) relies on getters that come out
@@ -64,22 +72,20 @@ async function jsCodeFor(n) {
   ].join('\n');
 }
 
-const nodeId = (wf, name) => {
-  const h = sha256Hex(`${wf}/${name}`);
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
-};
+const nodeId = (wf, name) => stableUuid(`${wf}/${name}`);
 
 export async function buildWorkflow(srcName) {
   const src = (await import(pathToFileURL(join(HERE, 'workflows-src', `${srcName}.mjs`)).href)).default;
   assertEdges(src.nodes, src.edges);
+  const edges = resolveEdges(src.nodes, src.edges);
   const nodes = [];
-  for (const n of layout(src.nodes, src.edges)) {
+  for (const n of canvas(src)) {
     const { entry, body, ...rest } = n;
     const parameters = entry ? { ...rest.parameters, jsCode: await jsCodeFor(n) } : rest.parameters;
     nodes.push({ id: nodeId(srcName, n.name), ...rest, parameters });
   }
-  const settings = src.errorWorkflow ? { ...SETTINGS, errorWorkflow: `__WORKFLOW_${src.errorWorkflow}__` } : { ...SETTINGS };
-  return { name: src.name, nodes, connections: connectionsFrom(src.edges), settings };
+  const settings = { ...SETTINGS, ...src.settings, ...(src.errorWorkflow ? { errorWorkflow: workflowPlaceholder(src.errorWorkflow) } : {}) };
+  return { name: src.name, nodes, connections: connectionsFrom(edges), settings };
 }
 
 async function main() {

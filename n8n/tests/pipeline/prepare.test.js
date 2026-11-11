@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { insertParams, prepareJob } from '../../src/pipeline/prepare.js';
-import { readConfig, resolveReferenceDate } from '../../src/pipeline/config.js';
+import { enqueueParams, prepareJob, rateLimitedResponse } from '../../src/pipeline/prepare.js';
+import { resolveReferenceDate } from '../../src/dates.js';
 import { recipientFor } from '../../src/pipeline/recipient.js';
-import { IDEMPOTENCY_WINDOW_MS, UUID } from '../../src/pipeline/ids.js';
-import { ENV, fixedRandom, NOW } from './env.js';
+import { NOW, SETTINGS } from './settings-fixture.js';
 import { payloadFor } from './fixtures.js';
 
-const prep = (body, env = ENV, now = NOW) => prepareJob(body, env, now, fixedRandom);
+const prep = (body, settings = SETTINGS, now = NOW) => prepareJob(body, settings, now);
+/** What enqueue_royalty_job hashes (SHA-256 of its canonical jsonb text) into the job's fingerprint. */
+const fingerprintOf = (body, settings, now) => JSON.parse(enqueueParams(prep(body, settings, now).job, '1')).fingerprint_of;
+/** The fields enqueue_royalty_job reads (infra/db/migrations/03-settings-enqueue.sql). */
+const ENQUEUE_FIELDS = ['author_code', 'author_id', 'batch_id', 'delivery', 'drills', 'execution_id', 'fingerprint_of', 'length',
+  'log_id', 'mode', 'note', 'recipient', 'requested_by', 'sign_off', 'tone'];
+const FINGERPRINT_FIELDS = ['attempt', 'author_id', 'bundle', 'delivery', 'drills', 'length', 'note', 'recipient', 'reference_date', 'sign_off', 'tone'];
 
 describe('prepareJob', () => {
   it('accepts a valid payload and builds the job', () => {
@@ -15,32 +20,35 @@ describe('prepareJob', () => {
     expect(r.job).toMatchObject({
       author_id: 'bubble_auth002', author_code: 'AUTH002', log_id: 'log_auth002', mode: 'single',
       reference_date: '2025-12-31', recipient: 'demo@inbox.test', attempt: 1,
-      drills: { ai_down: false, email_down: false, data_down: false, primary_down: false },
+      drills: { ai_down: false, email_down: false, data_down: false, primary_down: false, crash: false },
       delivery: 'send', tone: 'warm', length: 'standard', note: '', sign_off: '',
     });
-    expect(r.job.job_id).toMatch(UUID);
+    expect(r.job, 'enqueue_royalty_job makes the id').not.toHaveProperty('job_id');
+    expect(r.job, 'enqueue_royalty_job makes the fingerprint').not.toHaveProperty('fingerprint');
     expect(r.job.bundle.books).toHaveLength(2);
+    expect(r.job.settings).toEqual(SETTINGS);
   });
-  it('a double click (same data, same 10-minute window) gives the same idempotency key', () => {
-    const a = prep(payloadFor('AUTH002'));
-    const b = prep(payloadFor('AUTH002', { log_id: 'another_log' }), ENV, NOW + 60_000);
-    expect(b.job.idem_key).toBe(a.job.idem_key);
+  it('a double click (same data) gives the same fingerprint data, whatever the time or log id', () => {
+    const a = fingerprintOf(payloadFor('AUTH002'));
+    expect(Object.keys(a).sort()).toEqual(FINGERPRINT_FIELDS);
+    expect(fingerprintOf(payloadFor('AUTH002', { log_id: 'another_log' }), SETTINGS, NOW + 3_600_000)).toEqual(a);
+    expect(prep(payloadFor('AUTH002')).job).not.toHaveProperty('idem_key');
   });
-  it('changed data, a new attempt, a drill or the next window give a new key', () => {
-    const base = prep(payloadFor('AUTH002')).job.idem_key;
+  it('changed data, a new attempt or a drill give new fingerprint data', () => {
+    const base = fingerprintOf(payloadFor('AUTH002'));
     const changed = payloadFor('AUTH002');
     changed.books[0].paid += 1;
-    expect(prep(changed).job.idem_key).not.toBe(base);
-    expect(prep(payloadFor('AUTH002', { attempt: 2 })).job.idem_key).not.toBe(base);
-    expect(prep(payloadFor('AUTH002', { drills: { ai_down: true } })).job.idem_key).not.toBe(base);
-    expect(prep(payloadFor('AUTH002'), ENV, NOW + IDEMPOTENCY_WINDOW_MS).job.idem_key).not.toBe(base);
+    expect(fingerprintOf(changed)).not.toEqual(base);
+    expect(fingerprintOf(payloadFor('AUTH002', { attempt: 2 }))).not.toEqual(base);
+    expect(fingerprintOf(payloadFor('AUTH002', { drills: { ai_down: true } }))).not.toEqual(base);
+    expect(fingerprintOf(payloadFor('AUTH003'))).not.toEqual(base);
   });
-  it('delivery, tone, length, note and sign-off each change the idempotency key', () => {
-    const base = prep(payloadFor('AUTH002')).job.idem_key;
+  it('delivery, tone, length, note and sign-off each change the fingerprint data', () => {
+    const base = fingerprintOf(payloadFor('AUTH002'));
     for (const over of [{ delivery: 'draft' }, { tone: 'formal' }, { length: 'short' }, { note: 'Be brief.' }, { sign_off: 'Priya' }]) {
-      expect(prep(payloadFor('AUTH002', over)).job.idem_key, JSON.stringify(over)).not.toBe(base);
+      expect(fingerprintOf(payloadFor('AUTH002', over)), JSON.stringify(over)).not.toEqual(base);
     }
-    expect(prep(payloadFor('AUTH002', { tone: 'warm', length: 'standard', delivery: 'send' })).job.idem_key).toBe(base);
+    expect(fingerprintOf(payloadFor('AUTH002', { tone: 'warm', length: 'standard', delivery: 'send' }))).toEqual(base);
   });
   it('carries the writing options on the job and rejects unknown values with 400', () => {
     const r = prep(payloadFor('AUTH002', { delivery: 'draft', tone: 'concise', length: 'detailed', note: ' Thank them. ', sign_off: 'Anita Rao' }));
@@ -49,9 +57,14 @@ describe('prepareJob', () => {
     expect(bad).toMatchObject({ ok: false, code: 'VALIDATION', http_status: 400 });
     expect(bad.fields.map((f) => f.path)).toEqual(['delivery', 'tone', 'length']);
   });
-  it('accepts the primary_down drill (only with ALLOW_DRILLS)', () => {
+  it('accepts the primary_down drill (only with the allow_drills setting)', () => {
     expect(prep(payloadFor('AUTH002', { drills: { primary_down: true } })).job.drills.primary_down).toBe(true);
-    const off = prep(payloadFor('AUTH002', { drills: { primary_down: true } }), { ...ENV, ALLOW_DRILLS: 'false' });
+    const off = prep(payloadFor('AUTH002', { drills: { primary_down: true } }), { ...SETTINGS, allow_drills: false });
+    expect(off).toMatchObject({ ok: false, fields: [{ path: 'drills', code: 'DISABLED' }] });
+  });
+  it('accepts the crash drill (only with the allow_drills setting)', () => {
+    expect(prep(payloadFor('AUTH002', { drills: { crash: true } })).job.drills.crash).toBe(true);
+    const off = prep(payloadFor('AUTH002', { drills: { crash: true } }), { ...SETTINGS, allow_drills: false });
     expect(off).toMatchObject({ ok: false, fields: [{ path: 'drills', code: 'DISABLED' }] });
   });
   it('returns field errors for a bad payload (VALIDATION, HTTP 400)', () => {
@@ -60,61 +73,95 @@ describe('prepareJob', () => {
     expect(r.fields.map((f) => f.path)).toEqual(['author_id', 'mode', 'reference_date']);
   });
   it('rejects a non-object body', () => expect(prep('hello')).toMatchObject({ ok: false, code: 'VALIDATION' }));
-  it('requires author and books in payload mode, not in bubble mode', () => {
+  it('always requires the author and books in the request (n8n never reads Bubble data itself)', () => {
     const { author, books, ...bare } = payloadFor('AUTH001');
     expect(prep(bare).fields.map((f) => f.path)).toEqual(['author']);
-    const bubbleEnv = { ...ENV, DATA_SOURCE: 'bubble', BUBBLE_APP_BASE: 'https://x.bubbleapps.io/version-test' };
-    expect(prep(bare, bubbleEnv)).toMatchObject({ ok: true, job: { bundle: null, author_code: null } });
+    expect(prep({ ...bare, author }).fields.map((f) => f.path)).toEqual(['books']);
   });
   it('rejects drills when the server has them off', () => {
-    const r = prep(payloadFor('AUTH001', { drills: { email_down: true } }), { ...ENV, ALLOW_DRILLS: 'false' });
-    expect(r).toMatchObject({ ok: false, code: 'VALIDATION', fields: [{ path: 'drills', code: 'DISABLED' }] });
-    expect(prep(payloadFor('AUTH001'), { ...ENV, ALLOW_DRILLS: 'false' }).ok).toBe(true);
+    const r = prep(payloadFor('AUTH001', { drills: { email_down: true } }), { ...SETTINGS, allow_drills: false });
+    expect(r).toMatchObject({ ok: false, code: 'VALIDATION', fields: [{ path: 'drills', code: 'DISABLED', message: expect.stringContaining('allow_drills') }] });
+    expect(prep(payloadFor('AUTH001'), { ...SETTINGS, allow_drills: false }).ok).toBe(true);
   });
   it('rejects unknown drills and non-boolean values', () => {
     const r = prep(payloadFor('AUTH001', { drills: { ai_down: 'yes', fire: true } }));
     expect(r.fields.map((f) => f.path)).toEqual(['drills', 'drills.ai_down']);
   });
   it('fails NO_RECIPIENT when neither the request nor the server has a demo inbox', () => {
-    const r = prep(payloadFor('AUTH001'), { ...ENV, DEFAULT_DEMO_INBOX: '' });
+    const r = prep(payloadFor('AUTH001'), { ...SETTINGS, default_demo_inbox: '' });
     expect(r).toMatchObject({ ok: false, code: 'NO_RECIPIENT', http_status: 422 });
+    expect(r.message).toContain('default_demo_inbox');
   });
-  it('uses the request demo inbox over the server default', () => {
+  it('uses the request demo inbox over the server default when it is an allowed inbox', () => {
     expect(prep(payloadFor('AUTH001', { demo_inbox: 'qa@inbox.test' })).job.recipient).toBe('qa@inbox.test');
+  });
+  it('refuses a request demo inbox that is not allowed (422 RECIPIENT_NOT_ALLOWED, no job)', () => {
+    const r = prep(payloadFor('AUTH001', { demo_inbox: 'victim@elsewhere.test' }));
+    expect(r).toMatchObject({ ok: false, code: 'RECIPIENT_NOT_ALLOWED', http_status: 422, retryable: false });
+    expect(r.job).toBeUndefined();
   });
   it('validates attempt bounds', () => {
     expect(prep(payloadFor('AUTH001', { attempt: 0 })).fields[0].path).toBe('attempt');
     expect(prep(payloadFor('AUTH001', { attempt: '3' })).job.attempt).toBe(3);
   });
-  it('fails INTERNAL on invalid server settings', () => {
-    expect(prep(payloadFor('AUTH001'), { ...ENV, MAX_SENDS_PER_HOUR: 'lots' })).toMatchObject({ ok: false, code: 'INTERNAL' });
+  it('uses the reference_date_default setting when the request gives no date', () => {
+    expect(prep(payloadFor('AUTH001', { reference_date: '' }), { ...SETTINGS, reference_date_default: '2025-09-30' }).job.reference_date).toBe('2025-09-30');
   });
-  it('insertParams is one JSON value with the rate limit and callback status', () => {
-    const p = JSON.parse(insertParams(prep(payloadFor('AUTH001')).job));
-    expect(p).toMatchObject({ author_id: 'bubble_auth001', max_sends: 60, callback_status: 'NOT_NEEDED', mode: 'single' });
-    expect(p).toMatchObject({ delivery: 'send', tone: 'warm', length: 'standard', note: '', sign_off: '', recipient: 'demo@inbox.test' });
-    expect(p.drills).toEqual({ ai_down: false, email_down: false, data_down: false, primary_down: false });
+  it('enqueueParams is the one JSON value enqueue_royalty_job takes, with this execution\'s id', () => {
+    const job = prep(payloadFor('AUTH001')).job;
+    const p = JSON.parse(enqueueParams(job, '4711'));
+    expect(Object.keys(p).sort()).toEqual(ENQUEUE_FIELDS);
+    expect(p).toMatchObject({
+      execution_id: '4711', author_id: 'bubble_auth001', author_code: 'AUTH001',
+      mode: 'single', delivery: 'send', tone: 'warm', length: 'standard', note: '', sign_off: '', recipient: 'demo@inbox.test',
+    });
+    expect(p.drills).toEqual({ ai_down: false, email_down: false, data_down: false, primary_down: false, crash: false });
+    expect(p.fingerprint_of).toMatchObject({ author_id: 'bubble_auth001', reference_date: '2025-12-31', recipient: 'demo@inbox.test', attempt: 1 });
+    expect(p.fingerprint_of.bundle).toEqual(job.bundle);
+  });
+  it('enqueueParams refuses a missing execution id (the function would raise)', () => {
+    expect(() => enqueueParams(prep(payloadFor('AUTH001')).job, '')).toThrow(TypeError);
+  });
+  it('the 429 answer names the max_sends_per_hour limit', () => {
+    expect(rateLimitedResponse({ ...SETTINGS, max_sends_per_hour: 7 })).toEqual({
+      error: { code: 'RATE_LIMITED', message: 'Too many emails were sent in the last hour. The limit is 7 per hour; try again later.', retryable: true },
+    });
   });
 });
 
 describe('recipientFor', () => {
-  const config = { defaultDemoInbox: 'demo@inbox.test' };
-  it('never uses the author dataset address', () => {
-    const r = recipientFor({ demo_inbox: 'priya.sharma@email.com' }, config, 'Priya.Sharma@email.com');
+  it('never uses the author dataset address (here it is not an allowed inbox either)', () => {
+    const r = recipientFor({ demo_inbox: 'priya.sharma@email.com' }, SETTINGS, 'Priya.Sharma@email.com');
+    expect(r).toMatchObject({ ok: false, code: 'RECIPIENT_NOT_ALLOWED' });
+  });
+  it('falls back to the server inbox', () => expect(recipientFor({ demo_inbox: null }, SETTINGS, 'a@b.co').recipient).toBe('demo@inbox.test'));
+  it('accepts the default inbox or an allowed one, ignoring case and spaces, and sends to the configured address', () => {
+    const settings = { ...SETTINGS, default_demo_inbox: 'Demo@Inbox.test', allowed_demo_inboxes: [' QA@inbox.test ', 'ops2@inbox.test'] };
+    expect(recipientFor({ demo_inbox: 'demo@INBOX.test' }, settings, null)).toEqual({ ok: true, recipient: 'Demo@Inbox.test' });
+    expect(recipientFor({ demo_inbox: ' qa@inbox.TEST' }, settings, null)).toEqual({ ok: true, recipient: 'QA@inbox.test' });
+    expect(recipientFor({ demo_inbox: 'ops2@inbox.test' }, settings, null)).toEqual({ ok: true, recipient: 'ops2@inbox.test' });
+  });
+  it('refuses any other address instead of redirecting it, naming the settings but no address', () => {
+    for (const settings of [SETTINGS, { ...SETTINGS, allowed_demo_inboxes: [] }, { ...SETTINGS, default_demo_inbox: '' }]) {
+      const r = recipientFor({ demo_inbox: 'victim@elsewhere.test' }, settings, null);
+      expect(r).toMatchObject({ ok: false, code: 'RECIPIENT_NOT_ALLOWED', http_status: 422, retryable: false });
+      expect(r.message).toContain('allowed_demo_inboxes');
+      expect(r.message).toContain('default_demo_inbox');
+      for (const address of ['victim@elsewhere.test', 'demo@inbox.test', 'qa@inbox.test']) expect(r.message).not.toContain(address);
+    }
+  });
+  it('no inbox anywhere is still NO_RECIPIENT', () => {
+    const r = recipientFor({ demo_inbox: null }, { ...SETTINGS, default_demo_inbox: '', allowed_demo_inboxes: ['qa@inbox.test'] }, null);
     expect(r).toMatchObject({ ok: false, code: 'NO_RECIPIENT' });
   });
-  it('falls back to the server inbox', () => expect(recipientFor({ demo_inbox: null }, config, 'a@b.co').recipient).toBe('demo@inbox.test'));
+  it('the author address guard applies even when that address is allowed', () => {
+    const settings = { ...SETTINGS, default_demo_inbox: 'priya.sharma@email.com', allowed_demo_inboxes: ['priya.sharma@email.com'] };
+    expect(recipientFor({ demo_inbox: 'priya.sharma@email.com' }, settings, 'Priya.Sharma@email.com')).toMatchObject({ ok: false, code: 'NO_RECIPIENT' });
+    expect(recipientFor({ demo_inbox: null }, settings, 'Priya.Sharma@email.com')).toMatchObject({ ok: false, code: 'NO_RECIPIENT' });
+  });
 });
 
-describe('readConfig', () => {
-  it('applies defaults', () => {
-    const r = readConfig({ EMAIL_FROM: 's@b.co' });
-    expect(r.config).toMatchObject({ dataSource: 'payload', callbackMode: 'pull', maxSendsPerHour: 60, allowDrills: false, effort: 'medium' });
-  });
-  it('requires an https Bubble URL for bubble data or push callbacks', () => {
-    expect(readConfig({ ...ENV, CALLBACK_MODE: 'push' })).toMatchObject({ ok: false, code: 'INTERNAL' });
-    expect(readConfig({ ...ENV, CALLBACK_MODE: 'push', BUBBLE_APP_BASE: 'https://a.bubbleapps.io' }).ok).toBe(true);
-  });
+describe('resolveReferenceDate', () => {
   it('resolves "today" in India time', () => {
     expect(resolveReferenceDate('today', Date.UTC(2026, 0, 31, 20, 0))).toBe('2026-02-01');
     expect(resolveReferenceDate('2025-12-31', NOW)).toBe('2025-12-31');

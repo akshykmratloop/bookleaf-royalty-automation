@@ -17,9 +17,12 @@ Terraform in `terraform/` builds one small AWS host for the n8n workflows
 On the box (`/opt/n8n`, started by `n8n-stack.service` at every boot):
 
 - **Caddy** — the only container with published ports; gets the Let's Encrypt certificate itself.
-- **n8n** — pinned image (`var.n8n_image`), Postgres-backed, `$env` access enabled for workflow config.
+- **n8n** — pinned image (`var.n8n_image`), Postgres-backed. The workflows read their settings from the
+  `bookleaf_settings` table (see `n8n/PAYLOAD.md`, Server settings); `$env` stays blocked (n8n's default).
 - **Postgres 16** — DB `n8n` for n8n itself; `db/init/01-bookleaf.sql` creates the `bookleaf`
-  DB and the `royalty_jobs` table on the first start.
+  DB with the `royalty_jobs` ledger and the `bookleaf_settings` table on the first start. An
+  existing database is upgraded with `db/migrations/*.sql` (additive, re-runnable;
+  `scripts/ops/migrate-prod.sh` backs production up before applying one).
 
 Secrets never travel in user data: `n8n-load-env` reads them from SSM before each start and
 writes `/opt/n8n/.env` and `/opt/n8n/app.env` (mode 600).
@@ -41,13 +44,16 @@ terraform destroy                    # removes everything, including the paramet
 State is **local** (`terraform.tfstate`, git-ignored — it contains the generated secrets).
 Editing the bootstrap or a newer AMI never replaces the running box (`ignore_changes`).
 
-## Read the secrets and change app config
+## Read the secrets and change settings
 
 ```bash
 aws ssm get-parameter --profile loopmethods --region ap-south-1 \
   --name /bookleaf-a2/postgres/password --with-decryption --query Parameter.Value --output text
 
-# app config (ALLOW_DRILLS, EMAIL_PROVIDER, DEFAULT_DEMO_INBOX, ...) is dotenv lines in one parameter:
+# Workflow settings live in the bookleaf_settings table. Write the per-environment ones with
+# n8n/tools/settings-sql.mjs into a temp file outside the repo, apply it with
+# scripts/ops/migrate-prod.sh <that file> (backs up first), then delete the file.
+# n8n/app_env below is only read by the older $env workflows (kept for a rollback):
 aws ssm get-parameter --profile loopmethods --region ap-south-1 \
   --name /bookleaf-a2/n8n/app_env --with-decryption --query Parameter.Value --output text > app.env
 # edit app.env, then:

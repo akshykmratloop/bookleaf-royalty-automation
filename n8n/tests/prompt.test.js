@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { KB_FACTS } from '../src/kb.js';
 import { buildPrompt, feedbackMessage, PROMPT_VERSION, situationsFor, stageOf, SYSTEM_PROMPT } from '../src/prompt.js';
 import { bundleOf, factsOf, SAMPLE } from './helpers-data.js';
 
@@ -16,6 +18,13 @@ describe('system prompt', () => {
     for (const s of ['empathetic', '₹1,000', 'within 45 days', '48 hours', 'character for character',
       'never invent a reason', 'refunds', 'WRITING STYLE', 'ADMIN STYLE NOTE', 'Indian English'])
       expect(SYSTEM_PROMPT).toContain(s);
+  });
+  it('takes every policy figure from kb.js instead of repeating it', () => {
+    for (const f of KB_FACTS) expect(SYSTEM_PROMPT, f.id).toContain(f.display);
+    for (const file of ['prompt-system.js', 'prompt.js', 'badge.js', 'facts.js', 'dates.js']) {
+      const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
+      for (const f of KB_FACTS) expect(source, `${file} repeats ${f.display} (${f.id})`).not.toContain(f.display);
+    }
   });
   it('leaves the signature and the word count to data and the user message', () => {
     expect(SYSTEM_PROMPT).not.toContain('150 to 350 words');

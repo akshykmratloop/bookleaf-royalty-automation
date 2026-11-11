@@ -4,6 +4,9 @@ const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/g;
 const EMAIL = /^[^\s@<>()[\],;:"\\]+@[^\s@<>()[\],;:"\\]+\.[^\s@<>()[\],;:"\.]+$/;
 export const MAX_AMOUNT = 1e9;
 
+/** @param {unknown} s @returns {boolean} a plain email address (no display name) */
+export const isEmail = (s) => typeof s === 'string' && EMAIL.test(s);
+
 /** @param {string} s @returns {string} control chars removed, NFC normalised, trimmed */
 export const cleanString = (s) => s.replace(CONTROL_CHARS, '').normalize('NFC').trim();
 

@@ -1,4 +1,5 @@
 import { formatDate } from './dates.js';
+import { KB_TEXT } from './kb.js';
 import { formatInr } from './money.js';
 import { PROMPT_VERSION, SYSTEM_PROMPT } from './prompt-system.js';
 import { styleLines } from './prompt-style.js';
@@ -28,7 +29,7 @@ export function situationsFor(facts) {
   if (published.length === 0) out.push({ key: 'NO_SALES_YET', text: 'No published books with royalties yet.' });
   if (red.length && !belowThreshold) out.push({ key: 'OVERDUE', text: `Payout later than our usual cycle for: ${quoted(red.map((b) => b.title))}.` });
   if (belowThreshold) {
-    out.push({ key: 'BELOW_THRESHOLD', text: `Total pending ${formatInr(facts.totals.pending)} is below the ₹1,000 minimum payout, so it rolls over to the next quarter.` });
+    out.push({ key: 'BELOW_THRESHOLD', text: `Total pending ${formatInr(facts.totals.pending)} is below the ${KB_TEXT.threshold} minimum payout, so it rolls over to the next quarter.` });
   }
   if (yellow.length && !belowThreshold) out.push({ key: 'PENDING', text: `Pending royalty due in the next payout cycle for: ${quoted(yellow.map((b) => b.title))}.` });
   if (facts.allPaid) out.push({ key: 'ALL_PAID', text: 'Every rupee earned so far has been paid; nothing is pending.' });

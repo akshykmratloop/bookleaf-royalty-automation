@@ -4,14 +4,21 @@ import { randomBytes } from 'node:crypto';
 
 /**
  * Minimal KEY=VALUE env-file reader. Values are returned, never printed.
- * Supports blank lines, # comments (whole-line and inline after unquoted values), optional `export `,
- * and single/double quotes.
  * @param {string} path @returns {Record<string, string>}
  */
 export function readEnvFile(path) {
   if (!existsSync(path)) throw new Error(`Env file not found: ${path}`);
+  return parseEnvText(readFileSync(path, 'utf8'));
+}
+
+/**
+ * Supports blank lines, # comments (whole-line and inline after unquoted values), optional `export `,
+ * and single/double quotes. Lines that are not KEY=value are skipped.
+ * @param {string} text @returns {Record<string, string>}
+ */
+export function parseEnvText(text) {
   const out = {};
-  for (const raw of readFileSync(path, 'utf8').split(/\r?\n/)) {
+  for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line || line.startsWith('#')) continue;
     const m = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);

@@ -19,23 +19,3 @@ export function parseStatusQuery(query) {
   const includeHtml = String(query?.include ?? '').split(',').map((s) => s.trim()).includes('html');
   return { ok: true, ids, includeHtml, params: JSON.stringify({ ids, include_html: includeHtml }) };
 }
-
-const iso = (v) => (v instanceof Date ? v.toISOString() : v ?? null);
-
-/**
- * @param {Object[]} rows SELECT_JOBS rows (an empty {} row when nothing matched)
- * @param {string[]} ids requested ids, in order @param {boolean} includeHtml
- * @returns {{jobs:Object[], missing:string[]}}
- */
-export function shapeJobs(rows, ids, includeHtml) {
-  const byId = new Map(rows.filter((r) => r && r.job_id).map((r) => [r.job_id, r]));
-  const jobs = ids.filter((id) => byId.has(id)).map((id) => {
-    const { html, text_body: textBody, ...r } = byId.get(id);
-    const out = {
-      ...r, created_at: iso(r.created_at), updated_at: iso(r.updated_at), completed_at: iso(r.completed_at),
-      ...('stage_at' in r ? { stage_at: iso(r.stage_at) } : {}), ...('drafted_at' in r ? { drafted_at: iso(r.drafted_at) } : {}),
-    };
-    return includeHtml ? { ...out, html: html ?? null, text_body: textBody ?? null } : out;
-  });
-  return { jobs, missing: ids.filter((id) => !byId.has(id)) };
-}

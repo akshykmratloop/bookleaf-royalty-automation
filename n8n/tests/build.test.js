@@ -1,28 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { buildWorkflow, WORKFLOW_SOURCES } from '../build.mjs';
-import { CREDENTIALS, placeholderId } from '../workflows-src/lib/credentials.mjs';
-import { KEY_HASHES_PLACEHOLDER } from '../workflows-src/lib/nodes.mjs';
-import { KEY_HEADER } from '../src/pipeline/auth.js';
-import { sha256Hex } from '../src/pipeline/sha256.js';
+import { WORKFLOW_SOURCES } from '../build.mjs';
+import { CREDENTIALS, credentialRef, placeholderId } from '../workflows-src/lib/credentials.mjs';
+import { LOAD_SETTINGS } from '../src/pipeline/sql.js';
+import { TUNING } from '../src/pipeline/tuning.js';
 import { payloadFor } from '../../tests/fixtures/payloads.js';
-import { ENV } from './pipeline/env.js';
+import { SETTINGS } from './pipeline/settings-fixture.js';
+import { built, nodeOf, ofType, outputsOf, runCode } from './built.js';
 
-const built = Object.fromEntries(await Promise.all(WORKFLOW_SOURCES.map(async (n) => [n, await buildWorkflow(n)])));
-const nodeOf = (wf, name) => built[wf].nodes.find((n) => n.name === name);
-
-/** Test-only key; deploy.mjs writes the hash of the real key(s) in place of the placeholder. */
-const TEST_KEY = 'build-test-key-cccccccccccccccccccccccc';
-const AUTH = { [KEY_HEADER]: TEST_KEY };
-
-/** Runs a built Code node the way n8n does: user code inside a function, n8n globals as parameters. */
-function runCode(node, globals) {
-  const names = Object.keys(globals);
-  const code = node.parameters.jsCode.split(KEY_HASHES_PLACEHOLDER).join(sha256Hex(TEST_KEY));
-  // eslint-disable-next-line no-new-func
-  return new Function(...names, code)(...names.map((k) => globals[k]));
-}
-const webhooksOf = (wf) => built[wf].nodes.filter((n) => n.type === 'n8n-nodes-base.webhook');
+const webhooksOf = (wf) => ofType(wf, 'webhook');
 
 describe('built workflows', () => {
   it('are committed and up to date', () => {
@@ -56,41 +42,163 @@ describe('built workflows', () => {
       }
     }
   });
+  it('royalty-summary reads the author data from the request only: no Bubble Data API, no push callback', () => {
+    const names = built['royalty-summary'].nodes.map((n) => n.name);
+    expect(names.filter((n) => /Bubble|Callback|Data Source|After Update/.test(n))).toEqual([]);
+    expect(Object.keys(CREDENTIALS)).not.toContain('bubble');
+    expect(built['royalty-summary'].connections['Mark Processing'].main[0].map((c) => c.node)).toEqual(['Build Context']);
+  });
+  it('no workflow reads $env: the server settings come from bookleaf_settings', () => {
+    for (const [name, wf] of Object.entries(built)) expect(JSON.stringify(wf), name).not.toMatch(/\$env\b/);
+  });
+  it('royalty-summary and approve-draft load the settings right after the webhook; job-status loads none', () => {
+    for (const [wf, hook] of [['royalty-summary', 'Royalty Summary Webhook'], ['approve-draft', 'Approve Webhook']]) {
+      expect(built[wf].connections[hook].main[0].map((c) => c.node), wf).toEqual(['Load Settings']);
+      expect(nodeOf(wf, 'Load Settings').parameters.query, wf).toBe(LOAD_SETTINGS);
+    }
+    expect(JSON.stringify(built['job-status'])).not.toContain('bookleaf_settings');
+  });
+  it('the two AI calls live only in Write Draft, and no HTTP node anywhere retries on its own', () => {
+    const http = WORKFLOW_SOURCES.flatMap((wf) => ofType(wf, 'httpRequest').map((n) => `${wf}/${n.name}`));
+    expect(http).toEqual(['write-draft/Call Anthropic', 'write-draft/Call OpenAI (fallback)']);
+    for (const wf of WORKFLOW_SOURCES) for (const n of ofType(wf, 'httpRequest')) expect(n.retryOnFail, n.name).toBeUndefined();
+    expect(TUNING.aiRetries).toBeGreaterThanOrEqual(1);
+  });
+  it('Send Email takes the From line from the settings; no deploy-time sender placeholder is left', () => {
+    const sends = WORKFLOW_SOURCES.flatMap((wf) => ofType(wf, 'emailSend')).filter((n) => n.name !== 'Send Alert');
+    expect(sends.length).toBeGreaterThan(0);
+    expect(nodeOf('error-handler', 'Send Alert').parameters.fromEmail).toBe('={{ $json.alert_from }}');
+    for (const n of sends) expect(n.parameters.fromEmail, n.name).toMatch(/^=\{\{ [^|]+\.email\.from \}\}$/);
+    expect(JSON.stringify(built)).not.toContain('__SMTP_FROM__');
+  });
+  it('the sweeper runs every minute and saves only failed runs', () => {
+    const [trigger] = ofType('sweeper', 'scheduleTrigger');
+    expect(TUNING.sweepEveryMinutes).toBe(1);
+    expect(trigger.parameters.rule.interval).toEqual([{ field: 'minutes', minutesInterval: TUNING.sweepEveryMinutes }]);
+    expect(built.sweeper.settings).toMatchObject({ saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all' });
+  });
+  it('the webhook workflows save only failed runs: a successful run would keep the request headers, X-BookLeaf-Key included', () => {
+    for (const wf of ['royalty-summary', 'approve-draft', 'job-status'])
+      expect(built[wf].settings, wf).toMatchObject({ saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all' });
+  });
+  it('the sub-workflows get no request headers, so they keep saving their successful runs (visible per call)', () => {
+    for (const wf of ['write-draft', 'deliver-email'])
+      expect(built[wf].settings, wf).toMatchObject({ saveDataSuccessExecution: 'all', saveDataErrorExecution: 'all' });
+    const calls = Object.keys(built).flatMap((wf) => ofType(wf, 'executeWorkflow').map((n) => [`${wf} / ${n.name}`, JSON.stringify(n.parameters)]));
+    expect(calls.map(([where]) => where).sort()).toEqual([
+      'approve-draft / Deliver Email', 'royalty-summary / Deliver Email', 'royalty-summary / Rewrite Draft', 'royalty-summary / Write Draft',
+    ]);
+    for (const [where, params] of calls) expect(params, where).not.toMatch(/headers|Webhook/);
+  });
+  it('job-status (polled every few seconds) saves only failed runs, so its successful polls and their headers are not kept', () => {
+    expect(built['job-status'].settings).toMatchObject({ saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all' });
+  });
+  it('job-status is Parse Query → Query Valid? (IF 2.2) → Select Jobs → Respond Jobs, or Respond Rejected: one Code node per poll', () => {
+    const wf = built['job-status'];
+    const next = (from, i = 0) => (wf.connections[from]?.main[i] ?? []).map((c) => c.node);
+    expect(nodeOf('job-status', 'Query Valid?')).toMatchObject({ type: 'n8n-nodes-base.if', typeVersion: 2.2 });
+    expect([next('Parse Query'), next('Query Valid?', 0), next('Query Valid?', 1), next('Select Jobs')])
+      .toEqual([['Query Valid?'], ['Select Jobs'], ['Respond Rejected'], ['Respond Jobs']]);
+    expect(ofType('job-status', 'code').map((n) => n.name)).toEqual(['Parse Query']);
+    const respondJobs = nodeOf('job-status', 'Respond Jobs').parameters;
+    expect([respondJobs.options.responseCode, respondJobs.responseBody]).toEqual(['={{ 200 }}', '={{ $json.response }}']);
+  });
+  it('no Switch picks its output by a computed number: every Switch is in Rules mode with named outputs', () => {
+    const switches = WORKFLOW_SOURCES.flatMap((wf) => ofType(wf, 'switch'));
+    expect(switches.length).toBeGreaterThan(0);
+    for (const n of switches) expect(n.parameters.mode, n.name).toBe('rules');
+  });
   it('royalty-summary and approve-draft name the error workflow', () => {
     expect(built['royalty-summary'].settings.errorWorkflow).toBe('__WORKFLOW_BookLeaf - Error Handler__');
     expect(built['approve-draft'].settings.errorWorkflow).toBe('__WORKFLOW_BookLeaf - Error Handler__');
   });
-  it('webhooks check the key in the workflow (current + next key), from a deploy-time hash list', () => {
-    const paths = ['royalty-summary', 'job-status', 'approve-draft'].flatMap((wf) => webhooksOf(wf).map((n) => n.parameters.path));
-    expect(paths).toEqual(['royalty-summary', 'royalty-summary/jobs', 'royalty-summary/approve']);
-    for (const wf of ['royalty-summary', 'job-status', 'approve-draft']) {
-      for (const n of webhooksOf(wf)) expect(n.parameters.authentication, wf).toBe('none');
-      expect(JSON.stringify(built[wf]), wf).toContain(KEY_HASHES_PLACEHOLDER);
+  it('the three webhooks check X-BookLeaf-Key with n8n Header Auth (credential "BookLeaf Webhook Key")', () => {
+    const hooks = ['royalty-summary', 'job-status', 'approve-draft'].flatMap(webhooksOf);
+    expect(hooks.map((n) => n.parameters.path)).toEqual(['royalty-summary', 'royalty-summary/jobs', 'royalty-summary/approve']);
+    expect(CREDENTIALS.webhookKey).toEqual({ type: 'httpHeaderAuth', name: 'BookLeaf Webhook Key' });
+    for (const n of hooks) {
+      expect(n.parameters.authentication, n.name).toBe('headerAuth');
+      expect(n.credentials, n.name).toEqual(credentialRef('webhookKey'));
+    }
+  });
+  it('no Code node checks the key any more, and no key hash is written into a workflow', () => {
+    expect(JSON.stringify(built)).not.toContain('__WEBHOOK_KEY_HASHES__');
+    for (const wf of Object.values(built)) {
+      for (const n of wf.nodes.filter((x) => x.type === 'n8n-nodes-base.code')) {
+        expect(n.parameters.jsCode, n.name).not.toMatch(/x-bookleaf-key|keyHashes|FORBIDDEN/i);
+      }
     }
   });
 });
 
 describe('bundled Code nodes run standalone', () => {
-  it('Prepare Job accepts a valid payload and rejects a bad one or a bad key', () => {
-    const node = nodeOf('royalty-summary', 'Prepare Job');
-    const ok = runCode(node, { $json: { body: payloadFor('AUTH002', { delivery: 'draft' }), headers: AUTH }, $env: ENV });
-    expect(ok[0].json).toMatchObject({ route: 1, job: { author_code: 'AUTH002', delivery: 'draft' } });
-    const bad = runCode(node, { $json: { body: { mode: 'x' }, headers: AUTH }, $env: ENV });
-    expect(bad[0].json).toMatchObject({ route: 0, http_status: 400, response: { error: { code: 'VALIDATION' } } });
-    const noKey = runCode(node, { $json: { body: payloadFor('AUTH002'), headers: { [KEY_HEADER]: 'wrong' } }, $env: ENV });
-    expect(noKey[0].json).toMatchObject({ route: 0, http_status: 403, response: { error: { code: 'FORBIDDEN' } } });
+  it('Build Context throws on the crash drill, so the execution fails and the error workflow runs', () => {
+    const job = runCode(nodeOf('royalty-summary', 'Validate Body'), {
+      $json: { settings: SETTINGS }, $: outputsOf({ 'Royalty Summary Webhook': { body: payloadFor('AUTH002', { drills: { crash: true } }) } }),
+      $execution: { id: '81' },
+    })[0].json.job;
+    const run = () => runCode(nodeOf('royalty-summary', 'Build Context'), {
+      $: outputsOf({ 'Validate Body': { job }, 'Enqueue Job': { job_id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d' } }),
+    });
+    expect(run).toThrow('Failure drill: the workflow crashed on purpose.');
   });
-  it('Parse Query validates job ids and the key', () => {
-    const out = runCode(nodeOf('job-status', 'Parse Query'), { $json: { query: { ids: 'nope' }, headers: AUTH } });
-    expect(out[0].json).toMatchObject({ route: 0, http_status: 400 });
-    const noKey = runCode(nodeOf('job-status', 'Parse Query'), { $json: { query: { ids: 'nope' }, headers: {} } });
-    expect(noKey[0].json).toMatchObject({ route: 0, http_status: 403 });
+  // The webhook has already checked the key (Header Auth): the Code nodes get no headers at all.
+  it('Validate Body takes the request from the webhook, the checked settings from Check Settings and the execution id from n8n', () => {
+    const node = nodeOf('royalty-summary', 'Validate Body');
+    const run = (body, settings = SETTINGS) => runCode(node, {
+      $json: { settings }, $: outputsOf({ 'Royalty Summary Webhook': { body } }), $execution: { id: '81' },
+    })[0].json;
+    const ok = run(payloadFor('AUTH002', { delivery: 'draft' }));
+    expect(ok).toMatchObject({ ok: true, job: { author_code: 'AUTH002', delivery: 'draft', settings: SETTINGS } });
+    expect(JSON.parse(ok.enqueue).execution_id).toBe('81');
+    expect(run({ mode: 'x' })).toMatchObject({ ok: false, http_status: 400, response: { error: { code: 'VALIDATION' } } });
   });
-  it('Parse Request (approve) validates the body and the key', () => {
+  it('Check Settings (both workflows) answers 500 INTERNAL for unusable settings and passes good ones on', () => {
+    for (const wf of ['royalty-summary', 'approve-draft']) {
+      const run = (settings) => runCode(nodeOf(wf, 'Check Settings'), { $json: { settings } })[0].json;
+      expect(run(SETTINGS), wf).toEqual({ ok: true, settings: SETTINGS });
+      expect(run({ ...SETTINGS, email_from: '' }), wf).toMatchObject({ ok: false, http_status: 500, response: { error: { code: 'INTERNAL' } } });
+    }
+  });
+  it('Parse Query validates the job ids', () => {
+    const run = (query) => runCode(nodeOf('job-status', 'Parse Query'), { $json: { query } })[0].json;
+    expect(run({ ids: 'nope' })).toMatchObject({ ok: false, http_status: 400 });
+    expect(run({ ids: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', include: 'html' })).toMatchObject({ ok: true, include_html: true });
+  });
+  it('Parse Request (approve) validates the body and passes the checked settings on', () => {
     const node = nodeOf('approve-draft', 'Parse Request');
+    const run = (body, settings = SETTINGS) => runCode(node, {
+      $json: { settings }, $: outputsOf({ 'Approve Webhook': { body } }),
+    })[0].json;
     const body = { job_id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', action: 'discard' };
-    expect(runCode(node, { $json: { body, headers: AUTH }, $env: ENV })[0].json).toMatchObject({ route: 1, job_id: body.job_id });
-    expect(runCode(node, { $json: { body: { action: 'x' }, headers: AUTH }, $env: ENV })[0].json).toMatchObject({ route: 0, http_status: 400 });
-    expect(runCode(node, { $json: { body, headers: {} }, $env: ENV })[0].json).toMatchObject({ route: 0, http_status: 403 });
+    expect(run(body)).toMatchObject({ ok: true, job_id: body.job_id, settings: SETTINGS });
+    expect(run({ action: 'x' })).toMatchObject({ ok: false, http_status: 400 });
+  });
+});
+
+describe('expressions', () => {
+  /** Every string parameter, with its path, in every built workflow. */
+  function* stringsOf(value, path) {
+    if (typeof value === 'string') yield [path, value];
+    else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) yield* stringsOf(v, `${path}.${k}`);
+  }
+  it('no "={{ … }}" parameter holds "}}" before its end (n8n would close the expression there)', () => {
+    const bad = [];
+    for (const [wf, w] of Object.entries(built)) {
+      for (const n of w.nodes) {
+        for (const [path, s] of stringsOf(n.parameters, `${wf}/${n.name}`)) {
+          if (!s.startsWith('={{') || path.endsWith('.jsCode')) continue;
+          if (s.indexOf('}}') !== s.length - 2) bad.push(path);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+});
+
+describe('run time limit', () => {
+  it('Royalty Summary and Write Draft end themselves after TUNING.runTimeoutSeconds (n8n executionTimeout)', () => {
+    for (const wf of ['royalty-summary', 'write-draft']) expect(built[wf].settings.executionTimeout, wf).toBe(TUNING.runTimeoutSeconds);
+    expect(TUNING.runTimeoutSeconds).toBe(600);
   });
 });

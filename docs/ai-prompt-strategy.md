@@ -116,8 +116,9 @@ to work it out.
 Tokens are counted per call and priced in code (`providers/cost.js`). Claude Sonnet 5.5 is priced at
 $2 per million input tokens and $10 per million output tokens. An unknown model gets no cost, never a
 guess. Each job stores provider, model, tokens and USD, so the log shows what every email cost.
-Measured average per email: {{TODO}}. The OpenAI fallback rate in code is a placeholder
-until checked ({{VERIFY}}).
+Measured average per email: {{TODO}}. The OpenAI fallback, gpt-4.1-mini, is priced at OpenAI's
+published standard rate: $0.40 per million input tokens, $1.60 per million output tokens and $0.10
+per million cached input tokens (checked 2026-11-11).
 
 ## Testing
 

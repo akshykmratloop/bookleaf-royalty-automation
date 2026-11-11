@@ -1,12 +1,11 @@
 import { signatureFor } from '../signature.js';
 import { approveError, approveResponse } from './approve-request.js';
+import { ownAddresses } from './draft-check.js';
 import { checkEdited, formatIssues, renderEdited } from './edit.js';
-import { failure, MAX_ERROR_LENGTH } from './errors.js';
-import { senderFor } from './finalize.js';
-import { nodeErrorSummary } from './node-errors.js';
+import { brandOf, senderFor } from './finalize.js';
 
-/** Switch outputs after "Decide": answer now, discard the draft, or claim it and send. */
-export const APPROVE_ROUTES = Object.freeze({ RESPOND: 0, DISCARD: 1, CLAIM: 2 });
+/** What "Decide" chose; the Action Switch names its outputs after these: answer now, discard, or claim and send. */
+export const APPROVE_ACTIONS = Object.freeze({ ANSWER: 'answer', DISCARD: 'discard', SEND: 'send' });
 const SENDING = ['PROCESSING', 'SENT'];
 
 /**
@@ -14,10 +13,10 @@ const SENDING = ['PROCESSING', 'SENT'];
  * @property {string} job_id @property {string} status @property {string} tone @property {string} length
  * @property {string} sign_off @property {string} recipient @property {Object} sections
  * @property {import('../facts-types.js').AuthorFacts} facts @property {string[]} titles
- * @property {{email_down?:boolean}|null} drills @property {boolean} fresh drafted within 24 hours
+ * @property {{email_down?:boolean}|null} drills @property {boolean} fresh drafted within draft_ttl_hours
  */
 
-const respond = (response) => ({ route: APPROVE_ROUTES.RESPOND, http_status: 200, response });
+const respond = (response) => ({ action: APPROVE_ACTIONS.ANSWER, response });
 
 /** Status checks shared by every action. @returns {Object|null} an answer, or null to go on */
 function statusGate(request, row) {
@@ -28,62 +27,60 @@ function statusGate(request, row) {
   return null;
 }
 
-/** The edited email, checked by the same fact checker and rendered with figures from facts. */
-function checkAndRender(request, row, config) {
-  const check = checkEdited({ subject: request.subject, body: request.body, facts: row.facts, titles: row.titles ?? [], length: row.length });
-  const signature = signatureFor(row.tone, row.sign_off);
-  const rendered = renderEdited({ subject: request.subject, parsed: check.parsed, facts: row.facts, brand: config.brand, signature });
+/**
+ * Check Edit: the edited subject and prose through the same fact checker as the AI draft, when the
+ * answer depends on it (a fresh draft that is checked or sent); null otherwise, so Decide answers alone.
+ * The edit may name only BookLeaf's own addresses (support_email, email_from), like the AI's draft.
+ * @param {{request:import('./approve-request.js').ApproveRequest, row:DraftRow|Object,
+ *   settings?:import('./settings.js').Settings}} input
+ * @returns {ReturnType<typeof checkEdited>|null}
+ */
+export function editCheck({ request, row, settings }) {
+  if (request.action === 'discard' || statusGate(request, row) || !row.fresh) return null;
+  return checkEdited({
+    subject: request.subject, body: request.body, facts: row.facts, titles: row.titles ?? [], length: row.length,
+    allowedEmails: ownAddresses(settings),
+  });
+}
+
+/** The edited email, rendered with figures from facts, and its check summary. */
+function renderChecked(request, row, settings, check) {
+  const signature = signatureFor(row.tone, row.sign_off, settings.sender_name);
+  const rendered = renderEdited({ subject: request.subject, parsed: check.parsed, facts: row.facts, brand: brandOf(settings), signature });
   const summary = {
     job_id: request.job_id, status: row.status, passed: check.passed, issues: formatIssues(check.issues),
     issue_count: check.issues.length, words: check.words, figures_verified: check.verifiedFigures,
   };
-  return { check, rendered, summary };
+  return { rendered, summary };
 }
 
 /**
- * The "Decide" step after the draft row is loaded.
- * @param {{request:import('./approve-request.js').ApproveRequest, row:DraftRow|Object, config:import('./config.js').Config}} input
+ * The "Decide" step after the draft row is loaded. It works out every answer the request can get, so the
+ * nodes after it only pick one: `response` when the discard or claim takes the row, `fallback` when
+ * it does not (the draft changed meanwhile, or another click claimed it). A clean send is claimed by
+ * this execution, then `deliver` goes to the Deliver Email sub-workflow: the edited email for the job's
+ * stored demo inbox, with the drill stored on the job and nothing else to record.
+ * `check` is Check Edit's result (editCheck), present whenever the answer needs it.
+ * @param {{request:import('./approve-request.js').ApproveRequest, row:DraftRow|Object,
+ *   settings:import('./settings.js').Settings, executionId:string, check:ReturnType<typeof editCheck>}} input
  */
-export function decideApproval({ request, row, config }) {
+export function decideApproval({ request, row, settings, executionId, check }) {
   const gated = statusGate(request, row);
   if (gated) return gated;
-  const params = JSON.stringify({ job_id: request.job_id });
-  if (request.action === 'discard') return { route: APPROVE_ROUTES.DISCARD, params };
-  if (!row.fresh) return respond(approveError('DRAFT_EXPIRED', request.job_id, row.status));
-  const { check, rendered, summary } = checkAndRender(request, row, config);
+  const id = request.job_id;
+  if (request.action === 'discard') {
+    const response = approveResponse({ ok: true, job_id: id, status: 'DISCARDED' });
+    return { action: APPROVE_ACTIONS.DISCARD, params: JSON.stringify({ job_id: id }), response, fallback: approveError('NOT_A_DRAFT', id, '') };
+  }
+  if (!row.fresh) return respond(approveError('DRAFT_EXPIRED', id, row.status, {}, { hours: settings.draft_ttl_hours }));
+  const { rendered, summary } = renderChecked(request, row, settings, check);
   if (request.action === 'check') return respond(approveResponse({ ...summary, ok: true, html: rendered.html }));
-  if (!check.passed) return respond(approveError('EDIT_BLOCKED', request.job_id, row.status, summary));
-  const email = { from: senderFor(config), to: row.recipient, subject: rendered.subject, html: rendered.html, text: rendered.text };
-  const response = approveResponse({ ...summary, ok: true, status: 'PROCESSING' });
-  return { route: APPROVE_ROUTES.CLAIM, params, email, drill: row.drills?.email_down === true, response };
-}
-
-/**
- * After CLAIM_DRAFT. route 1 = claimed (answer, then send); 0 = nothing claimed: another click won.
- * @param {{row:Object, decided:{params:string, response:Object}}} input
- */
-export function claimOutcome({ row, decided }) {
-  if (row && row.job_id) return { route: 1, http_status: 200, response: decided.response };
-  const jobId = JSON.parse(decided.params).job_id;
-  return { route: 0, http_status: 200, response: approveError('ALREADY_SENT', jobId, 'PROCESSING') };
-}
-
-/** After DISCARD_DRAFT. @param {{row:Object, jobId:string}} input */
-export function discardOutcome({ row, jobId }) {
-  if (row && row.job_id) return respond(approveResponse({ ok: true, job_id: jobId, status: 'DISCARDED' }));
-  return respond(approveError('NOT_A_DRAFT', jobId, ''));
-}
-
-/** @param {string} jobId @param {{to:string, subject:string, html:string, text:string}} email */
-export const approvedSentUpdate = (jobId, email) => ({
-  job_id: jobId, status: 'SENT', stage: 'sent', subject: email.subject, html: email.html, text_body: email.text, sent_to: email.to,
-});
-
-/** The edited email is kept for the log; nothing reached the author. */
-export function approvedFailedUpdate(jobId, email, error) {
-  const f = failure('EMAIL_FAILED', nodeErrorSummary(error, 'smtp'));
+  if (!check.passed) return respond(approveError('EDIT_BLOCKED', id, row.status, summary));
+  const email = { from: senderFor(settings), to: row.recipient, subject: rendered.subject, html: rendered.html, text: rendered.text };
+  /** @type {import('./finalize.js').Delivery} */
+  const deliver = { job_id: id, email, drill: row.drills?.email_down === true, record: {} };
   return {
-    job_id: jobId, status: 'FAILED', stage: 'failed', error_code: f.code, error: f.message.slice(0, MAX_ERROR_LENGTH),
-    subject: email.subject, html: email.html, text_body: email.text,
+    action: APPROVE_ACTIONS.SEND, params: JSON.stringify({ job_id: id, execution_id: executionId }), deliver,
+    response: approveResponse({ ...summary, ok: true, status: 'PROCESSING' }), fallback: approveError('ALREADY_SENT', id, 'PROCESSING'),
   };
 }

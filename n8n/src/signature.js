@@ -1,6 +1,7 @@
 /**
  * The email signature ("Warm regards,\nBookLeaf Author Relations") is rendered from data, never
- * written by the AI: the valediction follows the tone, the name is the admin's sign_off.
+ * written by the AI: the valediction follows the tone, the name is the admin's sign_off, else the
+ * sender_name setting. DEFAULT_SIGN_OFF (the seeded sender_name) is also stripped when the AI writes it.
  */
 export const DEFAULT_SIGN_OFF = 'BookLeaf Author Relations';
 
@@ -17,11 +18,12 @@ const SIGN_OFF_TAIL = new RegExp(
 );
 
 /**
- * @param {string} [tone] warm | formal | concise @param {string} [signOff] '' = brand default
+ * @param {string} [tone] warm | formal | concise @param {string} [signOff] '' = the sender name
+ * @param {string} [senderName] the sender_name setting
  * @returns {{valediction:string, name:string}}
  */
-export function signatureFor(tone, signOff) {
-  const name = typeof signOff === 'string' && signOff.trim() ? signOff.trim() : DEFAULT_SIGN_OFF;
+export function signatureFor(tone, signOff, senderName = DEFAULT_SIGN_OFF) {
+  const name = typeof signOff === 'string' && signOff.trim() ? signOff.trim() : senderName;
   return { valediction: VALEDICTIONS[tone] ?? VALEDICTIONS.warm, name };
 }
 

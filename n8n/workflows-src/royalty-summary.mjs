@@ -1,110 +1,120 @@
-import { ANTHROPIC_VERSION, FALLBACK_BETA, URL as ANTHROPIC_URL } from '../src/providers/anthropic.js';
-import { URL as OPENAI_URL } from '../src/providers/openai.js';
-import { INSERT_JOB, MARK_PROCESSING, SET_STAGE, UPDATE_CALLBACK, UPDATE_JOB } from '../src/pipeline/sql.js';
-import { code, http, KEY_HASHES_PLACEHOLDER, note, pg, respond, route, sendEmail, webhook } from './lib/nodes.mjs';
+import { AI_OUTCOMES } from '../src/pipeline/after-ai.js';
+import { errorBody, failure } from '../src/pipeline/errors.js';
+import { ENQUEUE_JOB, LOAD_SETTINGS, MARK_PROCESSING, SET_STAGE, UPDATE_JOB } from '../src/pipeline/sql.js';
+import { TUNING } from '../src/pipeline/tuning.js';
+import { DELIVER_EMAIL } from './deliver-email.mjs';
+import { executeWorkflow } from './lib/flow-nodes.mjs';
+import { code, ifTrue, IS_TRUE, pg, respond, respondDatabaseDown, respondFixed, stopAndError, switchRules, webhook, withNote } from './lib/nodes.mjs';
+import { WRITE_DRAFT } from './write-draft.mjs';
 
-/** Pull mode: Bubble posts the author payload, gets 202 + job id at once, then polls job-status. */
-const JOB = "$('Prepare Job').first().json.job";
+/**
+ * Bubble posts the author and books with the request, gets 202 + job id at once, then polls job-status
+ * (n8n never calls Bubble). The happy path is the top row; every other branch sits below it.
+ */
+const WEBHOOK = "$('Royalty Summary Webhook').first().json";
+const VALIDATED = "$('Validate Body').first().json";
+const ENQUEUED = "$('Enqueue Job').first().json";
+/** The job under the id Enqueue Job made, and its context; Build Context passes both on. */
+const JOB = "$('Build Context').first().json.job";
 const CTX = "$('Build Context').first().json.ctx";
-const S = `const job = ${JOB};\n`;
-const AI = { timeoutMs: 45_000, retry: 2, waitMs: 2000, errorOutput: true };
-const anthropicCall = (name, body) => http(name, {
-  method: 'POST', url: ANTHROPIC_URL, credential: 'anthropic', authType: 'httpHeaderAuth', body, ...AI,
-  headers: { 'anthropic-version': ANTHROPIC_VERSION, 'anthropic-beta': FALLBACK_BETA },
-});
-const openaiCall = (name, body) => http(name, { method: 'POST', url: OPENAI_URL, credential: 'openai', authType: 'httpBearerAuth', body, ...AI });
-/** Live progress for job-status. alwaysOutputData: a job already finished elsewhere just continues to its end. */
-const setStage = (name, stage) => pg(name, SET_STAGE, `JSON.stringify({ job_id: ${JOB}.job_id, stage: '${stage}' })`, { alwaysOutputData: true });
-const CHECK = "$('Check Draft').first().json";
-const RENDERED = "$('Render Email').first().json";
-/** The first answer came from OpenAI when Anthropic failed and the fallback ran. */
-const FIRST_ANSWER = "$('Call OpenAI (fallback)').isExecuted ? $('Call OpenAI (fallback)').first().json : $('Call Anthropic').first().json";
-const bubbleGet = (name, urlExpr) => http(name, {
-  method: 'GET', url: `={{ ${urlExpr} }}`, credential: 'bubble', authType: 'httpBearerAuth', timeoutMs: 20_000, retry: 2, waitMs: 2000, errorOutput: true,
-});
+const FIRST = "$('Write Draft').first().json";
+const UNEXPECTED_ENQUEUE = errorBody(failure('INTERNAL', 'The enqueue gave an unexpected answer.'));
+
+const ABOUT = [
+  '## BookLeaf royalty summary',
+  'POST /webhook/royalty-summary with header X-BookLeaf-Key (n8n Header Auth: a missing or wrong key gets 403 before the workflow starts). '
+  + 'Server settings come from the bookleaf_settings table (Load Settings, then Check Settings).',
+  '**Enqueue Job** calls enqueue_royalty_job, which makes the job id: a double click gets the first job back (200, duplicate), more '
+  + 'than max_sends_per_hour gets 429, anything else 202 {job_id} at once. Then the **Write Draft** sub-workflow writes and fact-checks '
+  + 'the email (Anthropic, OpenAI if it fails); **Rewrite Draft** runs it once more with the checker\'s notes. **Deliver Email** sends '
+  + 'it and records SENT or EMAIL_FAILED. A draft (delivery=draft) and every failure end in **Record Result**. Code nodes are '
+  + 'generated from n8n/src by n8n/build.mjs.',
+].join('\n');
 
 const nodes = [
-  note('About', '## BookLeaf royalty summary (pull mode)\nPOST /webhook/royalty-summary with header X-BookLeaf-Key (checked in Prepare Job; current and next key accepted).\nAnswers 202 {job_id} at once, then writes, fact-checks and sends the email (or saves a DRAFTED job for approval when delivery=draft) and records the result in royalty_jobs, with a live `stage`. Every failure branch ends in **Update Job**. Code nodes are generated from n8n/src by n8n/build.mjs.', 260),
   webhook('Royalty Summary Webhook', 'POST', 'royalty-summary'),
-  code('Prepare Job', 'prepare', `return main({ body: $json.body, headers: $json.headers, keyHashes: '${KEY_HASHES_PLACEHOLDER}', env: $env, now: Date.now() });`),
-  route('Valid?', 2, '$json.route'),
+  pg('Load Settings', LOAD_SETTINGS, null, { errorOutput: true, retry: true }),
+  withNote(code('Check Settings', 'checkSettings', 'return main({ settings: $json.settings });'), 'Bad settings: 500'),
+  ifTrue('Settings OK?', '$json.ok', IS_TRUE),
+  withNote(code('Validate Body', 'prepare', `return main({ body: ${WEBHOOK}.body, settings: $json.settings, now: Date.now(), executionId: $execution.id });`), 'Bad body: 400'),
+  ifTrue('Request Valid?', '$json.ok', IS_TRUE),
   respond('Respond Rejected'),
-  pg('Insert Job', INSERT_JOB, '$json.insert_params'),
-  code('Classify', 'classify', `return main({ row: $json, job: ${JOB} });`),
-  respond('Respond Accepted'),
-  route('Queued?', 3, '$json.route'),
-  pg('Mark Processing', MARK_PROCESSING, `JSON.stringify({ job_id: ${JOB}.job_id })`),
-  route('Data Source', 2, `${JOB}.config.dataSource === 'bubble' ? 1 : 0`),
-  code('Bubble Queries', 'bubbleQueries', `return main({ job: ${JOB} });`),
-  bubbleGet('Bubble Author', '$json.author_url'),
-  bubbleGet('Bubble Books', "$('Bubble Queries').first().json.books_url"),
-  bubbleGet('Bubble Royalties', "$('Bubble Queries').first().json.royalties_url"),
-  code('Bubble Data Failed', 'dataFailed', `return main({ job: ${JOB}, error: $json });`),
-  code('Build Context', 'context', `${S}const bubble = job.config.dataSource === 'bubble'
-  ? { author: $('Bubble Author').first().json, books: $('Bubble Books').first().json, royalties: $('Bubble Royalties').first().json }
-  : null;
-return main({ job, bubble });`),
-  route('Context OK?', 2, '$json.route'),
-  setStage('Stage: Writing', 'writing'),
-  anthropicCall('Call Anthropic', `JSON.stringify(${CTX}.requests.anthropic)`),
-  openaiCall('Call OpenAI (fallback)', `JSON.stringify(${CTX}.requests.openai)`),
-  code('AI Failed', 'aiFailed', `return main({ job: ${JOB}, anthropicError: $('Call Anthropic').all(1)[0]?.json, openaiError: $json });`),
-  setStage('Stage: Checking', 'checking'),
-  code('Check Draft', 'checkDraft', `return main({ response: ${FIRST_ANSWER}, ctx: ${CTX}, job: ${JOB}, attempt: 1 });`),
-  route('Draft OK?', 4, '$json.route'),
-  setStage('Stage: Rewriting', 'rewriting'),
-  route('Rewrite With?', 2, `${CHECK}.route === 2 ? 1 : 0`),
-  anthropicCall('Regenerate (Anthropic)', `JSON.stringify(${CHECK}.regenerate.body)`),
-  openaiCall('Regenerate (OpenAI)', `JSON.stringify(${CHECK}.regenerate.body)`),
-  code('Regeneration Failed', 'regenerationFailed', `return main({ job: ${JOB}, error: $json, previous: $('Check Draft').first().json.ai });`),
-  code('Check Draft (retry)', 'checkDraft', `return main({ response: $json, ctx: ${CTX}, job: ${JOB}, attempt: 2, previous: $('Check Draft').first().json.ai });`),
-  route('Retry OK?', 2, '$json.route'),
+  withNote(pg('Enqueue Job', ENQUEUE_JOB, '$json.enqueue', { errorOutput: true }), 'Locked: duplicate, cap, new'),
+  switchRules('Outcome', '$json.outcome', [
+    { output: 'Queued', equals: 'queued' }, { output: 'Duplicate', equals: 'duplicate' }, { output: 'Rate limited', equals: 'rate_limited' },
+  ], 'Unexpected'),
+  respond('Respond 202', '202', '{ job_id: $json.job_id, status: $json.status, duplicate: false }'),
+  respond('Respond Duplicate', '200', 'Object.assign({ job_id: $json.job_id, status: $json.status, duplicate: true }, $json.error_code ? { error_code: $json.error_code } : {})'),
+  respond('Respond 429', '429', `${VALIDATED}.rate_limited`),
+  respondFixed('Respond 500', 500, UNEXPECTED_ENQUEUE),
+  withNote(respondDatabaseDown('Respond 503'), 'Database down: 503'),
+  withNote(pg('Mark Processing', MARK_PROCESSING, `JSON.stringify({ job_id: ${ENQUEUED}.job_id })`, { retry: true }), 'PROCESSING, stage writing'),
+  withNote(code('Build Context', 'context', `return main({ validated: ${VALIDATED}.job, jobId: ${ENQUEUED}.job_id });`), 'Job id from Enqueue Job'),
+  ifTrue('Context OK?', '$json.ok', IS_TRUE),
+  withNote(executeWorkflow('Write Draft', WRITE_DRAFT, { job: JOB, ctx: CTX, request: `${CTX}.requests`, attempt: '1', previous: '{}' }), 'AI writes; figures checked'),
+  switchRules('Draft OK?', '$json.outcome', [
+    { output: 'Pass', equals: AI_OUTCOMES.PASS }, { output: 'Rewrite', equals: AI_OUTCOMES.REWRITE }, { output: 'Fail', equals: AI_OUTCOMES.FAIL },
+  ], 'Unexpected'),
+  pg('Stage: Rewriting', SET_STAGE, `JSON.stringify({ job_id: ${JOB}.job_id, stage: 'rewriting' })`, { alwaysOutputData: true, retry: true }),
+  withNote(executeWorkflow('Rewrite Draft', WRITE_DRAFT, { job: JOB, ctx: CTX, request: `${FIRST}.rewrite`, attempt: '2', previous: `${FIRST}.ai` }), 'Again, with checker notes'),
+  ifTrue('Rewrite OK?', '$json.ok', IS_TRUE),
+  withNote(stopAndError('Stop: Unexpected', 'Write Draft gave an unexpected outcome.'), 'Error workflow fails the job'),
   code('Render Email', 'render', `return main({ ctx: ${CTX}, job: ${JOB}, ai: $json.ai });`),
-  route('Draft?', 2, '$json.route'),
-  setStage('Stage: Sending', 'sending'),
-  route('Email Drill?', 2, `${RENDERED}.drill ? 1 : 0`),
-  sendEmail('Send Email', 'smtp', `${RENDERED}.email`),
-  sendEmail('Send Email (drill: SMTP down)', 'smtpDrill', `${RENDERED}.email`),
-  code('Mark Sent', 'markSent', `return main({ job: ${JOB}, rendered: ${RENDERED} });`),
-  code('Email Failed', 'emailFailed', `return main({ job: ${JOB}, rendered: ${RENDERED}, error: $json });`),
-  pg('Update Job', UPDATE_JOB, 'JSON.stringify($json.update)'),
-  code('After Update', 'afterUpdate', `return main({ row: $json, job: ${JOB} });`),
-  route('Push Callback?', 2, '$json.route'),
-  http('Notify Bubble', {
-    method: 'POST', url: '={{ $json.callback.url }}', credential: 'bubble', authType: 'httpBearerAuth',
-    body: 'JSON.stringify($json.callback.body)', timeoutMs: 20_000, retry: 3, waitMs: 5000, errorOutput: true,
-  }),
-  code('Callback Result', 'callbackResult', "return main({ jobId: $('After Update').first().json.job_id, error: $json.error ? $json : null });"),
-  pg('Update Callback', UPDATE_CALLBACK, '$json.params'),
+  withNote(ifTrue('Send Now?', '$json.send', IS_TRUE), 'false: delivery=draft'),
+  withNote(executeWorkflow('Deliver Email', DELIVER_EMAIL, '$json.deliver'), 'Saves, sends once, records'),
+  withNote(pg('Record Result', UPDATE_JOB, 'JSON.stringify($json.update)', { retry: true }), 'Drafts and every failure'),
 ];
 
 const edges = [
-  ['Royalty Summary Webhook', 'Prepare Job'], ['Prepare Job', 'Valid?'],
-  ['Valid?', 'Respond Rejected', 0], ['Valid?', 'Insert Job', 1],
-  ['Insert Job', 'Classify'], ['Classify', 'Respond Accepted'], ['Respond Accepted', 'Queued?'],
-  ['Queued?', 'Mark Processing', 0], ['Mark Processing', 'Data Source'],
-  ['Data Source', 'Build Context', 0], ['Data Source', 'Bubble Queries', 1],
-  ['Bubble Queries', 'Bubble Author'], ['Bubble Author', 'Bubble Books', 0], ['Bubble Author', 'Bubble Data Failed', 1],
-  ['Bubble Books', 'Bubble Royalties', 0], ['Bubble Books', 'Bubble Data Failed', 1],
-  ['Bubble Royalties', 'Build Context', 0], ['Bubble Royalties', 'Bubble Data Failed', 1],
-  ['Bubble Data Failed', 'Update Job'],
-  ['Build Context', 'Context OK?'], ['Context OK?', 'Update Job', 0], ['Context OK?', 'Stage: Writing', 1], ['Stage: Writing', 'Call Anthropic'],
-  ['Call Anthropic', 'Stage: Checking', 0], ['Call Anthropic', 'Call OpenAI (fallback)', 1],
-  ['Call OpenAI (fallback)', 'Stage: Checking', 0], ['Call OpenAI (fallback)', 'AI Failed', 1], ['AI Failed', 'Update Job'],
-  ['Stage: Checking', 'Check Draft'], ['Check Draft', 'Draft OK?'],
-  ['Draft OK?', 'Render Email', 0], ['Draft OK?', 'Stage: Rewriting', 1], ['Draft OK?', 'Stage: Rewriting', 2], ['Draft OK?', 'Update Job', 3],
-  ['Stage: Rewriting', 'Rewrite With?'], ['Rewrite With?', 'Regenerate (Anthropic)', 0], ['Rewrite With?', 'Regenerate (OpenAI)', 1],
-  ['Regenerate (Anthropic)', 'Check Draft (retry)', 0], ['Regenerate (Anthropic)', 'Regeneration Failed', 1],
-  ['Regenerate (OpenAI)', 'Check Draft (retry)', 0], ['Regenerate (OpenAI)', 'Regeneration Failed', 1],
-  ['Regeneration Failed', 'Update Job'],
-  ['Check Draft (retry)', 'Retry OK?'], ['Retry OK?', 'Render Email', 0], ['Retry OK?', 'Update Job', 1],
-  ['Render Email', 'Draft?'], ['Draft?', 'Stage: Sending', 0], ['Draft?', 'Update Job', 1], ['Stage: Sending', 'Email Drill?'],
-  ['Email Drill?', 'Send Email', 0], ['Email Drill?', 'Send Email (drill: SMTP down)', 1],
-  ['Send Email', 'Mark Sent', 0], ['Send Email', 'Email Failed', 1],
-  ['Send Email (drill: SMTP down)', 'Mark Sent', 0], ['Send Email (drill: SMTP down)', 'Email Failed', 1],
-  ['Mark Sent', 'Update Job'], ['Email Failed', 'Update Job'],
-  ['Update Job', 'After Update'], ['After Update', 'Push Callback?'], ['Push Callback?', 'Notify Bubble', 1],
-  ['Notify Bubble', 'Callback Result', 0], ['Notify Bubble', 'Callback Result', 1], ['Callback Result', 'Update Callback'],
+  ['Royalty Summary Webhook', 'Load Settings'], ['Load Settings', 'Check Settings'], ['Load Settings', 'Respond 503', 'error'],
+  ['Check Settings', 'Settings OK?'],
+  ['Settings OK?', 'Validate Body', 'true'], ['Settings OK?', 'Respond Rejected', 'false'], ['Validate Body', 'Request Valid?'],
+  ['Request Valid?', 'Enqueue Job', 'true'], ['Request Valid?', 'Respond Rejected', 'false'], ['Enqueue Job', 'Outcome'], ['Enqueue Job', 'Respond 503', 'error'],
+  ['Outcome', 'Respond 202', 'Queued'], ['Outcome', 'Respond Duplicate', 'Duplicate'], ['Outcome', 'Respond 429', 'Rate limited'],
+  ['Outcome', 'Respond 500', 'Unexpected'],
+  ['Respond 202', 'Mark Processing'], ['Mark Processing', 'Build Context'], ['Build Context', 'Context OK?'],
+  ['Context OK?', 'Write Draft', 'true'], ['Context OK?', 'Record Result', 'false'], ['Write Draft', 'Draft OK?'],
+  ['Draft OK?', 'Render Email', 'Pass'], ['Draft OK?', 'Stage: Rewriting', 'Rewrite'], ['Draft OK?', 'Record Result', 'Fail'],
+  ['Draft OK?', 'Stop: Unexpected', 'Unexpected'],
+  ['Stage: Rewriting', 'Rewrite Draft'], ['Rewrite Draft', 'Rewrite OK?'],
+  ['Rewrite OK?', 'Render Email', 'true'], ['Rewrite OK?', 'Record Result', 'false'],
+  ['Render Email', 'Send Now?'], ['Send Now?', 'Deliver Email', 'true'], ['Send Now?', 'Record Result', 'false'],
 ];
 
-export default { name: 'BookLeaf - Royalty Summary', nodes, edges, errorWorkflow: 'BookLeaf - Error Handler' };
+/**
+ * Grid cells [column, row]. The happy path is row 0, left to right; branches sit below the node they
+ * leave.
+ */
+const grid = {
+  'Royalty Summary Webhook': [0, 0], 'Load Settings': [1, 0], 'Check Settings': [2, 0], 'Settings OK?': [3, 0], 'Validate Body': [4, 0],
+  'Request Valid?': [5, 0], 'Respond Rejected': [6, 1], 'Respond 503': [6, 2],
+  'Enqueue Job': [7, 0], Outcome: [8, 0], 'Respond 202': [9, 0], 'Respond Duplicate': [9, 1], 'Respond 429': [9, 2], 'Respond 500': [9, 3],
+  'Mark Processing': [10, 0],
+  'Build Context': [11, 0], 'Context OK?': [12, 0],
+  'Write Draft': [13, 0],
+  'Draft OK?': [14, 0], 'Stage: Rewriting': [15, 1], 'Rewrite Draft': [16, 1], 'Rewrite OK?': [17, 1], 'Stop: Unexpected': [15, 2],
+  'Render Email': [18, 0], 'Send Now?': [19, 0], 'Deliver Email': [20, 0],
+  'Record Result': [19, 3],
+};
+
+const sections = [
+  { title: 'Intake', text: 'The settings are checked (bad settings: 500), then the body (a bad body: 400). Database down before the answer: 503.',
+    nodes: ['Royalty Summary Webhook', 'Load Settings', 'Check Settings', 'Settings OK?', 'Validate Body', 'Request Valid?', 'Respond Rejected', 'Respond 503'] },
+  { title: 'Ledger', text: 'One locked call: a new job (202), a double click (200, the same job) or the hourly cap (429).',
+    nodes: ['Enqueue Job', 'Outcome', 'Respond 202', 'Respond Duplicate', 'Respond 429', 'Respond 500', 'Mark Processing'] },
+  { title: 'Data & facts', text: 'Figures checked, facts and prompt built.', nodes: ['Build Context', 'Context OK?'] },
+  { title: 'AI writer', text: 'Sub-workflow: Anthropic, OpenAI if it fails, then the fact check.', nodes: ['Write Draft'], tone: 'ai' },
+  { title: 'Fact check', text: 'Pass, one rewrite with the checker\'s notes, or fail.',
+    nodes: ['Draft OK?', 'Stage: Rewriting', 'Rewrite Draft', 'Rewrite OK?', 'Stop: Unexpected'] },
+  { title: 'Render & deliver', text: 'HTML and text email; Deliver Email sends it once.', nodes: ['Render Email', 'Send Now?', 'Deliver Email'] },
+  { title: 'Record', text: 'Drafts and every failure end here.', nodes: ['Record Result'] },
+];
+
+/**
+ * Only failed runs are saved (the error handler needs them): a saved run holds the webhook's request
+ * headers, X-BookLeaf-Key included. Write Draft and Deliver Email get no headers and keep their runs.
+ */
+export default {
+  name: 'BookLeaf - Royalty Summary', nodes, edges, grid, sections, about: ABOUT, errorWorkflow: 'BookLeaf - Error Handler',
+  settings: { executionTimeout: TUNING.runTimeoutSeconds, saveDataSuccessExecution: 'none' },
+};

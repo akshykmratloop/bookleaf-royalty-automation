@@ -25,6 +25,12 @@ function structureIssues(sections, facts) {
   return out;
 }
 
+/**
+ * BookLeaf's own addresses, the only ones the prose may name.
+ * @param {{support_email?:string, email_from?:string}|undefined} settings @returns {string[]}
+ */
+export const ownAddresses = (settings) => [settings?.support_email, settings?.email_from].filter(Boolean);
+
 /** @param {string} text @returns {number} */
 export const countWords = (text) => text.split(/\s+/).filter(Boolean).length;
 
@@ -38,11 +44,12 @@ export function lengthIssues(words, length) {
  * Fact-checks an AI draft against the author's facts (independently of the model).
  * @param {Object} sections @param {import('../facts-types.js').AuthorFacts} facts @param {string[]} titles
  * @param {string} [length] the job's length option; sets the word-count warning
+ * @param {readonly string[]} [allowedEmails] the addresses the prose may name (ownAddresses)
  * @returns {{passed:boolean, issues:Object[], blocking:Object[], verifiedFigures:number, words:number}}
  */
-export function checkDraft(sections, facts, titles, length = 'standard') {
+export function checkDraft(sections, facts, titles, length = 'standard', allowedEmails = []) {
   const text = proseText(sections);
-  const r = checkEmail({ text, facts: facts.facts, titles });
+  const r = checkEmail({ text, facts: facts.facts, titles, allowedEmails });
   const words = countWords(text);
   const issues = [...r.issues, ...structureIssues(sections, facts), ...lengthIssues(words, length)];
   return { passed: r.passed, issues, blocking: issues.filter((i) => i.severity === 'BLOCK'), verifiedFigures: r.verifiedFigures, words };
