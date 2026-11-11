@@ -6,4 +6,3 @@ export const SETTINGS = Object.freeze({
   email_from: 'sender@bookleaf.test', default_demo_inbox: 'demo@inbox.test', allow_drills: true, alert_email: 'ops@inbox.test',
 });
 export const NOW = Date.UTC(2026, 10, 10, 6, 0, 0);
-export const fixedRandom = () => Array.from({ length: 16 }, (_, i) => i * 17);

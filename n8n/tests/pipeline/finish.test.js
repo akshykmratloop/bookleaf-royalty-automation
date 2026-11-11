@@ -5,13 +5,13 @@ import { CrashDrillError } from '../../src/pipeline/drills.js';
 import { errorBody, failure } from '../../src/pipeline/errors.js';
 import { deliveryFor, failedUpdate } from '../../src/pipeline/finalize.js';
 import { nodeErrorSummary } from '../../src/pipeline/node-errors.js';
-import { prepareJob } from '../../src/pipeline/prepare.js';
+import { queuedJob } from './job-fixture.js';
 import { parseStatusQuery, shapeJobs } from '../../src/pipeline/status.js';
-import { fixedRandom, NOW, SETTINGS } from './settings-fixture.js';
+import { NOW, SETTINGS } from './settings-fixture.js';
 import { payloadFor } from './fixtures.js';
 import { anthropicOk } from './ai-fixtures.js';
 
-const job = prepareJob(payloadFor('AUTH002'), SETTINGS, NOW, fixedRandom).job;
+const job = queuedJob('AUTH002');
 const ctx = buildContext(job).ctx;
 const ai = afterAi({ response: anthropicOk(), ctx, job, attempt: 1 }).ai;
 const ID = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
@@ -67,9 +67,9 @@ describe('job status query', () => {
 
 describe('the crash drill', () => {
   it('throws a CrashDrillError from buildContext, so the run fails and the error workflow takes over', () => {
-    const r = prepareJob(payloadFor('AUTH002', { drills: { crash: true } }), SETTINGS, NOW, fixedRandom);
-    expect(() => buildContext(r.job)).toThrow(CrashDrillError);
-    expect(() => buildContext(r.job)).toThrow('Failure drill: the workflow crashed on purpose.');
+    const crashJob = queuedJob('AUTH002', { drills: { crash: true } });
+    expect(() => buildContext(crashJob)).toThrow(CrashDrillError);
+    expect(() => buildContext(crashJob)).toThrow('Failure drill: the workflow crashed on purpose.');
   });
 });
 
@@ -99,7 +99,7 @@ describe('sender, brand and plain-text table details', () => {
     expect(email.html).toContain('Leaf &amp; Co &middot; help@bookleaf.test');
   });
   it('a book never paid reads "no payout yet" in the text table', async () => {
-    const kavita = prepareJob(payloadFor('AUTH009'), SETTINGS, NOW, fixedRandom).job;
+    const kavita = queuedJob('AUTH009');
     const kctx = buildContext(kavita).ctx;
     const { email } = deliveryFor({ ctx: kctx, job: kavita, ai: { ...ai, sections: { ...ai.sections, bookParagraphs: [] } } });
     expect(email.text).toContain('pending ₹850 | no payout yet | Overdue');

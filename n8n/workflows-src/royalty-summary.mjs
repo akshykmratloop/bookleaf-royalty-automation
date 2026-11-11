@@ -11,7 +11,9 @@ import { TUNING } from './lib/tuning.mjs';
  * (n8n never calls Bubble). The happy path is the top row; every other branch sits below it.
  */
 const WEBHOOK = "$('Royalty Summary Webhook').first().json";
-const JOB = "$('Prepare Job').first().json.job";
+const VALIDATED = "$('Validate Body').first().json";
+/** The job under the id Enqueue Job made; Build Context passes it on. */
+const JOB = "$('Build Context').first().json.job";
 const CTX = "$('Build Context').first().json.ctx";
 const CHECK = "$('Check Draft').first().json";
 /** Timeout from the ai_timeout_ms setting (carried on the job); retries are build-time node settings. */
@@ -39,7 +41,9 @@ const ABOUT = [
 const nodes = [
   webhook('Royalty Summary Webhook', 'POST', 'royalty-summary'),
   pg('Load Settings', LOAD_SETTINGS, null),
-  withNote(code('Prepare Job', 'prepare', `return main({ body: ${WEBHOOK}.body, settings: $json.settings, now: Date.now(), executionId: $execution.id });`), 'Checks the body; builds job'),
+  withNote(code('Check Settings', 'checkSettings', 'return main({ settings: $json.settings });'), 'Bad settings: 500'),
+  ifTrue('Settings OK?', '$json.ok', IS_TRUE),
+  withNote(code('Validate Body', 'prepare', `return main({ body: ${WEBHOOK}.body, settings: $json.settings, now: Date.now(), executionId: $execution.id });`), 'Bad body: 400'),
   ifTrue('Request Valid?', '$json.ok', IS_TRUE),
   respond('Respond Rejected'),
   withNote(pg('Enqueue Job', ENQUEUE_JOB, '$json.enqueue'), 'Locked: duplicate, cap, new'),
@@ -48,9 +52,9 @@ const nodes = [
   ]),
   respond('Respond 202', '202', '{ job_id: $json.job_id, status: $json.status, duplicate: false }'),
   respond('Respond Duplicate', '200', 'Object.assign({ job_id: $json.job_id, status: $json.status, duplicate: true }, $json.error_code ? { error_code: $json.error_code } : {})'),
-  respond('Respond 429', '429', "$('Prepare Job').first().json.rate_limited"),
-  withNote(pg('Mark Processing', MARK_PROCESSING, `JSON.stringify({ job_id: ${JOB}.job_id })`), 'PROCESSING, stage writing'),
-  code('Build Context', 'context', `return main({ job: ${JOB} });`),
+  respond('Respond 429', '429', `${VALIDATED}.rate_limited`),
+  withNote(pg('Mark Processing', MARK_PROCESSING, "JSON.stringify({ job_id: $('Enqueue Job').first().json.job_id })"), 'PROCESSING, stage writing'),
+  withNote(code('Build Context', 'context', `return main({ validated: ${VALIDATED}.job, jobId: $('Enqueue Job').first().json.job_id });`), 'Job id from Enqueue Job'),
   ifTrue('Context OK?', '$json.ok', IS_TRUE),
   anthropicCall('Call Anthropic', `JSON.stringify(${CTX}.requests.anthropic)`),
   withNote(openaiCall('Call OpenAI (fallback)', `JSON.stringify(${CTX}.requests.openai)`), 'Runs when Anthropic fails'),
@@ -71,7 +75,8 @@ const nodes = [
 ];
 
 const edges = [
-  ['Royalty Summary Webhook', 'Load Settings'], ['Load Settings', 'Prepare Job'], ['Prepare Job', 'Request Valid?'],
+  ['Royalty Summary Webhook', 'Load Settings'], ['Load Settings', 'Check Settings'], ['Check Settings', 'Settings OK?'],
+  ['Settings OK?', 'Validate Body', 'true'], ['Settings OK?', 'Respond Rejected', 'false'], ['Validate Body', 'Request Valid?'],
   ['Request Valid?', 'Enqueue Job', 'true'], ['Request Valid?', 'Respond Rejected', 'false'], ['Enqueue Job', 'Outcome'],
   ['Outcome', 'Respond 202', 'Queued'], ['Outcome', 'Respond Duplicate', 'Duplicate'], ['Outcome', 'Respond 429', 'Rate limited'],
   ['Respond 202', 'Mark Processing'], ['Mark Processing', 'Build Context'], ['Build Context', 'Context OK?'],
@@ -93,19 +98,20 @@ const edges = [
  * leave. An empty column between sections keeps their notes apart.
  */
 const grid = {
-  'Royalty Summary Webhook': [0, 0], 'Load Settings': [1, 0], 'Prepare Job': [2, 0], 'Request Valid?': [3, 0], 'Respond Rejected': [4, 1],
-  'Enqueue Job': [5, 0], Outcome: [6, 0], 'Respond 202': [7, 0], 'Respond Duplicate': [7, 1], 'Respond 429': [7, 2], 'Mark Processing': [8, 0],
-  'Build Context': [9, 0], 'Context OK?': [10, 0],
-  'Call Anthropic': [11, 0], 'Call OpenAI (fallback)': [12, 1],
-  'Check Draft': [13, 0], 'Draft OK?': [14, 0], 'Stage: Rewriting': [15, 1], 'Rewrite (Anthropic)': [16, 1],
-  'Rewrite (OpenAI fallback)': [17, 2], 'Check Rewrite': [18, 1], 'Rewrite OK?': [19, 1],
-  'Render Email': [20, 0], 'Send Now?': [21, 0], 'Deliver Email': [22, 0],
-  'AI Failed': [21, 3], 'Record Result': [22, 3],
+  'Royalty Summary Webhook': [0, 0], 'Load Settings': [1, 0], 'Check Settings': [2, 0], 'Settings OK?': [3, 0], 'Validate Body': [4, 0],
+  'Request Valid?': [5, 0], 'Respond Rejected': [6, 1],
+  'Enqueue Job': [7, 0], Outcome: [8, 0], 'Respond 202': [9, 0], 'Respond Duplicate': [9, 1], 'Respond 429': [9, 2], 'Mark Processing': [10, 0],
+  'Build Context': [11, 0], 'Context OK?': [12, 0],
+  'Call Anthropic': [13, 0], 'Call OpenAI (fallback)': [14, 1],
+  'Check Draft': [15, 0], 'Draft OK?': [16, 0], 'Stage: Rewriting': [17, 1], 'Rewrite (Anthropic)': [18, 1],
+  'Rewrite (OpenAI fallback)': [19, 2], 'Check Rewrite': [20, 1], 'Rewrite OK?': [21, 1],
+  'Render Email': [22, 0], 'Send Now?': [23, 0], 'Deliver Email': [24, 0],
+  'AI Failed': [23, 3], 'Record Result': [24, 3],
 };
 
 const sections = [
-  { title: 'Intake', text: 'Settings, then the body is checked and the job built. A bad body gets 400.',
-    nodes: ['Royalty Summary Webhook', 'Load Settings', 'Prepare Job', 'Request Valid?', 'Respond Rejected'] },
+  { title: 'Intake', text: 'The settings are checked (bad settings: 500), then the body (a bad body: 400).',
+    nodes: ['Royalty Summary Webhook', 'Load Settings', 'Check Settings', 'Settings OK?', 'Validate Body', 'Request Valid?', 'Respond Rejected'] },
   { title: 'Ledger', text: 'One locked call: a new job (202), a double click (200, the same job) or the hourly cap (429).',
     nodes: ['Enqueue Job', 'Outcome', 'Respond 202', 'Respond Duplicate', 'Respond 429', 'Mark Processing'] },
   { title: 'Data & facts', text: 'Figures checked, facts and prompt built.', nodes: ['Build Context', 'Context OK?'] },

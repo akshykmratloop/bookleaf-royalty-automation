@@ -61,7 +61,7 @@ describe('enqueue_royalty_job (one transaction-scoped advisory lock)', () => {
   });
   it('takes the lock before it looks back for duplicates or counts the hour', () => {
     const lock = at("PERFORM pg_advisory_xact_lock(hashtextextended('bookleaf.enqueue_royalty_job', 0));");
-    expect(lock).toBeLessThan(at("r.author_id = job->>'author_id' AND r.fingerprint = job->>'fingerprint'"));
+    expect(lock).toBeLessThan(at("r.author_id = job->>'author_id' AND r.fingerprint = job_fingerprint"));
     expect(lock).toBeLessThan(at('SELECT count(*)::integer INTO sends'));
   });
   it('looks back over a sliding window read from duplicate_window_minutes, whatever the status', () => {
@@ -77,9 +77,16 @@ describe('enqueue_royalty_job (one transaction-scoped advisory lock)', () => {
   it('answers a duplicate before it checks the cap, so a double click at the limit still gets its job', () => {
     expect(at("'duplicate'::text")).toBeLessThan(at('SELECT count(*)::integer INTO sends'));
   });
+  it('makes the job id and the fingerprint itself: SHA-256 of fingerprint_of as canonical jsonb text', () => {
+    at("job_fingerprint text := encode(sha256(convert_to((job->'fingerprint_of')::text, 'UTF8')), 'hex');");
+    at('new_job uuid := gen_random_uuid();');
+    expect(at('PERFORM pg_advisory_xact_lock')).toBeLessThan(at('new_job, job_fingerprint, job->>\'execution_id\''));
+  });
   it('stores the execution id and fingerprint, and never writes idem_key', () => {
-    at("job->>'fingerprint', job->>'execution_id'");
+    at("new_job, job_fingerprint, job->>'execution_id'");
     expect(enqueueFn).not.toContain('idem_key');
+    expect(enqueueFn).not.toContain("job->>'job_id'");
+    expect(enqueueFn).not.toContain("job->>'fingerprint'");
   });
 });
 

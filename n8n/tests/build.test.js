@@ -62,7 +62,7 @@ describe('built workflows', () => {
     const ai = ofType('royalty-summary', 'httpRequest');
     expect(ai.map((n) => n.name)).toEqual(['Call Anthropic', 'Call OpenAI (fallback)', 'Rewrite (Anthropic)', 'Rewrite (OpenAI fallback)']);
     for (const n of ai) {
-      expect(n.parameters.options.timeout, n.name).toBe("={{ $('Prepare Job').first().json.job.settings.ai_timeout_ms }}");
+      expect(n.parameters.options.timeout, n.name).toBe("={{ $('Build Context').first().json.job.settings.ai_timeout_ms }}");
       expect(n, n.name).toMatchObject({ retryOnFail: true, maxTries: TUNING.aiRetries + 1, waitBetweenTries: TUNING.aiRetryWaitMs });
     }
   });
@@ -120,16 +120,18 @@ describe('built workflows', () => {
 
 describe('bundled Code nodes run standalone', () => {
   it('Build Context throws on the crash drill, so the execution fails and the error workflow runs', () => {
-    const job = runCode(nodeOf('royalty-summary', 'Prepare Job'), {
+    const job = runCode(nodeOf('royalty-summary', 'Validate Body'), {
       $json: { settings: SETTINGS }, $: outputsOf({ 'Royalty Summary Webhook': { body: payloadFor('AUTH002', { drills: { crash: true } }) } }),
       $execution: { id: '81' },
     })[0].json.job;
-    const run = () => runCode(nodeOf('royalty-summary', 'Build Context'), { $: outputsOf({ 'Prepare Job': { job } }) });
+    const run = () => runCode(nodeOf('royalty-summary', 'Build Context'), {
+      $: outputsOf({ 'Validate Body': { job }, 'Enqueue Job': { job_id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d' } }),
+    });
     expect(run).toThrow('Failure drill: the workflow crashed on purpose.');
   });
   // The webhook has already checked the key (Header Auth): the Code nodes get no headers at all.
-  it('Prepare Job takes the request from the webhook, the settings from Load Settings and the execution id from n8n', () => {
-    const node = nodeOf('royalty-summary', 'Prepare Job');
+  it('Validate Body takes the request from the webhook, the checked settings from Check Settings and the execution id from n8n', () => {
+    const node = nodeOf('royalty-summary', 'Validate Body');
     const run = (body, settings = SETTINGS) => runCode(node, {
       $json: { settings }, $: outputsOf({ 'Royalty Summary Webhook': { body } }), $execution: { id: '81' },
     })[0].json;
@@ -137,14 +139,20 @@ describe('bundled Code nodes run standalone', () => {
     expect(ok).toMatchObject({ ok: true, job: { author_code: 'AUTH002', delivery: 'draft', settings: SETTINGS } });
     expect(JSON.parse(ok.enqueue).execution_id).toBe('81');
     expect(run({ mode: 'x' })).toMatchObject({ ok: false, http_status: 400, response: { error: { code: 'VALIDATION' } } });
-    expect(run(payloadFor('AUTH002'), { ...SETTINGS, email_from: '' })).toMatchObject({ ok: false, http_status: 500, response: { error: { code: 'INTERNAL' } } });
+  });
+  it('Check Settings (both workflows) answers 500 INTERNAL for unusable settings and passes good ones on', () => {
+    for (const wf of ['royalty-summary', 'approve-draft']) {
+      const run = (settings) => runCode(nodeOf(wf, 'Check Settings'), { $json: { settings } })[0].json;
+      expect(run(SETTINGS), wf).toEqual({ ok: true, settings: SETTINGS });
+      expect(run({ ...SETTINGS, email_from: '' }), wf).toMatchObject({ ok: false, http_status: 500, response: { error: { code: 'INTERNAL' } } });
+    }
   });
   it('Parse Query validates the job ids', () => {
     const run = (query) => runCode(nodeOf('job-status', 'Parse Query'), { $json: { query } })[0].json;
     expect(run({ ids: 'nope' })).toMatchObject({ ok: false, http_status: 400 });
     expect(run({ ids: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', include: 'html' })).toMatchObject({ ok: true, include_html: true });
   });
-  it('Parse Request (approve) validates the settings and the body', () => {
+  it('Parse Request (approve) validates the body and passes the checked settings on', () => {
     const node = nodeOf('approve-draft', 'Parse Request');
     const run = (body, settings = SETTINGS) => runCode(node, {
       $json: { settings }, $: outputsOf({ 'Approve Webhook': { body } }),
@@ -152,6 +160,5 @@ describe('bundled Code nodes run standalone', () => {
     const body = { job_id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', action: 'discard' };
     expect(run(body)).toMatchObject({ ok: true, job_id: body.job_id, settings: SETTINGS });
     expect(run({ action: 'x' })).toMatchObject({ ok: false, http_status: 400 });
-    expect(run(body, { ...SETTINGS, draft_ttl_hours: 0 })).toMatchObject({ ok: false, http_status: 500 });
   });
 });

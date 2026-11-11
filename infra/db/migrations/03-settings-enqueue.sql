@@ -71,6 +71,8 @@ CREATE INDEX IF NOT EXISTS royalty_jobs_created_idx ON royalty_jobs (created_at)
 --                 duplicate_window_minutes (a sliding window; any status)
 --   rate_limited  max_sends_per_hour jobs were created in the last hour (FAILED and DISCARDED not counted)
 --   queued        the new job, inserted QUEUED at stage queued
+-- It makes the job id (gen_random_uuid) and the fingerprint: SHA-256 hex of `fingerprint_of` as jsonb
+-- text, which is canonical (keys sorted, whitespace fixed), so the order Bubble sends fields in never matters.
 -- VOLATILE on purpose: each statement takes a fresh snapshot after the lock is granted.
 CREATE OR REPLACE FUNCTION enqueue_royalty_job(job jsonb)
 RETURNS TABLE (outcome text, job_id text, status text, error_code text, recent_sends integer)
@@ -84,9 +86,11 @@ DECLARE
   earlier_status text;
   earlier_error text;
   sends integer;
+  job_fingerprint text := encode(sha256(convert_to((job->'fingerprint_of')::text, 'UTF8')), 'hex');
+  new_job uuid := gen_random_uuid();
 BEGIN
-  IF coalesce(job->>'fingerprint', '') !~ '^[0-9a-f]{64}$' THEN
-    RAISE EXCEPTION 'enqueue_royalty_job: fingerprint must be 64 lowercase hex characters' USING ERRCODE = 'invalid_parameter_value';
+  IF jsonb_typeof(job->'fingerprint_of') IS DISTINCT FROM 'object' THEN
+    RAISE EXCEPTION 'enqueue_royalty_job: fingerprint_of must be a JSON object' USING ERRCODE = 'invalid_parameter_value';
   END IF;
   IF coalesce(job->>'execution_id', '') = '' THEN
     RAISE EXCEPTION 'enqueue_royalty_job: execution_id is required' USING ERRCODE = 'invalid_parameter_value';
@@ -96,7 +100,7 @@ BEGIN
 
   SELECT r.job_id, r.status, r.error_code INTO earlier_job, earlier_status, earlier_error
   FROM royalty_jobs r
-  WHERE r.author_id = job->>'author_id' AND r.fingerprint = job->>'fingerprint'
+  WHERE r.author_id = job->>'author_id' AND r.fingerprint = job_fingerprint
     AND r.created_at > now() - make_interval(mins => window_minutes)
   ORDER BY r.created_at DESC
   LIMIT 1;
@@ -115,10 +119,10 @@ BEGIN
 
   INSERT INTO royalty_jobs (job_id, fingerprint, execution_id, log_id, batch_id, author_id, author_code, mode, status,
     requested_by, callback_status, stage, stage_at, delivery, tone, length, note, sign_off, recipient, drills)
-  VALUES ((job->>'job_id')::uuid, job->>'fingerprint', job->>'execution_id', job->>'log_id', job->>'batch_id',
+  VALUES (new_job, job_fingerprint, job->>'execution_id', job->>'log_id', job->>'batch_id',
     job->>'author_id', job->>'author_code', job->>'mode', 'QUEUED', job->>'requested_by', 'NOT_NEEDED', 'queued', now(),
     job->>'delivery', job->>'tone', job->>'length', job->>'note', job->>'sign_off', job->>'recipient', job->'drills');
-  RETURN QUERY SELECT 'queued'::text, job->>'job_id', 'QUEUED'::text, NULL::text, sends + 1;
+  RETURN QUERY SELECT 'queued'::text, new_job::text, 'QUEUED'::text, NULL::text, sends + 1;
 END $$;
 
 COMMIT;

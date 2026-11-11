@@ -24,6 +24,8 @@ const ABOUT = [
 const nodes = [
   webhook('Approve Webhook', 'POST', 'royalty-summary/approve'),
   pg('Load Settings', LOAD_SETTINGS, null),
+  withNote(code('Check Settings', 'checkSettings', 'return main({ settings: $json.settings });'), 'Bad settings: 500'),
+  ifTrue('Settings OK?', '$json.ok', IS_TRUE),
   code('Parse Request', 'parseApprove', `return main({ body: ${WEBHOOK}.body, settings: $json.settings });`),
   ifTrue('Request Valid?', '$json.ok', IS_TRUE),
   respond('Respond Rejected'),
@@ -43,7 +45,8 @@ const nodes = [
 ];
 
 const edges = [
-  ['Approve Webhook', 'Load Settings'], ['Load Settings', 'Parse Request'], ['Parse Request', 'Request Valid?'],
+  ['Approve Webhook', 'Load Settings'], ['Load Settings', 'Check Settings'], ['Check Settings', 'Settings OK?'],
+  ['Settings OK?', 'Parse Request', 'true'], ['Settings OK?', 'Respond Rejected', 'false'], ['Parse Request', 'Request Valid?'],
   ['Request Valid?', 'Load Draft', 'true'], ['Request Valid?', 'Respond Rejected', 'false'],
   ['Load Draft', 'Decide'], ['Decide', 'Action'],
   ['Action', 'Claim Draft', 'Send'], ['Action', 'Discard Draft', 'Discard'], ['Action', 'Respond Answer', 'Answer'],
@@ -54,13 +57,15 @@ const edges = [
 
 /** The send path is row 0, left to right (Send is Action's top output); discard and check answers sit below. */
 const grid = {
-  'Approve Webhook': [0, 0], 'Load Settings': [1, 0], 'Parse Request': [2, 0], 'Request Valid?': [3, 0], 'Respond Rejected': [4, 1],
-  'Load Draft': [5, 0], Decide: [6, 0], Action: [7, 0],
-  'Claim Draft': [8, 0], 'Claimed?': [9, 0], 'Respond Sending': [10, 0], 'Deliver Email': [11, 0], 'Respond Already Sent': [10, 1],
-  'Discard Draft': [8, 3], 'Respond Discard': [9, 3], 'Respond Answer': [8, 4],
+  'Approve Webhook': [0, 0], 'Load Settings': [1, 0], 'Check Settings': [2, 0], 'Settings OK?': [3, 0], 'Parse Request': [4, 0],
+  'Request Valid?': [5, 0], 'Respond Rejected': [6, 1],
+  'Load Draft': [7, 0], Decide: [8, 0], Action: [9, 0],
+  'Claim Draft': [10, 0], 'Claimed?': [11, 0], 'Respond Sending': [12, 0], 'Deliver Email': [13, 0], 'Respond Already Sent': [12, 1],
+  'Discard Draft': [10, 3], 'Respond Discard': [11, 3], 'Respond Answer': [10, 4],
 };
 const sections = [
-  { title: 'Intake', text: 'Settings and the body; a bad body gets 400.', nodes: ['Approve Webhook', 'Load Settings', 'Parse Request', 'Request Valid?', 'Respond Rejected'] },
+  { title: 'Intake', text: 'The settings (bad: 500), then the body (bad: 400).',
+    nodes: ['Approve Webhook', 'Load Settings', 'Check Settings', 'Settings OK?', 'Parse Request', 'Request Valid?', 'Respond Rejected'] },
   { title: 'Load & decide', text: 'Re-checks the edit and works out every answer.', nodes: ['Load Draft', 'Decide', 'Action'] },
   { title: 'Send', text: 'One click wins the draft; the email goes out once.', nodes: ['Claim Draft', 'Claimed?', 'Respond Sending', 'Deliver Email', 'Respond Already Sent'] },
   { title: 'Discard or check', text: 'Closes the draft, or answers a preview.', nodes: ['Discard Draft', 'Respond Discard', 'Respond Answer'] },

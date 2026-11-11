@@ -1,4 +1,4 @@
-import { sha256Hex } from '../../src/pipeline/sha256.js';
+import { createHash } from 'node:crypto';
 import { credentialRef } from './credentials.mjs';
 
 /**
@@ -10,7 +10,7 @@ const node = (name, type, typeVersion, parameters, extra = {}) => ({ name, type:
 
 /** A UUID-shaped id that is the same on every build (n8n wants ids; a reproducible build wants no randomness). */
 export function stableUuid(text) {
-  const h = sha256Hex(text);
+  const h = createHash('sha256').update(text, 'utf8').digest('hex');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 

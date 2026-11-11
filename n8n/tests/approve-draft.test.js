@@ -17,10 +17,10 @@ function answer(name, $json) {
 }
 
 describe('approve-draft shape', () => {
-  it('has 16 working nodes: 2 Code, 2 IF, 1 Switch, 4 Postgres, 5 Respond, Deliver Email and the webhook', () => {
-    expect(working).toHaveLength(16);
+  it('has 18 working nodes: 3 Code, 3 IF, 1 Switch, 4 Postgres, 5 Respond, Deliver Email and the webhook', () => {
+    expect(working).toHaveLength(18);
     const counts = working.reduce((acc, n) => ({ ...acc, [short(n)]: (acc[short(n)] ?? 0) + 1 }), {});
-    expect(counts).toEqual({ webhook: 1, postgres: 4, code: 2, if: 2, switch: 1, respondToWebhook: 5, executeWorkflow: 1 });
+    expect(counts).toEqual({ webhook: 1, postgres: 4, code: 3, if: 3, switch: 1, respondToWebhook: 5, executeWorkflow: 1 });
   });
   it('Action is a Rules-mode Switch with the outputs Send (top: the main row), Discard and Answer', () => {
     const action = nodeOf(WF, 'Action');
@@ -42,6 +42,11 @@ describe('approve-draft shape', () => {
 });
 
 describe('approve-draft wiring', () => {
+  it('settings are checked on their own first: unusable settings get 500 from Respond Rejected', () => {
+    expect(targets(WF, 'Load Settings')).toEqual(['Check Settings']);
+    expect(targets(WF, 'Check Settings')).toEqual(['Settings OK?']);
+    expect([targets(WF, 'Settings OK?', 0), targets(WF, 'Settings OK?', 1)]).toEqual([['Parse Request'], ['Respond Rejected']]);
+  });
   it('a valid request loads the draft and Decide picks the action; a bad one is answered by Respond Rejected', () => {
     expect(targets(WF, 'Parse Request')).toEqual(['Request Valid?']);
     expect([targets(WF, 'Request Valid?', 0), targets(WF, 'Request Valid?', 1)]).toEqual([['Load Draft'], ['Respond Rejected']]);
@@ -80,7 +85,7 @@ describe('approve-draft wiring', () => {
 describe('approve-draft canvas', () => {
   it('reads left to right: the send path on one row, the other answers below it', () => {
     const y = (name) => nodeOf(WF, name).position[1];
-    const happy = ['Approve Webhook', 'Load Settings', 'Parse Request', 'Request Valid?', 'Load Draft', 'Decide', 'Action',
+    const happy = ['Approve Webhook', 'Load Settings', 'Check Settings', 'Settings OK?', 'Parse Request', 'Request Valid?', 'Load Draft', 'Decide', 'Action',
       'Claim Draft', 'Claimed?', 'Respond Sending', 'Deliver Email'];
     expect(happy.map(y)).toEqual(happy.map(() => 0));
     const x = happy.map((name) => nodeOf(WF, name).position[0]);

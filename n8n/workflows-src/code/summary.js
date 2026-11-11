@@ -12,8 +12,9 @@ import { enqueueParams, prepareJob, rateLimitedResponse } from '../../src/pipeli
 const item = (json) => [{ json }];
 
 /**
- * Check the settings (Load Settings) and the webhook body (the webhook already checked the key).
- * ok: `enqueue` is Enqueue Job's parameter and `rate_limited` the 429 body; not ok: the 4xx/500 answer.
+ * Validate Body: the webhook body (the webhook already checked the key) against the settings Check
+ * Settings passed on. ok: `enqueue` is Enqueue Job's parameter and `rate_limited` the 429 body; not
+ * ok: the 4xx answer.
  */
 export function prepare({ body, settings, now, executionId }) {
   const r = prepareJob(body, settings, now);
@@ -21,10 +22,14 @@ export function prepare({ body, settings, now, executionId }) {
   return item({ ok: true, job: r.job, enqueue: enqueueParams(r.job, executionId), rate_limited: rateLimitedResponse(r.job.settings) });
 }
 
-/** Data + integrity + facts + prompt. ok: call the AI; not ok: `update` fails the job. */
-export function context({ job }) {
+/**
+ * Data + integrity + facts + prompt, for the job under the id Enqueue Job made (`jobId`). `job` is passed
+ * on for every later node. ok: call the AI; not ok: `update` fails the job.
+ */
+export function context({ validated, jobId }) {
+  const job = { ...validated, job_id: jobId };
   const r = buildContext(job);
-  return r.ok ? item({ ok: true, ctx: r.ctx }) : item({ ok: false, update: failedUpdate(job, r) });
+  return r.ok ? item({ ok: true, job, ctx: r.ctx }) : item({ ok: false, job, update: failedUpdate(job, r) });
 }
 
 /**

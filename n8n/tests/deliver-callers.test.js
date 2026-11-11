@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { afterAi } from '../src/pipeline/after-ai.js';
 import { buildContext } from '../src/pipeline/context.js';
 import { draftUpdate } from '../src/pipeline/finalize.js';
-import { prepareJob } from '../src/pipeline/prepare.js';
+import { queuedJob } from './pipeline/job-fixture.js';
 import { DELIVER_EMAIL } from '../workflows-src/deliver-email.mjs';
 import { anthropicOk } from './pipeline/ai-fixtures.js';
 import { payloadFor } from './pipeline/fixtures.js';
-import { fixedRandom, NOW, SETTINGS } from './pipeline/settings-fixture.js';
+import { NOW, SETTINGS } from './pipeline/settings-fixture.js';
 import { built, evaluate, nodeOf, ofType, outputsOf, runCode, targets } from './built.js';
 
 /** royalty-summary and approve-draft hand every email to "BookLeaf - Deliver Email". */
@@ -29,7 +29,7 @@ function expectDeclaredTypes(inputs) {
   });
 }
 
-const job = (over) => prepareJob(payloadFor('AUTH002', over), SETTINGS, NOW, fixedRandom).job;
+const job = (over) => queuedJob('AUTH002', over);
 const written = (j) => {
   const ctx = buildContext(j).ctx;
   return { ctx, ai: afterAi({ response: anthropicOk(), ctx, job: j, attempt: 1 }).ai };
@@ -38,7 +38,7 @@ const written = (j) => {
 function rendered(j) {
   const { ctx, ai } = written(j);
   return runCode(nodeOf('royalty-summary', 'Render Email'), {
-    $json: { ai }, $: outputsOf({ 'Build Context': { ctx }, 'Prepare Job': { job: j } }),
+    $json: { ai }, $: outputsOf({ 'Build Context': { ctx, job: j } }),
   })[0].json;
 }
 

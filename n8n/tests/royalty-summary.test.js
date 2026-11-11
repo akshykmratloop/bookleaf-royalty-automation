@@ -1,19 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { AI_OUTCOMES } from '../src/pipeline/after-ai.js';
 import { buildContext } from '../src/pipeline/context.js';
-import { prepareJob, rateLimitedResponse } from '../src/pipeline/prepare.js';
+import { rateLimitedResponse } from '../src/pipeline/prepare.js';
 import { ENQUEUE_JOB, UPDATE_JOB } from '../src/pipeline/sql.js';
 import { anthropicOk, openaiOk, wrongSections } from './pipeline/ai-fixtures.js';
 import { payloadFor } from './pipeline/fixtures.js';
-import { fixedRandom, NOW, SETTINGS } from './pipeline/settings-fixture.js';
+import { JOB_ID, queuedJob } from './pipeline/job-fixture.js';
+import { SETTINGS } from './pipeline/settings-fixture.js';
 import { built, evaluate, nodeOf, runCode, targets } from './built.js';
 
 /** "BookLeaf - Royalty Summary": intake, ledger, data, AI writer, fact check, render and deliver, record. */
 const WF = 'royalty-summary';
-const ID = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
+const ID = JOB_ID;
 const working = built[WF].nodes.filter((n) => n.type !== 'n8n-nodes-base.stickyNote');
 const typeCounts = () => working.reduce((acc, n) => ({ ...acc, [n.type.replace('n8n-nodes-base.', '')]: (acc[n.type.replace('n8n-nodes-base.', '')] ?? 0) + 1 }), {});
-const job = prepareJob(payloadFor('AUTH002'), SETTINGS, NOW, fixedRandom).job;
+const job = queuedJob('AUTH002');
 const ctx = buildContext(job).ctx;
 /**
  * `$` as n8n gives it to a Code node: `first()` of a node's output, `all(1)` of its error output and
@@ -28,10 +29,10 @@ const run = (name, $json, outputs, errors) => runCode(nodeOf(WF, name), { $json,
 const ruleOutputs = (name) => nodeOf(WF, name).parameters.rules.values.map((r) => [r.outputKey, r.conditions.conditions[0].rightValue]);
 
 describe('royalty-summary shape', () => {
-  it('has 27 working nodes: 6 Code, 4 IF, 2 Switch, 5 Postgres, 4 HTTP, 4 Respond, Deliver Email and the webhook', () => {
-    expect(working).toHaveLength(27);
+  it('has 29 working nodes: 7 Code, 5 IF, 2 Switch, 5 Postgres, 4 HTTP, 4 Respond, Deliver Email and the webhook', () => {
+    expect(working).toHaveLength(29);
     expect(typeCounts()).toEqual({
-      webhook: 1, postgres: 5, code: 6, if: 4, switch: 2, respondToWebhook: 4, httpRequest: 4, executeWorkflow: 1,
+      webhook: 1, postgres: 5, code: 7, if: 5, switch: 2, respondToWebhook: 4, httpRequest: 4, executeWorkflow: 1,
     });
   });
   it('every Switch is in Rules mode with named outputs (filter version 2); none picks an output by number', () => {
@@ -47,22 +48,34 @@ describe('royalty-summary shape', () => {
   it('every IF is 2.2 and asks the happy-path question, so true is the main row', () => {
     const ifs = working.filter((x) => x.type === 'n8n-nodes-base.if');
     expect(ifs.map((n) => [n.name, n.parameters.conditions.conditions[0].leftValue])).toEqual([
-      ['Request Valid?', '={{ $json.ok }}'], ['Context OK?', '={{ $json.ok }}'], ['Rewrite OK?', '={{ $json.ok }}'], ['Send Now?', '={{ $json.send }}'],
+      ['Settings OK?', '={{ $json.ok }}'], ['Request Valid?', '={{ $json.ok }}'], ['Context OK?', '={{ $json.ok }}'], ['Rewrite OK?', '={{ $json.ok }}'], ['Send Now?', '={{ $json.send }}'],
     ]);
     for (const n of ifs) expect(n.parameters.conditions.conditions[0].operator, n.name).toEqual({ type: 'boolean', operation: 'true', singleValue: true });
   });
 });
 
 describe('intake and ledger', () => {
-  it('Prepare Job checks the request and builds the enqueue parameter with this execution\'s id and the 429 answer', () => {
-    const out = run('Prepare Job', { settings: SETTINGS }, { 'Royalty Summary Webhook': { body: payloadFor('AUTH002') } });
+  it('Check Settings checks the Load Settings row on its own: bad settings get 500 before the body is read', () => {
+    expect(targets(WF, 'Load Settings')).toEqual(['Check Settings']);
+    expect(targets(WF, 'Check Settings')).toEqual(['Settings OK?']);
+    expect([targets(WF, 'Settings OK?', 0), targets(WF, 'Settings OK?', 1)]).toEqual([['Validate Body'], ['Respond Rejected']]);
+    expect(run('Check Settings', { settings: SETTINGS }, {})).toEqual({ ok: true, settings: SETTINGS });
+    const bad = run('Check Settings', { settings: { ...SETTINGS, max_sends_per_hour: 'lots', email_from: '' } }, {});
+    expect(bad).toMatchObject({ ok: false, http_status: 500, response: { error: { code: 'INTERNAL' } } });
+    expect(bad.response.error.message).toContain('max_sends_per_hour must be a whole number');
+    expect(bad.response.error.message).toContain('email_from must be an email address');
+    expect(run('Check Settings', { settings: null }, {})).toMatchObject({ ok: false, http_status: 500 });
+  });
+  it('Validate Body checks the request and builds the enqueue parameter (no id, no hash: the database makes both) and the 429 answer', () => {
+    const out = run('Validate Body', { ok: true, settings: SETTINGS }, { 'Royalty Summary Webhook': { body: payloadFor('AUTH002') } });
     expect(out).toMatchObject({ ok: true, job: { author_code: 'AUTH002' }, rate_limited: rateLimitedResponse(SETTINGS) });
-    expect(JSON.parse(out.enqueue)).toMatchObject({ job_id: out.job.job_id, execution_id: '4711', fingerprint: out.job.fingerprint });
-    expect(run('Prepare Job', { settings: SETTINGS }, { 'Royalty Summary Webhook': { body: { mode: 'x' } } }))
+    expect(out.job).not.toHaveProperty('job_id');
+    expect(JSON.parse(out.enqueue)).toMatchObject({ execution_id: '4711', fingerprint_of: { author_id: 'bubble_auth002' } });
+    expect(run('Validate Body', { ok: true, settings: SETTINGS }, { 'Royalty Summary Webhook': { body: { mode: 'x' } } }))
       .toMatchObject({ ok: false, http_status: 400, response: { error: { code: 'VALIDATION' } } });
   });
   it('a valid request goes to Enqueue Job (enqueue_royalty_job); a bad one is answered by Respond Rejected', () => {
-    expect(targets(WF, 'Prepare Job')).toEqual(['Request Valid?']);
+    expect(targets(WF, 'Validate Body')).toEqual(['Request Valid?']);
     expect(targets(WF, 'Request Valid?', 0)).toEqual(['Enqueue Job']);
     expect(targets(WF, 'Request Valid?', 1)).toEqual(['Respond Rejected']);
     expect(nodeOf(WF, 'Enqueue Job').parameters).toMatchObject({ query: ENQUEUE_JOB, options: { queryReplacement: '={{ $json.enqueue }}' } });
@@ -77,7 +90,7 @@ describe('intake and ledger', () => {
   it('answers Bubble exactly as before: 202 {job_id, status, duplicate}, 200 duplicate (+error_code), 429 RATE_LIMITED', () => {
     const answer = (name, $json) => {
       const p = nodeOf(WF, name).parameters;
-      const g = { $json, $: nodes({ 'Prepare Job': { rate_limited: rateLimitedResponse(SETTINGS) } }) };
+      const g = { $json, $: nodes({ 'Validate Body': { rate_limited: rateLimitedResponse(SETTINGS) } }) };
       return { status: evaluate(p.options.responseCode, g), body: evaluate(p.responseBody, g) };
     };
     const queued = { outcome: 'queued', job_id: ID, status: 'QUEUED', error_code: null };
@@ -88,6 +101,15 @@ describe('intake and ledger', () => {
       .toEqual({ status: 200, body: { job_id: ID, status: 'FAILED', duplicate: true, error_code: 'AI_UNAVAILABLE' } });
     expect(answer('Respond 429', { outcome: 'rate_limited', job_id: null }))
       .toEqual({ status: 429, body: rateLimitedResponse(SETTINGS) });
+  });
+});
+
+describe('the job after the ledger', () => {
+  it('Build Context runs the job under the id Enqueue Job made, and passes the job on', () => {
+    const validated = { ...job };
+    delete validated.job_id;
+    const out = run('Build Context', {}, { 'Validate Body': { job: validated }, 'Enqueue Job': { job_id: ID } });
+    expect(out).toMatchObject({ ok: true, job: { job_id: ID, author_code: 'AUTH002' }, ctx: { titles: expect.any(Array) } });
   });
 });
 
@@ -111,7 +133,7 @@ describe('AI writer, fact check and rewrite', () => {
     expect([targets(WF, 'Rewrite OK?', 0), targets(WF, 'Rewrite OK?', 1)]).toEqual([['Render Email'], ['Record Result']]);
   });
   it('Check Draft and Check Rewrite run the same fact check on whichever provider answered', () => {
-    const outputs = { 'Prepare Job': { job }, 'Build Context': { ctx } };
+    const outputs = { 'Build Context': { job, ctx } };
     const first = run('Check Draft', anthropicOk(wrongSections), outputs);
     expect(first).toMatchObject({ outcome: AI_OUTCOMES.REWRITE, ok: false, rewrite: { anthropic: { messages: expect.any(Array) }, openai: { input: expect.any(Array) } } });
     const second = run('Check Rewrite', openaiOk(), { ...outputs, 'Check Draft': first });
@@ -120,7 +142,7 @@ describe('AI writer, fact check and rewrite', () => {
     expect(failed).toMatchObject({ ok: false, update: { status: 'FAILED', error_code: 'AI_FACT_CHECK_FAILED', ai_attempts: 2 } });
   });
   it('one AI Failed node serves both phases and names both providers\' errors', () => {
-    const base = { 'Prepare Job': { job } };
+    const base = { 'Build Context': { job, ctx } };
     const anthropicError = { error: { httpCode: '529', message: 'Overloaded' } };
     const write = run('AI Failed', { error: { message: 'connect ETIMEDOUT' } }, base, { 'Call Anthropic': anthropicError });
     expect(write.update).toMatchObject({ job_id: job.job_id, status: 'FAILED', error_code: 'AI_UNAVAILABLE' });
@@ -144,7 +166,7 @@ describe('render, deliver and record', () => {
   });
   it('reads left to right: the happy path on one row, every other branch below it', () => {
     const y = (name) => nodeOf(WF, name).position[1];
-    const happy = ['Royalty Summary Webhook', 'Load Settings', 'Prepare Job', 'Request Valid?', 'Enqueue Job', 'Outcome', 'Respond 202',
+    const happy = ['Royalty Summary Webhook', 'Load Settings', 'Check Settings', 'Settings OK?', 'Validate Body', 'Request Valid?', 'Enqueue Job', 'Outcome', 'Respond 202',
       'Mark Processing', 'Build Context', 'Context OK?', 'Call Anthropic', 'Check Draft', 'Draft OK?', 'Render Email', 'Send Now?', 'Deliver Email'];
     expect(happy.map(y)).toEqual(happy.map(() => 0));
     const x = happy.map((name) => nodeOf(WF, name).position[0]);

@@ -2,14 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { enqueueParams, prepareJob, rateLimitedResponse } from '../../src/pipeline/prepare.js';
 import { resolveReferenceDate } from '../../src/dates.js';
 import { recipientFor } from '../../src/pipeline/recipient.js';
-import { UUID } from '../../src/pipeline/ids.js';
-import { fixedRandom, NOW, SETTINGS } from './settings-fixture.js';
+import { NOW, SETTINGS } from './settings-fixture.js';
 import { payloadFor } from './fixtures.js';
 
-const prep = (body, settings = SETTINGS, now = NOW) => prepareJob(body, settings, now, fixedRandom);
+const prep = (body, settings = SETTINGS, now = NOW) => prepareJob(body, settings, now);
+/** What enqueue_royalty_job hashes (SHA-256 of its canonical jsonb text) into the job's fingerprint. */
+const fingerprintOf = (body, settings, now) => JSON.parse(enqueueParams(prep(body, settings, now).job, '1')).fingerprint_of;
 /** The fields enqueue_royalty_job reads (infra/db/migrations/03-settings-enqueue.sql). */
-const ENQUEUE_FIELDS = ['author_code', 'author_id', 'batch_id', 'delivery', 'drills', 'execution_id', 'fingerprint', 'job_id', 'length',
+const ENQUEUE_FIELDS = ['author_code', 'author_id', 'batch_id', 'delivery', 'drills', 'execution_id', 'fingerprint_of', 'length',
   'log_id', 'mode', 'note', 'recipient', 'requested_by', 'sign_off', 'tone'];
+const FINGERPRINT_FIELDS = ['attempt', 'author_id', 'bundle', 'delivery', 'drills', 'length', 'note', 'recipient', 'reference_date', 'sign_off', 'tone'];
 
 describe('prepareJob', () => {
   it('accepts a valid payload and builds the job', () => {
@@ -21,32 +23,32 @@ describe('prepareJob', () => {
       drills: { ai_down: false, email_down: false, data_down: false, primary_down: false, crash: false },
       delivery: 'send', tone: 'warm', length: 'standard', note: '', sign_off: '',
     });
-    expect(r.job.job_id).toMatch(UUID);
+    expect(r.job, 'enqueue_royalty_job makes the id').not.toHaveProperty('job_id');
+    expect(r.job, 'enqueue_royalty_job makes the fingerprint').not.toHaveProperty('fingerprint');
     expect(r.job.bundle.books).toHaveLength(2);
     expect(r.job.settings).toEqual(SETTINGS);
   });
-  it('a double click (same data) gives the same fingerprint: 64 hex characters, whatever the time or log id', () => {
-    const a = prep(payloadFor('AUTH002'));
-    const b = prep(payloadFor('AUTH002', { log_id: 'another_log' }), SETTINGS, NOW + 3_600_000);
-    expect(a.job.fingerprint).toMatch(/^[0-9a-f]{64}$/);
-    expect(b.job.fingerprint).toBe(a.job.fingerprint);
-    expect(a.job).not.toHaveProperty('idem_key');
+  it('a double click (same data) gives the same fingerprint data, whatever the time or log id', () => {
+    const a = fingerprintOf(payloadFor('AUTH002'));
+    expect(Object.keys(a).sort()).toEqual(FINGERPRINT_FIELDS);
+    expect(fingerprintOf(payloadFor('AUTH002', { log_id: 'another_log' }), SETTINGS, NOW + 3_600_000)).toEqual(a);
+    expect(prep(payloadFor('AUTH002')).job).not.toHaveProperty('idem_key');
   });
-  it('changed data, a new attempt or a drill give a new fingerprint', () => {
-    const base = prep(payloadFor('AUTH002')).job.fingerprint;
+  it('changed data, a new attempt or a drill give new fingerprint data', () => {
+    const base = fingerprintOf(payloadFor('AUTH002'));
     const changed = payloadFor('AUTH002');
     changed.books[0].paid += 1;
-    expect(prep(changed).job.fingerprint).not.toBe(base);
-    expect(prep(payloadFor('AUTH002', { attempt: 2 })).job.fingerprint).not.toBe(base);
-    expect(prep(payloadFor('AUTH002', { drills: { ai_down: true } })).job.fingerprint).not.toBe(base);
-    expect(prep(payloadFor('AUTH003')).job.fingerprint).not.toBe(base);
+    expect(fingerprintOf(changed)).not.toEqual(base);
+    expect(fingerprintOf(payloadFor('AUTH002', { attempt: 2 }))).not.toEqual(base);
+    expect(fingerprintOf(payloadFor('AUTH002', { drills: { ai_down: true } }))).not.toEqual(base);
+    expect(fingerprintOf(payloadFor('AUTH003'))).not.toEqual(base);
   });
-  it('delivery, tone, length, note and sign-off each change the fingerprint', () => {
-    const base = prep(payloadFor('AUTH002')).job.fingerprint;
+  it('delivery, tone, length, note and sign-off each change the fingerprint data', () => {
+    const base = fingerprintOf(payloadFor('AUTH002'));
     for (const over of [{ delivery: 'draft' }, { tone: 'formal' }, { length: 'short' }, { note: 'Be brief.' }, { sign_off: 'Priya' }]) {
-      expect(prep(payloadFor('AUTH002', over)).job.fingerprint, JSON.stringify(over)).not.toBe(base);
+      expect(fingerprintOf(payloadFor('AUTH002', over)), JSON.stringify(over)).not.toEqual(base);
     }
-    expect(prep(payloadFor('AUTH002', { tone: 'warm', length: 'standard', delivery: 'send' })).job.fingerprint).toBe(base);
+    expect(fingerprintOf(payloadFor('AUTH002', { tone: 'warm', length: 'standard', delivery: 'send' }))).toEqual(base);
   });
   it('carries the writing options on the job and rejects unknown values with 400', () => {
     const r = prep(payloadFor('AUTH002', { delivery: 'draft', tone: 'concise', length: 'detailed', note: ' Thank them. ', sign_off: 'Anita Rao' }));
@@ -97,13 +99,6 @@ describe('prepareJob', () => {
     expect(prep(payloadFor('AUTH001', { attempt: 0 })).fields[0].path).toBe('attempt');
     expect(prep(payloadFor('AUTH001', { attempt: '3' })).job.attempt).toBe(3);
   });
-  it('fails INTERNAL (HTTP 500) on invalid or missing server settings, naming them, before reading the body', () => {
-    const r = prep('not even an object', { ...SETTINGS, max_sends_per_hour: 'lots', email_from: '' });
-    expect(r).toMatchObject({ ok: false, code: 'INTERNAL', http_status: 500 });
-    expect(r.message).toContain('max_sends_per_hour must be a whole number');
-    expect(r.message).toContain('email_from must be an email address');
-    expect(prep(payloadFor('AUTH001'), null)).toMatchObject({ ok: false, code: 'INTERNAL' });
-  });
   it('uses the reference_date_default setting when the request gives no date', () => {
     expect(prep(payloadFor('AUTH001', { reference_date: '' }), { ...SETTINGS, reference_date_default: '2025-09-30' }).job.reference_date).toBe('2025-09-30');
   });
@@ -112,10 +107,12 @@ describe('prepareJob', () => {
     const p = JSON.parse(enqueueParams(job, '4711'));
     expect(Object.keys(p).sort()).toEqual(ENQUEUE_FIELDS);
     expect(p).toMatchObject({
-      job_id: job.job_id, execution_id: '4711', fingerprint: job.fingerprint, author_id: 'bubble_auth001', author_code: 'AUTH001',
+      execution_id: '4711', author_id: 'bubble_auth001', author_code: 'AUTH001',
       mode: 'single', delivery: 'send', tone: 'warm', length: 'standard', note: '', sign_off: '', recipient: 'demo@inbox.test',
     });
     expect(p.drills).toEqual({ ai_down: false, email_down: false, data_down: false, primary_down: false, crash: false });
+    expect(p.fingerprint_of).toMatchObject({ author_id: 'bubble_auth001', reference_date: '2025-12-31', recipient: 'demo@inbox.test', attempt: 1 });
+    expect(p.fingerprint_of.bundle).toEqual(job.bundle);
   });
   it('enqueueParams refuses a missing execution id (the function would raise)', () => {
     expect(() => enqueueParams(prep(payloadFor('AUTH001')).job, '')).toThrow(TypeError);

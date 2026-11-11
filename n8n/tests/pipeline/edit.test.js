@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { afterAi } from '../../src/pipeline/after-ai.js';
 import { buildContext } from '../../src/pipeline/context.js';
 import { checkEdited, EDIT_MARKER, formatIssues, parseEditText, renderEdited, toEditText } from '../../src/pipeline/edit.js';
-import { prepareJob } from '../../src/pipeline/prepare.js';
+import { queuedJob } from './job-fixture.js';
 import { renderEmail } from '../../src/render-email.js';
 import { signatureFor } from '../../src/signature.js';
-import { fixedRandom, NOW, SETTINGS } from './settings-fixture.js';
+import { NOW, SETTINGS } from './settings-fixture.js';
 import { payloadFor } from './fixtures.js';
 import { anthropicOk, goodSections } from './ai-fixtures.js';
 
-const job = prepareJob(payloadFor('AUTH002'), SETTINGS, NOW, fixedRandom).job;
+const job = queuedJob('AUTH002');
 const ctx = buildContext(job).ctx;
 const ai = afterAi({ response: anthropicOk(), ctx, job, attempt: 1 }).ai;
 const { facts, titles } = ctx;

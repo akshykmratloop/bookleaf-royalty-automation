@@ -572,3 +572,31 @@ remove `N8N_BLOCK_ENV_ACCESS_IN_NODE` from the box's compose and restart (step 3
 smoke test → after the rollback window, delete the credentials "BookLeaf n8n API (X-N8N-API-KEY)", "BookLeaf
 Bubble API (bearer)" and "BookLeaf Webhook Key (X-BookLeaf-Key)" by hand. `n8n/export/` holds local workflow ids:
 a deploy to another instance should use `deploy.mjs`, an import there keeps those ids.
+
+---
+
+# Inspection 2 fixes (score 7.8) — one entry per commit
+
+## Fix 1 — the database makes the job id and the fingerprint; Prepare Job split in two (HIGH: Code-node size)
+
+- **Changed:** `enqueue_royalty_job` (migration 03, mirrored in 01) now makes the job id (`gen_random_uuid()`) and the
+  fingerprint: SHA-256 hex of the `fingerprint_of` object as `jsonb::text`, which Postgres prints canonically (keys
+  sorted, fixed spacing), so key order never matters. Input: `fingerprint_of` (required JSON object) replaces
+  `job_id` and `fingerprint`. Deleted: `n8n/src/pipeline/sha256.js` (hand-written SHA-256), `canonical.js`,
+  `uuidV4` in `ids.js` (only the UUID regex is left) and their test. `stableUuid` in the build uses `node:crypto`.
+- **Prepare Job → Check Settings + Settings OK? + Validate Body** in Royalty Summary; Approve Draft gets the same
+  Check Settings + Settings OK? before Parse Request. Bad settings (500) and a bad body (400) are now two visible
+  branches into Respond Rejected. Build Context takes the job id from Enqueue Job and passes `job` on; every later
+  node reads the job from Build Context.
+- **Tests (written first, RED):** prepare (no id/fingerprint on the job, `fingerprint_of` fields), ledger pins
+  (id and hash made in SQL after the lock), workflow wiring of both workflows, Check Settings in both workflows,
+  Build Context with the Enqueue Job id; real Postgres: a made v4 id, the stored fingerprint equals Postgres's
+  SHA-256 of the data, the same data in another key order is a duplicate, `fingerprint_of` must be an object.
+  `queuedJob()` fixture (`n8n/tests/pipeline/job-fixture.js`) replaces `fixedRandom`.
+- **Gates:** npm test 516/516, build --check clean, test:db 43/43, contracts 40/40 on the local n8n (03 re-applied
+  to the local `bookleaf` database first: re-runnable, only the function changed).
+- **Sizes:** working nodes 64 → 68 (royalty-summary 29, approve-draft 18). Code 10 → 12 nodes, 196.3 → 197.8 KB:
+  Validate Body 17.9 KB (Prepare Job was 29.1), Check Settings 10.0 KB ×2. Further cuts follow in later fixes.
+- **Release engineer:** 03 is not in production yet, so it was edited in place (its function is `CREATE OR
+  REPLACE`; re-running it on a database that already has 03 updates the function only). Workflows and 03 must go
+  out together: the new workflows send `fingerprint_of`, which the old function refuses, and vice versa.
