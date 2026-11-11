@@ -11,7 +11,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildWorkflow, WORKFLOW_SOURCES } from './build.mjs';
 import { CREDENTIALS, placeholderId } from './workflows-src/lib/credentials.mjs';
-import { workflowPlaceholder } from './workflows-src/lib/nodes.mjs';
+import { workflowPlaceholder } from './workflows-src/lib/flow-nodes.mjs';
 import { readEnvFile, requireKeys } from './tools/env-file.mjs';
 import { n8nApi } from './tools/n8n-api.mjs';
 import { aiKeys, credentialData, databaseSettings, smtpSettings, webhookKey } from './tools/secrets.mjs';

@@ -14,7 +14,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { canvas } from './workflows-src/lib/canvas.mjs';
 import { assertEdges, connectionsFrom, resolveEdges } from './workflows-src/lib/graph.mjs';
-import { stableUuid, workflowPlaceholder } from './workflows-src/lib/nodes.mjs';
+import { workflowPlaceholder } from './workflows-src/lib/flow-nodes.mjs';
+import { stableUuid } from './workflows-src/lib/nodes.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, 'workflows');

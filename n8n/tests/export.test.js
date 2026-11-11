@@ -5,7 +5,7 @@ import { WORKFLOW_SOURCES } from '../build.mjs';
 import { exportable } from '../tools/export.mjs';
 import { readEnvFile } from '../tools/env-file.mjs';
 import { CREDENTIALS, placeholderId } from '../workflows-src/lib/credentials.mjs';
-import { workflowPlaceholder } from '../workflows-src/lib/nodes.mjs';
+import { workflowPlaceholder } from '../workflows-src/lib/flow-nodes.mjs';
 import { built } from './built.js';
 
 /**

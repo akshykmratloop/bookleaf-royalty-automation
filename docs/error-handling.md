@@ -16,6 +16,7 @@ listed in [`n8n/PAYLOAD.md`](../n8n/PAYLOAD.md#error-codes-error_code).
 | Invalid payload (bad id, bad date, too long) | Field-by-field validation in Validate Body | 400 `VALIDATION` with the list of fields; no job |
 | No safe recipient | Neither `demo_inbox` nor the `default_demo_inbox` setting | 422 `NO_RECIPIENT`; no job |
 | Missing or invalid server setting | Check Settings, against the settings schema, before the body is read | 500 `INTERNAL` naming the setting (never its value); no job |
+| Database down before the webhook answered (settings, enqueue, job status, a draft's load, claim or discard) | The Postgres node's error output | 503 `DB_UNAVAILABLE` (`retryable: true`), the standard error body; nothing changed. The run itself succeeds, so no alert: the sweeper's failing runs alert while the database stays down. |
 | Duplicate request | `enqueue_royalty_job` (one advisory lock; same author + fingerprint within `duplicate_window_minutes`) | 200 with the first job's id and `duplicate: true` |
 | Too many sends | `enqueue_royalty_job`: `max_sends_per_hour` jobs in the last hour | 429 `RATE_LIMITED`, naming the limit |
 | Figures do not add up (earned is not copies x rate, paid + pending is not earned) | Integrity check before any AI call | FAILED `INTEGRITY`, naming the book and rule; no AI call |

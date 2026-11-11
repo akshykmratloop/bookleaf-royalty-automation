@@ -1,5 +1,6 @@
 import { FAIL_JOB } from '../src/pipeline/sql-failures.js';
-import { errorTrigger, ifTrue, NOT_EMPTY, pg, sendAlert, withNote } from './lib/nodes.mjs';
+import { sendAlert } from './lib/flow-nodes.mjs';
+import { errorTrigger, ifTrue, NOT_EMPTY, pg, withNote } from './lib/nodes.mjs';
 
 /**
  * "BookLeaf - Error Handler", the error workflow of Royalty Summary and Approve Draft. n8n runs it with

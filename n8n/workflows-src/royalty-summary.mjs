@@ -2,7 +2,8 @@ import { AI_OUTCOMES } from '../src/pipeline/after-ai.js';
 import { errorBody, failure } from '../src/pipeline/errors.js';
 import { ENQUEUE_JOB, LOAD_SETTINGS, MARK_PROCESSING, SET_STAGE, UPDATE_JOB } from '../src/pipeline/sql.js';
 import { DELIVER_EMAIL } from './deliver-email.mjs';
-import { code, executeWorkflow, ifTrue, IS_TRUE, pg, respond, stopAndError, switchRules, webhook, withNote } from './lib/nodes.mjs';
+import { executeWorkflow } from './lib/flow-nodes.mjs';
+import { code, ifTrue, IS_TRUE, pg, respond, respondDatabaseDown, respondFixed, stopAndError, switchRules, webhook, withNote } from './lib/nodes.mjs';
 import { WRITE_DRAFT } from './write-draft.mjs';
 
 /**
@@ -31,20 +32,21 @@ const ABOUT = [
 
 const nodes = [
   webhook('Royalty Summary Webhook', 'POST', 'royalty-summary'),
-  pg('Load Settings', LOAD_SETTINGS, null),
+  pg('Load Settings', LOAD_SETTINGS, null, { errorOutput: true }),
   withNote(code('Check Settings', 'checkSettings', 'return main({ settings: $json.settings });'), 'Bad settings: 500'),
   ifTrue('Settings OK?', '$json.ok', IS_TRUE),
   withNote(code('Validate Body', 'prepare', `return main({ body: ${WEBHOOK}.body, settings: $json.settings, now: Date.now(), executionId: $execution.id });`), 'Bad body: 400'),
   ifTrue('Request Valid?', '$json.ok', IS_TRUE),
   respond('Respond Rejected'),
-  withNote(pg('Enqueue Job', ENQUEUE_JOB, '$json.enqueue'), 'Locked: duplicate, cap, new'),
+  withNote(pg('Enqueue Job', ENQUEUE_JOB, '$json.enqueue', { errorOutput: true }), 'Locked: duplicate, cap, new'),
   switchRules('Outcome', '$json.outcome', [
     { output: 'Queued', equals: 'queued' }, { output: 'Duplicate', equals: 'duplicate' }, { output: 'Rate limited', equals: 'rate_limited' },
   ], 'Unexpected'),
   respond('Respond 202', '202', '{ job_id: $json.job_id, status: $json.status, duplicate: false }'),
   respond('Respond Duplicate', '200', 'Object.assign({ job_id: $json.job_id, status: $json.status, duplicate: true }, $json.error_code ? { error_code: $json.error_code } : {})'),
   respond('Respond 429', '429', `${VALIDATED}.rate_limited`),
-  respond('Respond 500', '500', JSON.stringify(UNEXPECTED_ENQUEUE)),
+  respondFixed('Respond 500', 500, UNEXPECTED_ENQUEUE),
+  withNote(respondDatabaseDown('Respond 503'), 'Database down: 503'),
   withNote(pg('Mark Processing', MARK_PROCESSING, `JSON.stringify({ job_id: ${ENQUEUED}.job_id })`), 'PROCESSING, stage writing'),
   withNote(code('Build Context', 'context', `return main({ validated: ${VALIDATED}.job, jobId: ${ENQUEUED}.job_id });`), 'Job id from Enqueue Job'),
   ifTrue('Context OK?', '$json.ok', IS_TRUE),
@@ -63,9 +65,10 @@ const nodes = [
 ];
 
 const edges = [
-  ['Royalty Summary Webhook', 'Load Settings'], ['Load Settings', 'Check Settings'], ['Check Settings', 'Settings OK?'],
+  ['Royalty Summary Webhook', 'Load Settings'], ['Load Settings', 'Check Settings'], ['Load Settings', 'Respond 503', 'error'],
+  ['Check Settings', 'Settings OK?'],
   ['Settings OK?', 'Validate Body', 'true'], ['Settings OK?', 'Respond Rejected', 'false'], ['Validate Body', 'Request Valid?'],
-  ['Request Valid?', 'Enqueue Job', 'true'], ['Request Valid?', 'Respond Rejected', 'false'], ['Enqueue Job', 'Outcome'],
+  ['Request Valid?', 'Enqueue Job', 'true'], ['Request Valid?', 'Respond Rejected', 'false'], ['Enqueue Job', 'Outcome'], ['Enqueue Job', 'Respond 503', 'error'],
   ['Outcome', 'Respond 202', 'Queued'], ['Outcome', 'Respond Duplicate', 'Duplicate'], ['Outcome', 'Respond 429', 'Rate limited'],
   ['Outcome', 'Respond 500', 'Unexpected'],
   ['Respond 202', 'Mark Processing'], ['Mark Processing', 'Build Context'], ['Build Context', 'Context OK?'],
@@ -83,7 +86,7 @@ const edges = [
  */
 const grid = {
   'Royalty Summary Webhook': [0, 0], 'Load Settings': [1, 0], 'Check Settings': [2, 0], 'Settings OK?': [3, 0], 'Validate Body': [4, 0],
-  'Request Valid?': [5, 0], 'Respond Rejected': [6, 1],
+  'Request Valid?': [5, 0], 'Respond Rejected': [6, 1], 'Respond 503': [6, 2],
   'Enqueue Job': [7, 0], Outcome: [8, 0], 'Respond 202': [9, 0], 'Respond Duplicate': [9, 1], 'Respond 429': [9, 2], 'Respond 500': [9, 3],
   'Mark Processing': [10, 0],
   'Build Context': [11, 0], 'Context OK?': [12, 0],
@@ -94,8 +97,8 @@ const grid = {
 };
 
 const sections = [
-  { title: 'Intake', text: 'The settings are checked (bad settings: 500), then the body (a bad body: 400).',
-    nodes: ['Royalty Summary Webhook', 'Load Settings', 'Check Settings', 'Settings OK?', 'Validate Body', 'Request Valid?', 'Respond Rejected'] },
+  { title: 'Intake', text: 'The settings are checked (bad settings: 500), then the body (a bad body: 400). Database down before the answer: 503.',
+    nodes: ['Royalty Summary Webhook', 'Load Settings', 'Check Settings', 'Settings OK?', 'Validate Body', 'Request Valid?', 'Respond Rejected', 'Respond 503'] },
   { title: 'Ledger', text: 'One locked call: a new job (202), a double click (200, the same job) or the hourly cap (429).',
     nodes: ['Enqueue Job', 'Outcome', 'Respond 202', 'Respond Duplicate', 'Respond 429', 'Respond 500', 'Mark Processing'] },
   { title: 'Data & facts', text: 'Figures checked, facts and prompt built.', nodes: ['Build Context', 'Context OK?'] },

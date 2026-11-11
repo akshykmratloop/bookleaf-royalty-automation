@@ -17,10 +17,10 @@ function answer(name, $json) {
 }
 
 describe('approve-draft shape', () => {
-  it('has 19 working nodes: 3 Code, 3 IF, 1 Switch, 4 Postgres, 6 Respond, Deliver Email and the webhook', () => {
-    expect(working).toHaveLength(19);
+  it('has 20 working nodes: 3 Code, 3 IF, 1 Switch, 4 Postgres, 7 Respond, Deliver Email and the webhook', () => {
+    expect(working).toHaveLength(20);
     const counts = working.reduce((acc, n) => ({ ...acc, [short(n)]: (acc[short(n)] ?? 0) + 1 }), {});
-    expect(counts).toEqual({ webhook: 1, postgres: 4, code: 3, if: 3, switch: 1, respondToWebhook: 6, executeWorkflow: 1 });
+    expect(counts).toEqual({ webhook: 1, postgres: 4, code: 3, if: 3, switch: 1, respondToWebhook: 7, executeWorkflow: 1 });
   });
   it('Action is a Rules-mode Switch with the outputs Send (top: the main row), Discard and Answer', () => {
     const action = nodeOf(WF, 'Action');

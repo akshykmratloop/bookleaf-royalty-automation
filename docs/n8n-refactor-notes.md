@@ -639,3 +639,30 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   `stuck_job_minutes`. Each Write Draft call is its own execution (saved like any other).
 - **Release engineer:** a new workflow, **BookLeaf - Write Draft**; deploy.mjs publishes it before Royalty Summary
   (it uses the existing Anthropic and OpenAI credentials). No migration or setting.
+
+## Fix 3 — a database failure before the answer gives Bubble a shaped 503 (MEDIUM)
+
+- **Changed:** new error code `DB_UNAVAILABLE` (HTTP 503, `retryable: true`). Every Postgres node that runs before
+  a webhook has answered sends its errors to a **Respond 503** node: royalty-summary Load Settings and Enqueue Job;
+  approve-draft Load Settings, Load Draft, Discard Draft and Claim Draft; job-status Select Jobs. Nodes after the
+  answer keep failing the run, so the error workflow handles them. `pg()` takes `{ alwaysOutputData, errorOutput }`.
+- **Found and fixed while testing it live:** a Respond node whose body was `={{ <JSON> }}` broke in n8n ("invalid
+  syntax"): a JSON object ends in `}}`, which closes the n8n expression early. The unit helper `evaluate()` had
+  accepted it. Fixed bodies (Respond 503, both Respond 500 of fix 2) now use the new `respondFixed()` (literal JSON,
+  numeric status, no expression); `evaluate()` now refuses an expression holding `}}` before its end, and a build
+  test scans every parameter of every workflow for it.
+- **Builders:** email and sub-workflow builders moved to `n8n/workflows-src/lib/flow-nodes.mjs` (nodes.mjs was
+  near the 200-line limit).
+- **Tests (written first):** `n8n/tests/database-down.test.js` (wiring of each node, the 503 body, nodes after the
+  answer have no error output), the expression scan, updated node counts. New contract
+  `tests/contract/07-database-down.test.js`: holds the enqueue advisory lock for 8 s, so Enqueue Job fails after its
+  5 s `lock_timeout`; the webhook answers 503 DB_UNAVAILABLE. It runs only against a localhost n8n (it needs the
+  local Postgres container and must never hold up production's database).
+- **Live checks (local):** before the fix the same request got n8n's `500 {"message":"Error in workflow"}`; after
+  it, `503 DB_UNAVAILABLE` in 5.2 s. Contracts 41/41.
+- **Sizes:** working nodes 75 → 78 (royalty-summary 27, approve-draft 20, job-status 8). Code unchanged in count
+  (11), 165.4 KB (the error catalog grew by one entry in every bundle that carries it).
+- **Deviations:** none from the inspector's fix. The 503 run counts as a success in n8n (it answered), so no alert
+  is sent for it; with the database down, the sweeper's runs fail every minute and alert (fix 6).
+- **Release engineer:** none (no migration, credential or setting). Bubble's API Connector already treats a non-2xx
+  answer as an error; the body has the documented `{error:{code,message,retryable}}` shape.

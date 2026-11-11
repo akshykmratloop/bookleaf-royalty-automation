@@ -1,21 +1,19 @@
 import { createHash } from 'node:crypto';
+import { errorBody, failure } from '../../src/pipeline/errors.js';
 import { credentialRef } from './credentials.mjs';
 
 /**
  * Small constructors for the n8n nodes used by the BookLeaf workflows (n8n 2.x node types and
  * typeVersions, checked against n8nio/n8n:2.45.4). Code nodes carry `entry`/`body`; build.mjs turns
- * them into a self-contained `jsCode`.
+ * them into a self-contained `jsCode`. Email and sub-workflow nodes: flow-nodes.mjs.
  */
-const node = (name, type, typeVersion, parameters, extra = {}) => ({ name, type: `n8n-nodes-base.${type}`, typeVersion, parameters, ...extra });
+export const node = (name, type, typeVersion, parameters, extra = {}) => ({ name, type: `n8n-nodes-base.${type}`, typeVersion, parameters, ...extra });
 
 /** A UUID-shaped id that is the same on every build (n8n wants ids; a reproducible build wants no randomness). */
 export function stableUuid(text) {
   const h = createHash('sha256').update(text, 'utf8').digest('hex');
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
-
-/** What deploy.mjs swaps for a workflow's id on the instance (build.mjs WORKFLOW_SOURCES deploys it first). */
-export const workflowPlaceholder = (name) => `__WORKFLOW_${name}__`;
 
 /**
  * Shows `text` under the node on the canvas (n8n "Display Note in Flow"), for anything a reader would ask
@@ -88,10 +86,28 @@ export const respond = (name, statusExpr = '$json.http_status', bodyExpr = '$jso
   respondWith: 'json', responseBody: `={{ ${bodyExpr} }}`, options: { responseCode: `={{ ${statusExpr} }}` },
 });
 
-/** Postgres query with ONE JSON parameter ($1::jsonb). */
-export const pg = (name, query, paramExpr, extra = {}) => node(name, 'postgres', 2.6, {
+/**
+ * Postgres query with ONE JSON parameter ($1::jsonb).
+ * @param {{alwaysOutputData?:boolean, errorOutput?:boolean}} [o] errorOutput: a failure goes to the second output
+ */
+export const pg = (name, query, paramExpr, o = {}) => node(name, 'postgres', 2.6, {
   operation: 'executeQuery', query, options: paramExpr ? { queryReplacement: `={{ ${paramExpr} }}` } : {},
-}, { credentials: credentialRef('postgres'), ...extra });
+}, {
+  credentials: credentialRef('postgres'),
+  ...(o.alwaysOutputData ? { alwaysOutputData: true } : {}),
+  ...(o.errorOutput ? { onError: 'continueErrorOutput' } : {}),
+});
+
+/**
+ * Respond to Webhook with a fixed status and JSON body (no expression: a JSON body ends in "}}", which
+ * would close an n8n expression early).
+ */
+export const respondFixed = (name, status, body) => node(name, 'respondToWebhook', 1.1, {
+  respondWith: 'json', responseBody: JSON.stringify(body), options: { responseCode: status },
+});
+
+/** The answer when the database failed before the webhook answered: 503 DB_UNAVAILABLE. */
+export const respondDatabaseDown = (name) => respondFixed(name, 503, errorBody(failure('DB_UNAVAILABLE')));
 
 /**
  * HTTP Request with a JSON body and a credential that never retries on its own. Every answer, whatever
@@ -119,66 +135,6 @@ export const wait = (name, seconds) => node(name, 'wait', 1.1, { resume: 'timeIn
 
 /** Stop and Error: fails the run on purpose with `message`, so the workflow's error workflow takes over. */
 export const stopAndError = (name, message) => node(name, 'stopAndError', 1, { errorType: 'errorMessage', errorMessage: message });
-
-/**
- * Send Email (SMTP), one try: when the server's answer is lost, a second try could send twice. n8n gives
- * every Send Email node a webhookId (for its unused "send and wait" mode) and invents a new one on each
- * save that lacks it; a fixed one keeps the deployed workflow equal to the build.
- * @param {{from:string, to:string, subject:string, text:string, html?:string}} fields expressions; no html = plain text
- */
-const emailNode = (name, credential, fields, extra) => node(name, 'emailSend', 2.1, {
-  resource: 'email', operation: 'send', fromEmail: `={{ ${fields.from} }}`, toEmail: `={{ ${fields.to} }}`,
-  subject: `={{ ${fields.subject} }}`, emailFormat: fields.html ? 'both' : 'text', text: `={{ ${fields.text} }}`,
-  ...(fields.html ? { html: `={{ ${fields.html} }}` } : {}), options: { appendAttribution: false },
-}, { webhookId: stableUuid(`emailSend/${name}`), credentials: credentialRef(credential), ...extra, retryOnFail: false });
-
-/**
- * An author's email, HTML and text; a failure goes to the second output as the input item plus
- * `error` (the server's message).
- * @param {string} name @param {string} credential @param {string} [src] expression for the {from,to,subject,html,text} object
- */
-export const sendEmail = (name, credential, src = '$json.email') => emailNode(name, credential, {
-  from: `${src}.from`, to: `${src}.to`, subject: `${src}.subject`, text: `${src}.text`, html: `${src}.html`,
-}, { onError: 'continueErrorOutput' });
-
-/**
- * A plain-text alert. A failure fails the node (and so its run, shown in the executions list).
- * @param {string} name @param {string} credential @param {{from:string, to:string, subject:string, text:string}} fields expressions
- */
-export const sendAlert = (name, credential, fields) => emailNode(name, credential, fields, {});
-
-/**
- * Execute Workflow Trigger ("When Executed by Another Workflow") with typed inputs. The caller's
- * Execute Workflow node checks the types; fields that are not declared never reach the workflow.
- * @param {{name:string, type:'string'|'number'|'boolean'|'array'|'object'}[]} inputs
- */
-export const subWorkflowTrigger = (name, inputs) => node(name, 'executeWorkflowTrigger', 1.1, {
-  inputSource: 'workflowInputs', workflowInputs: { values: inputs.map((i) => ({ name: i.name, type: i.type })) },
-});
-
-/** One sub-workflow input in an Execute Workflow node's mapping, as the n8n editor writes it. */
-const inputColumn = ({ name, type }) => ({ id: name, displayName: name, required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type });
-
-/**
- * Execute Workflow: runs a published sub-workflow once with this item and waits for it; its last node's
- * output comes back. A failure in the sub-workflow fails this node, so the calling workflow's error
- * workflow handles it.
- * @param {string} name @param {{name:string, inputs:{name:string, type:string}[]}} target the sub-workflow's name and inputs
- * @param {string|Record<string, string>} src expression for an object holding every input, or one expression per input
- */
-export function executeWorkflow(name, target, src) {
-  const id = workflowPlaceholder(target.name);
-  const valueOf = (input) => (typeof src === 'string' ? `={{ ${src}.${input} }}` : `={{ ${src[input]} }}`);
-  return node(name, 'executeWorkflow', 1.2, {
-    source: 'database',
-    workflowId: { __rl: true, mode: 'list', value: id, cachedResultName: target.name, cachedResultUrl: `/workflow/${id}` },
-    workflowInputs: {
-      mappingMode: 'defineBelow', value: Object.fromEntries(target.inputs.map((i) => [i.name, valueOf(i.name)])),
-      matchingColumns: [], schema: target.inputs.map(inputColumn), attemptToConvertTypes: false, convertFieldsToString: true,
-    },
-    mode: 'once', options: { waitForSubWorkflow: true },
-  });
-}
 
 export const schedule = (name, minutes) => node(name, 'scheduleTrigger', 1.2, { rule: { interval: [{ field: 'minutes', minutesInterval: minutes }] } });
 

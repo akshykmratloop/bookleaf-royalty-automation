@@ -160,3 +160,23 @@ describe('bundled Code nodes run standalone', () => {
     expect(run({ action: 'x' })).toMatchObject({ ok: false, http_status: 400 });
   });
 });
+
+describe('expressions', () => {
+  /** Every string parameter, with its path, in every built workflow. */
+  function* stringsOf(value, path) {
+    if (typeof value === 'string') yield [path, value];
+    else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) yield* stringsOf(v, `${path}.${k}`);
+  }
+  it('no "={{ … }}" parameter holds "}}" before its end (n8n would close the expression there)', () => {
+    const bad = [];
+    for (const [wf, w] of Object.entries(built)) {
+      for (const n of w.nodes) {
+        for (const [path, s] of stringsOf(n.parameters, `${wf}/${n.name}`)) {
+          if (!s.startsWith('={{') || path.endsWith('.jsCode')) continue;
+          if (s.indexOf('}}') !== s.length - 2) bad.push(path);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+});

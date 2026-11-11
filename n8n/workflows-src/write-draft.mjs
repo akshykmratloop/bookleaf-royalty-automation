@@ -1,7 +1,8 @@
 import { ANTHROPIC_VERSION, FALLBACK_BETA, URL as ANTHROPIC_URL } from '../src/providers/anthropic.js';
 import { URL as OPENAI_URL } from '../src/providers/openai.js';
 import { TUNING } from '../src/pipeline/tuning.js';
-import { code, http, subWorkflowTrigger, switchWhen, wait, withNote } from './lib/nodes.mjs';
+import { subWorkflowTrigger } from './lib/flow-nodes.mjs';
+import { code, http, switchWhen, wait, withNote } from './lib/nodes.mjs';
 
 /**
  * "BookLeaf - Write Draft": one AI draft, checked. Royalty Summary calls it twice: Write Draft (attempt 1,

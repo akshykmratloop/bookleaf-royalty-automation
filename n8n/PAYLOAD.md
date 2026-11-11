@@ -201,6 +201,7 @@ a bad key):
 | `TIMEOUT` | Not finished within `stuck_job_minutes` (sweeper). | Yes |
 | `EMAIL_UNCERTAIN` | The run stopped while the email was being sent (stage `sending`), so it may or may not have arrived: the SMTP server may have taken it before the stop. Set by the error workflow, or by the sweeper when a job sat at stage `sending` for `stuck_job_minutes`. | Check the inbox first |
 | `INTERNAL` | Unexpected workflow error (the error workflow found the job by its execution id); `error` names the node and its message. `alert_email` gets an email. | Yes |
+| `DB_UNAVAILABLE` | Answered synchronously with HTTP 503 when the job database failed before the webhook answered (settings, enqueue, job status, or a draft's load, claim or discard). Nothing was changed. | Yes, shortly |
 
 ## Server settings
 

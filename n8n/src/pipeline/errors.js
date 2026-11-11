@@ -17,6 +17,7 @@ export const ERROR_CODES = Object.freeze({
   },
   TIMEOUT: { http: 504, retryable: true, message: 'The job did not finish in time (the stuck_job_minutes setting), so the sweeper stopped it.' },
   INTERNAL: { http: 500, retryable: true, message: 'An unexpected error stopped the workflow.' },
+  DB_UNAVAILABLE: { http: 503, retryable: true, message: 'The job database could not be reached, so the request was not handled. Try again shortly.' },
 });
 
 export const MAX_ERROR_LENGTH = 1000;

@@ -22,13 +22,25 @@ export function runCode(node, globals) {
   return new Function(...names, node.parameters.jsCode)(...names.map((k) => globals[k]));
 }
 
+/** A fixed (non-expression) parameter as n8n reads it: a number stays a number, JSON text is parsed. */
+function literalValue(parameter) {
+  if (typeof parameter !== 'string') return parameter;
+  try {
+    return JSON.parse(parameter);
+  } catch {
+    return parameter;
+  }
+}
+
 /**
- * Evaluates a "={{ … }}" node parameter for one item.
+ * Evaluates a node parameter for one item: a "={{ … }}" expression, or a fixed value.
  * @param {string} parameter @param {Record<string, unknown>} globals e.g. {$json, $}
  */
 export function evaluate(parameter, globals) {
+  if (typeof parameter !== 'string' || !parameter.startsWith('=')) return literalValue(parameter);
   const m = /^=\{\{ ([\s\S]*) \}\}$/.exec(parameter);
   if (!m) throw new Error(`not an n8n expression: ${parameter}`);
+  if (m[1].includes('}}')) throw new Error(`n8n would end this expression at the first "}}": ${parameter}`);
   const names = Object.keys(globals);
   // eslint-disable-next-line no-new-func
   return new Function(...names, `return (${m[1]});`)(...names.map((k) => globals[k]));

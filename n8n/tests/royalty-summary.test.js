@@ -32,10 +32,10 @@ const callInputs = (name, outputs, $json = {}) => Object.fromEntries(Object.entr
   .map(([k, expr]) => [k, evaluate(expr, { $json, $: nodes(outputs) })]));
 
 describe('royalty-summary shape', () => {
-  it('has 26 working nodes: 4 Code, 5 IF, 2 Switch, 5 Postgres, 5 Respond, 3 sub-workflow calls, Stop and the webhook', () => {
-    expect(working).toHaveLength(26);
+  it('has 27 working nodes: 4 Code, 5 IF, 2 Switch, 5 Postgres, 6 Respond, 3 sub-workflow calls, Stop and the webhook', () => {
+    expect(working).toHaveLength(27);
     expect(typeCounts()).toEqual({
-      webhook: 1, postgres: 5, code: 4, if: 5, switch: 2, respondToWebhook: 5, executeWorkflow: 3, stopAndError: 1,
+      webhook: 1, postgres: 5, code: 4, if: 5, switch: 2, respondToWebhook: 6, executeWorkflow: 3, stopAndError: 1,
     });
   });
   it('every Switch is in Rules mode with named outputs (filter version 2); none picks an output by number', () => {

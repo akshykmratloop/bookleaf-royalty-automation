@@ -1,5 +1,6 @@
 import { MARK_EMAIL_FAILED, MARK_SENT, UPDATE_JOB } from '../src/pipeline/sql.js';
-import { ifTrue, IS_FALSE, NOT_EMPTY, pg, sendEmail, subWorkflowTrigger, withNote } from './lib/nodes.mjs';
+import { sendEmail, subWorkflowTrigger } from './lib/flow-nodes.mjs';
+import { ifTrue, IS_FALSE, NOT_EMPTY, pg, withNote } from './lib/nodes.mjs';
 
 /**
  * "BookLeaf - Deliver Email": the one place an email is sent. Royalty Summary (a send job) and Approve
