@@ -1,5 +1,5 @@
 // Notification log: every send with its outcome, newest first. Rows update live as n8n reports.
-import { chain, f, op, parent, search, text, dateFmt, sorted } from '../expr.mjs';
+import { chain, f, op, parent, search, text, dateFmt, sorted, yesNo } from '../expr.mjs';
 import { group, row, cell, flexCell, label, button, list, thingGroup, showWhen } from '../ui.mjs';
 import { sendBadge } from './badge.mjs';
 
@@ -36,7 +36,7 @@ function logRow() {
     group('ad_l_status', [sendBadge('ad_l_badge', p(f.option('status', 'sendstatus'), op('display')))], { props: { width: 104, single_width: true, min_width_css: '104px' } }),
     detail(),
     cell('ad_l_fig', text(p(f.num('figures_verified'))), 70, { align: 'right', style: 'Text_small_' }),
-    cell('ad_l_cost', text('$', p(f.num('cost_usd'), op('format_number', { properties: { formatting_type: 'number', decimal_place: 4 }, slidable: true }))), 76, { align: 'right', style: 'Text_small_' }),
+    cell('ad_l_cost', text(p(f.num('cost_usd'), op('is_empty'), yesNo('—', ['$', p(f.num('cost_usd'), op('format_number', { properties: { formatting_type: 'number', decimal_place: 4 }, slidable: true }))]))), 76, { align: 'right', style: 'Text_small_' }),
     group('ad_l_actcell', [
       showWhen(button('ad_l_view', 'Email', 'Button_ghost_'), p(f.text('email_html'), op('is_not_empty'))),
     ], { props: { width: 72, single_width: true, min_width_css: '72px' } }),

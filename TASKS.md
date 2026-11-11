@@ -19,12 +19,12 @@ Legend: ⬜ TODO · 🔄 In progress · ✅ Done (commit SHA) · ⛔ Blocked
 - ⬜ Seed CSVs + upload; 10 author logins + 1 admin
 
 ## Step 3 — Author portal (free plan)
-- ⬜ Login, KPI tiles, My Books, Royalty Overview + badges, statements
-- ⬜ e2e privacy check
+- ✅ Login, KPI tiles, My Books, Royalty Overview + badges, statements
+- 🔄 e2e privacy check — script in `tests/e2e`, KPI wait fixed (6584611); full 10/10 rerun pending
 
 ## Step 4 — Trial #1 + integration + admin portal
-- ⬜ Data API + Workflow API, push mode, backend workflows
-- ⬜ Admin overview, filters, detail, send, log, bulk, settings, drills
+- ⛔ Data API + Workflow API, push mode, backend workflows — needs the Bubble trial (card declined; user will retry). Pull mode covers it meanwhile.
+- ✅ Admin overview, filters, detail, send, log, bulk, settings, drills — generated from `bubble-app/admin`, written by `scripts/editor/write-admin.mjs` (6584611). Live: single send Sent in ~15 s; AI-down drill → Failed with reason; bulk 9/9 Sent in 55 s
 - ⬜ First `.bubble` export
 
 ## Step 5 — Hardening
