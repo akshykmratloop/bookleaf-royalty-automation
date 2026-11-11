@@ -3,7 +3,7 @@ import { URL as OPENAI_URL } from '../src/providers/openai.js';
 import { AI_OUTCOMES } from '../src/pipeline/after-ai.js';
 import { ENQUEUE_JOB, LOAD_SETTINGS, MARK_PROCESSING, SET_STAGE, UPDATE_JOB } from '../src/pipeline/sql.js';
 import { DELIVER_EMAIL } from './deliver-email.mjs';
-import { code, executeWorkflow, http, ifTrue, IS_TRUE, note, pg, respond, switchRules, webhook, withNote } from './lib/nodes.mjs';
+import { code, executeWorkflow, http, ifTrue, IS_TRUE, pg, respond, switchRules, webhook, withNote } from './lib/nodes.mjs';
 import { TUNING } from './lib/tuning.mjs';
 
 /**
@@ -37,7 +37,6 @@ const ABOUT = [
 ].join('\n');
 
 const nodes = [
-  note('About', ABOUT, 240, { position: [-40, -300], width: 1520 }),
   webhook('Royalty Summary Webhook', 'POST', 'royalty-summary'),
   pg('Load Settings', LOAD_SETTINGS, null),
   withNote(code('Prepare Job', 'prepare', `return main({ body: ${WEBHOOK}.body, settings: $json.settings, now: Date.now(), executionId: $execution.id });`), 'Checks the body; builds job'),
@@ -89,8 +88,32 @@ const edges = [
   ['Render Email', 'Send Now?'], ['Send Now?', 'Deliver Email', 'true'], ['Send Now?', 'Record Result', 'false'],
 ];
 
-/** The happy path: one row, left to right. */
-const mainRow = ['Royalty Summary Webhook', 'Load Settings', 'Prepare Job', 'Request Valid?', 'Enqueue Job', 'Outcome', 'Respond 202',
-  'Mark Processing', 'Build Context', 'Context OK?', 'Call Anthropic', 'Check Draft', 'Draft OK?', 'Render Email', 'Send Now?', 'Deliver Email'];
+/**
+ * Grid cells [column, row]. The happy path is row 0, left to right; branches sit below the node they
+ * leave. An empty column between sections keeps their notes apart.
+ */
+const grid = {
+  'Royalty Summary Webhook': [0, 0], 'Load Settings': [1, 0], 'Prepare Job': [2, 0], 'Request Valid?': [3, 0], 'Respond Rejected': [4, 1],
+  'Enqueue Job': [5, 0], Outcome: [6, 0], 'Respond 202': [7, 0], 'Respond Duplicate': [7, 1], 'Respond 429': [7, 2], 'Mark Processing': [8, 0],
+  'Build Context': [9, 0], 'Context OK?': [10, 0],
+  'Call Anthropic': [11, 0], 'Call OpenAI (fallback)': [12, 1],
+  'Check Draft': [13, 0], 'Draft OK?': [14, 0], 'Stage: Rewriting': [15, 1], 'Rewrite (Anthropic)': [16, 1],
+  'Rewrite (OpenAI fallback)': [17, 2], 'Check Rewrite': [18, 1], 'Rewrite OK?': [19, 1],
+  'Render Email': [20, 0], 'Send Now?': [21, 0], 'Deliver Email': [22, 0],
+  'AI Failed': [21, 3], 'Record Result': [22, 3],
+};
 
-export default { name: 'BookLeaf - Royalty Summary', nodes, edges, mainRow, errorWorkflow: 'BookLeaf - Error Handler' };
+const sections = [
+  { title: 'Intake', text: 'Settings, then the body is checked and the job built. A bad body gets 400.',
+    nodes: ['Royalty Summary Webhook', 'Load Settings', 'Prepare Job', 'Request Valid?', 'Respond Rejected'] },
+  { title: 'Ledger', text: 'One locked call: a new job (202), a double click (200, the same job) or the hourly cap (429).',
+    nodes: ['Enqueue Job', 'Outcome', 'Respond 202', 'Respond Duplicate', 'Respond 429', 'Mark Processing'] },
+  { title: 'Data & facts', text: 'Figures checked, facts and prompt built.', nodes: ['Build Context', 'Context OK?'] },
+  { title: 'AI writer', text: 'Anthropic writes; OpenAI if it fails.', nodes: ['Call Anthropic', 'Call OpenAI (fallback)'] },
+  { title: 'Fact check', text: 'Every figure is checked against the data. One rewrite with the checker\'s notes (Anthropic, then OpenAI).',
+    nodes: ['Check Draft', 'Draft OK?', 'Stage: Rewriting', 'Rewrite (Anthropic)', 'Rewrite (OpenAI fallback)', 'Check Rewrite', 'Rewrite OK?'] },
+  { title: 'Render & deliver', text: 'HTML and text email; Deliver Email sends it once.', nodes: ['Render Email', 'Send Now?', 'Deliver Email'] },
+  { title: 'Record', text: 'Drafts and every failure end here.', nodes: ['AI Failed', 'Record Result'] },
+];
+
+export default { name: 'BookLeaf - Royalty Summary', nodes, edges, grid, sections, about: ABOUT, errorWorkflow: 'BookLeaf - Error Handler' };

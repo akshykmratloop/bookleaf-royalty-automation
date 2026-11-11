@@ -8,12 +8,42 @@
       "typeVersion": 1,
       "parameters": {
         "content": "## BookLeaf error handler\nRuns when **Royalty Summary** or **Approve Draft** stops with an unexpected error (a crash, a database or SMTP outage, the `crash` drill).\n**Fail Job** ends the job that belongs to the failed execution (its `execution_id`), only while it is still QUEUED/PROCESSING: `EMAIL_UNCERTAIN` when it stopped at stage `sending` (the email may already be out), `INTERNAL` otherwise. It always returns one row with the `alert_email` setting; **Send Alert** tells that address (empty = nobody). A failed alert fails this run.",
-        "height": 220,
-        "width": 1000
+        "height": 160,
+        "width": 1200
       },
       "position": [
-        -40,
-        -280
+        -60,
+        -294
+      ]
+    },
+    {
+      "id": "e8e0db84-7bc6-4d2a-ac56-c8d324d1bf05",
+      "name": "Fail the job",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Fail the job\nFound by the failed run's execution id.",
+        "height": 294,
+        "width": 480
+      },
+      "position": [
+        -60,
+        -94
+      ]
+    },
+    {
+      "id": "60a52341-3e86-487b-a3ca-0a983cd1bc00",
+      "name": "Alert",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Alert\nEmails alert_email, when set.",
+        "height": 294,
+        "width": 480
+      },
+      "position": [
+        720,
+        -94
       ]
     },
     {
@@ -84,7 +114,7 @@
       "notes": "false: alert_email empty",
       "notesInFlow": true,
       "position": [
-        520,
+        780,
         0
       ]
     },
@@ -113,7 +143,7 @@
       },
       "retryOnFail": false,
       "position": [
-        780,
+        1040,
         0
       ]
     }

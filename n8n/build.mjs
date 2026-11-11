@@ -12,7 +12,8 @@ import { build } from 'esbuild';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { assertEdges, connectionsFrom, layout, resolveEdges } from './workflows-src/lib/graph.mjs';
+import { canvas } from './workflows-src/lib/canvas.mjs';
+import { assertEdges, connectionsFrom, resolveEdges } from './workflows-src/lib/graph.mjs';
 import { stableUuid, workflowPlaceholder } from './workflows-src/lib/nodes.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -75,7 +76,7 @@ export async function buildWorkflow(srcName) {
   assertEdges(src.nodes, src.edges);
   const edges = resolveEdges(src.nodes, src.edges);
   const nodes = [];
-  for (const n of layout(src.nodes, edges, src.mainRow)) {
+  for (const n of canvas(src)) {
     const { entry, body, ...rest } = n;
     const parameters = entry ? { ...rest.parameters, jsCode: await jsCodeFor(n) } : rest.parameters;
     nodes.push({ id: nodeId(srcName, n.name), ...rest, parameters });

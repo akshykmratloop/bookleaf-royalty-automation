@@ -22,11 +22,11 @@ describe('approve-draft shape', () => {
     const counts = working.reduce((acc, n) => ({ ...acc, [short(n)]: (acc[short(n)] ?? 0) + 1 }), {});
     expect(counts).toEqual({ webhook: 1, postgres: 4, code: 2, if: 2, switch: 1, respondToWebhook: 5, executeWorkflow: 1 });
   });
-  it('Action is a Rules-mode Switch with the outputs Answer, Discard and Send', () => {
+  it('Action is a Rules-mode Switch with the outputs Send (top: the main row), Discard and Answer', () => {
     const action = nodeOf(WF, 'Action');
     expect(action).toMatchObject({ typeVersion: 3.2, parameters: { mode: 'rules' } });
     expect(action.parameters.rules.values.map((r) => [r.outputKey, r.conditions.conditions[0].rightValue])).toEqual([
-      ['Answer', APPROVE_ACTIONS.ANSWER], ['Discard', APPROVE_ACTIONS.DISCARD], ['Send', APPROVE_ACTIONS.SEND],
+      ['Send', APPROVE_ACTIONS.SEND], ['Discard', APPROVE_ACTIONS.DISCARD], ['Answer', APPROVE_ACTIONS.ANSWER],
     ]);
     expect(action.parameters.rules.values[0].conditions.conditions[0].leftValue).toBe('={{ $json.action }}');
   });
@@ -48,7 +48,7 @@ describe('approve-draft wiring', () => {
     expect(targets(WF, 'Load Draft')).toEqual(['Decide']);
     expect(nodeOf(WF, 'Load Draft')).toMatchObject({ alwaysOutputData: true, parameters: { query: SELECT_DRAFT } });
     expect(targets(WF, 'Decide')).toEqual(['Action']);
-    expect([0, 1, 2].map((i) => targets(WF, 'Action', i))).toEqual([['Respond Answer'], ['Discard Draft'], ['Claim Draft']]);
+    expect([0, 1, 2].map((i) => targets(WF, 'Action', i))).toEqual([['Claim Draft'], ['Discard Draft'], ['Respond Answer']]);
   });
   it('discard: Discard Draft, then one answer whether or not the row was still a draft', () => {
     expect(nodeOf(WF, 'Discard Draft')).toMatchObject({

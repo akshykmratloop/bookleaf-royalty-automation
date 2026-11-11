@@ -2,6 +2,36 @@
   "name": "BookLeaf - Stuck Job Sweeper",
   "nodes": [
     {
+      "id": "f19a5efa-bc53-492c-aae4-24df93794cc0",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## BookLeaf stuck job sweeper\nFails any job still QUEUED/PROCESSING `stuck_job_minutes` (a setting, 10) after it started: EMAIL_UNCERTAIN if it stopped while sending, TIMEOUT otherwise. Drafts are never touched. Only failed sweeps are saved.",
+        "height": 160,
+        "width": 480
+      },
+      "position": [
+        -60,
+        -294
+      ]
+    },
+    {
+      "id": "ffae6c6e-1fa6-4708-a0ec-cc5185ef3f07",
+      "name": "Sweep",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Sweep\nEvery minute; a sweep that finds nothing changes nothing.",
+        "height": 294,
+        "width": 480
+      },
+      "position": [
+        -60,
+        -94
+      ]
+    },
+    {
       "id": "4dff84af-29f8-408b-ace4-724b33013554",
       "name": "Every Minute",
       "type": "n8n-nodes-base.scheduleTrigger",
@@ -37,6 +67,8 @@
           "name": "BookLeaf Postgres (bookleaf db)"
         }
       },
+      "notes": "TIMEOUT or EMAIL_UNCERTAIN",
+      "notesInFlow": true,
       "position": [
         260,
         0

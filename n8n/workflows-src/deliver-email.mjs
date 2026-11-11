@@ -1,5 +1,5 @@
 import { MARK_EMAIL_FAILED, MARK_SENT, UPDATE_JOB } from '../src/pipeline/sql.js';
-import { ifTrue, IS_FALSE, note, NOT_EMPTY, pg, sendEmail, subWorkflowTrigger, withNote } from './lib/nodes.mjs';
+import { ifTrue, IS_FALSE, NOT_EMPTY, pg, sendEmail, subWorkflowTrigger, withNote } from './lib/nodes.mjs';
 
 /**
  * "BookLeaf - Deliver Email": the one place an email is sent. Royalty Summary (a send job) and Approve
@@ -33,7 +33,6 @@ const ABOUT = [
 ].join('\n');
 
 const nodes = [
-  note('About', ABOUT, 240, { position: [-40, -300], width: 1480 }),
   subWorkflowTrigger('When Called', DELIVER_EMAIL.inputs),
   withNote(pg('Mark Sending', UPDATE_JOB, SENDING, { alwaysOutputData: true }), 'Saves email; stage sending'),
   withNote(ifTrue('Still Running?', '$json.job_id', NOT_EMPTY), 'false: job already ended'),
@@ -45,10 +44,22 @@ const nodes = [
 ];
 
 const edges = [
-  ['When Called', 'Mark Sending'], ['Mark Sending', 'Still Running?'], ['Still Running?', 'Real SMTP?', 0],
-  ['Real SMTP?', 'Send Email', 0], ['Real SMTP?', 'Send Email (drill: SMTP down)', 1],
-  ['Send Email', 'Mark Sent', 0], ['Send Email', 'Mark Failed', 1],
-  ['Send Email (drill: SMTP down)', 'Mark Sent', 0], ['Send Email (drill: SMTP down)', 'Mark Failed', 1],
+  ['When Called', 'Mark Sending'], ['Mark Sending', 'Still Running?'], ['Still Running?', 'Real SMTP?', 'true'],
+  ['Real SMTP?', 'Send Email', 'true'], ['Real SMTP?', 'Send Email (drill: SMTP down)', 'false'],
+  ['Send Email', 'Mark Sent'], ['Send Email', 'Mark Failed', 'error'],
+  ['Send Email (drill: SMTP down)', 'Mark Sent'], ['Send Email (drill: SMTP down)', 'Mark Failed', 'error'],
 ];
 
-export default { name: DELIVER_EMAIL.name, nodes, edges };
+/** The send path is row 0, left to right; the drill send and Mark Failed sit below. */
+const grid = {
+  'When Called': [0, 0], 'Mark Sending': [1, 0], 'Still Running?': [2, 0],
+  'Real SMTP?': [3, 0], 'Send Email': [4, 0], 'Send Email (drill: SMTP down)': [4, 1],
+  'Mark Sent': [5, 0], 'Mark Failed': [5, 1],
+};
+const sections = [
+  { title: 'Save', text: 'The email goes on the job first; an ended job is never emailed.', nodes: ['When Called', 'Mark Sending', 'Still Running?'] },
+  { title: 'Send once', text: 'One try, never retried.', nodes: ['Real SMTP?', 'Send Email', 'Send Email (drill: SMTP down)'] },
+  { title: 'Record', text: 'SENT or EMAIL_FAILED.', nodes: ['Mark Sent', 'Mark Failed'] },
+];
+
+export default { name: DELIVER_EMAIL.name, nodes, edges, grid, sections, about: ABOUT };

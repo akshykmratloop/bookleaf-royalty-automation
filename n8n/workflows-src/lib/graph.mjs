@@ -1,5 +1,5 @@
 /**
- * Builds n8n `connections` from edges and lays nodes out left to right by graph depth.
+ * Builds n8n `connections` from edges (positions: canvas.mjs).
  * Edge: [from, to] or [from, to, output]: an output index, or its name (resolveEdges).
  */
 
@@ -36,39 +36,6 @@ export function connectionsFrom(edges) {
     main[output].push({ node: to, type: 'main', index: 0 });
   }
   return out;
-}
-
-function depths(nodes, edges) {
-  const depth = new Map(nodes.map((n) => [n.name, 0]));
-  for (let pass = 0; pass < nodes.length; pass += 1) {
-    let changed = false;
-    for (const [from, to] of edges) {
-      const d = depth.get(from) + 1;
-      if (d > depth.get(to) && d < nodes.length) { depth.set(to, d); changed = true; }
-    }
-    if (!changed) break;
-  }
-  return depth;
-}
-
-/**
- * Positions by depth (x) and row (y). Nodes in `mainRow` (the happy path) share row 0; the others stack
- * below them, rows 1, 2, ... at each depth. Without a main row, the first node at each depth takes row 0.
- * @param {Object[]} nodes @param {[string, string, number][]} edges @param {string[]} [mainRow]
- * @returns {Object[]} nodes with `position` (notes keep theirs)
- */
-export function layout(nodes, edges, mainRow = []) {
-  const depth = depths(nodes, edges);
-  const main = new Set(mainRow);
-  const rowAt = new Map();
-  return nodes.map((n) => {
-    if (n.position) return n;
-    const d = depth.get(n.name);
-    if (main.has(n.name)) return { ...n, position: [d * 260, 0] };
-    const row = rowAt.get(d) ?? (main.size ? 1 : 0);
-    rowAt.set(d, row + 1);
-    return { ...n, position: [d * 260, row * 180] };
-  });
 }
 
 /** Fails the build when an edge names a node that does not exist. */

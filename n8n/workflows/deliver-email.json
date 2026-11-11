@@ -8,12 +8,57 @@
       "typeVersion": 1,
       "parameters": {
         "content": "## BookLeaf deliver email\nSends one email for a job and records the result. Called by **Royalty Summary** (a send job, after Render Email) and **Approve Draft** (after a draft is claimed) with `job_id`, `email` {from, to, subject, html, text}, `drill` (the email_down drill) and `record` (more job columns to save: author code, AI usage).\n**Mark Sending** saves the email on the job at stage `sending`, but only while the job is QUEUED/PROCESSING: a job the sweeper has already failed is never emailed, and a failed send keeps its email for the log. **Real SMTP?** is false only for the email_down drill, whose server cannot be reached. **Send Email** tries once. **Mark Sent** / **Mark Failed** (`EMAIL_FAILED` with the server's message) end the job.\nNo error workflow here: a failure fails the caller's Deliver Email node, and the caller's error workflow handles it.",
-        "height": 240,
-        "width": 1480
+        "height": 204,
+        "width": 1200
       },
       "position": [
-        -40,
-        -300
+        -60,
+        -338
+      ]
+    },
+    {
+      "id": "459dc408-178c-4189-ade2-068572350afa",
+      "name": "Save",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Save\nThe email goes on the job first; an ended job is never emailed.",
+        "height": 294,
+        "width": 740
+      },
+      "position": [
+        -60,
+        -94
+      ]
+    },
+    {
+      "id": "d00072f8-4595-4c20-a7b0-4dea76f968fd",
+      "name": "Send once",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Send once\nOne try, never retried.",
+        "height": 494,
+        "width": 480
+      },
+      "position": [
+        720,
+        -94
+      ]
+    },
+    {
+      "id": "da9d424e-b0fc-4687-a068-cf984ec55179",
+      "name": "Record",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Record\nSENT or EMAIL_FAILED.",
+        "height": 494,
+        "width": 220
+      },
+      "position": [
+        1240,
+        -94
       ]
     },
     {
@@ -210,7 +255,7 @@
       "notesInFlow": true,
       "position": [
         1040,
-        180
+        200
       ]
     },
     {
@@ -258,7 +303,7 @@
       "notesInFlow": true,
       "position": [
         1300,
-        180
+        200
       ]
     }
   ],

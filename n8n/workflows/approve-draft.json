@@ -8,12 +8,72 @@
       "typeVersion": 1,
       "parameters": {
         "content": "## BookLeaf approve draft\nPOST /webhook/royalty-summary/approve with header X-BookLeaf-Key (n8n Header Auth). Every business answer is HTTP 200 with the same fields.\n**Decide** re-runs the fact check on the edited subject/body and works out every answer: **check** returns a preview at once; **discard** closes the draft; **send** claims it atomically for this execution (one email per draft, however many clicks), answers at once, then hands the email to the **Deliver Email** sub-workflow. Code nodes are generated from n8n/src by n8n/build.mjs.",
-        "height": 200,
+        "height": 160,
         "width": 1200
       },
       "position": [
-        -40,
-        -260
+        -60,
+        -294
+      ]
+    },
+    {
+      "id": "63bcaf64-8c21-4637-ab53-7e2954602b76",
+      "name": "Intake",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Intake\nSettings and the body; a bad body gets 400.",
+        "height": 494,
+        "width": 1260
+      },
+      "position": [
+        -60,
+        -94
+      ]
+    },
+    {
+      "id": "b451e5b3-7e8f-44c2-a967-e0606b3b8ff1",
+      "name": "Load & decide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Load & decide\nRe-checks the edit and works out every answer.",
+        "height": 294,
+        "width": 740
+      },
+      "position": [
+        1240,
+        -94
+      ]
+    },
+    {
+      "id": "268bac1d-f718-4782-ac24-1bcbe3f8e88d",
+      "name": "Send",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Send\nOne click wins the draft; the email goes out once.",
+        "height": 494,
+        "width": 1000
+      },
+      "position": [
+        2020,
+        -94
+      ]
+    },
+    {
+      "id": "9d9f030e-7a62-472f-a6d8-6b6d083c08c3",
+      "name": "Discard or check",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "parameters": {
+        "content": "## Discard or check\nCloses the draft, or answers a preview.",
+        "height": 494,
+        "width": 480
+      },
+      "position": [
+        2020,
+        506
       ]
     },
     {
@@ -124,7 +184,7 @@
       },
       "position": [
         1040,
-        180
+        200
       ]
     },
     {
@@ -147,7 +207,7 @@
       },
       "alwaysOutputData": true,
       "position": [
-        1040,
+        1300,
         0
       ]
     },
@@ -164,7 +224,7 @@
       "notes": "Checks the edit; all answers",
       "notesInFlow": true,
       "position": [
-        1300,
+        1560,
         0
       ]
     },
@@ -187,9 +247,9 @@
                 },
                 "conditions": [
                   {
-                    "id": "eb7a2e92-9c43-4447-a1ad-463fcf7d1c8e",
+                    "id": "ac6151ea-ded7-470f-aedd-a7bb19cf6c09",
                     "leftValue": "={{ $json.action }}",
-                    "rightValue": "answer",
+                    "rightValue": "send",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -199,7 +259,7 @@
                 "combinator": "and"
               },
               "renameOutput": true,
-              "outputKey": "Answer"
+              "outputKey": "Send"
             },
             {
               "conditions": {
@@ -235,9 +295,9 @@
                 },
                 "conditions": [
                   {
-                    "id": "ac6151ea-ded7-470f-aedd-a7bb19cf6c09",
+                    "id": "eb7a2e92-9c43-4447-a1ad-463fcf7d1c8e",
                     "leftValue": "={{ $json.action }}",
-                    "rightValue": "send",
+                    "rightValue": "answer",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -247,14 +307,14 @@
                 "combinator": "and"
               },
               "renameOutput": true,
-              "outputKey": "Send"
+              "outputKey": "Answer"
             }
           ]
         },
         "options": {}
       },
       "position": [
-        1560,
+        1820,
         0
       ]
     },
@@ -280,8 +340,8 @@
       "notes": "Only while still DRAFTED",
       "notesInFlow": true,
       "position": [
-        1820,
-        180
+        2080,
+        600
       ]
     },
     {
@@ -297,8 +357,8 @@
         }
       },
       "position": [
-        2080,
-        180
+        2340,
+        600
       ]
     },
     {
@@ -314,8 +374,8 @@
         }
       },
       "position": [
-        1820,
-        360
+        2080,
+        800
       ]
     },
     {
@@ -340,7 +400,7 @@
       "notes": "Atomic: one click wins",
       "notesInFlow": true,
       "position": [
-        1820,
+        2080,
         0
       ]
     },
@@ -376,7 +436,7 @@
       "notes": "false: another click won",
       "notesInFlow": true,
       "position": [
-        2080,
+        2340,
         0
       ]
     },
@@ -393,7 +453,7 @@
         }
       },
       "position": [
-        2340,
+        2600,
         0
       ]
     },
@@ -410,8 +470,8 @@
         }
       },
       "position": [
-        2340,
-        180
+        2600,
+        200
       ]
     },
     {
@@ -486,7 +546,7 @@
       "notes": "Saves, sends once, records",
       "notesInFlow": true,
       "position": [
-        2600,
+        2860,
         0
       ]
     }
@@ -569,7 +629,7 @@
       "main": [
         [
           {
-            "node": "Respond Answer",
+            "node": "Claim Draft",
             "type": "main",
             "index": 0
           }
@@ -583,7 +643,7 @@
         ],
         [
           {
-            "node": "Claim Draft",
+            "node": "Respond Answer",
             "type": "main",
             "index": 0
           }

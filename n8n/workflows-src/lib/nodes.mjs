@@ -158,12 +158,3 @@ export function executeWorkflow(name, target, src) {
 export const schedule = (name, minutes) => node(name, 'scheduleTrigger', 1.2, { rule: { interval: [{ field: 'minutes', minutesInterval: minutes }] } });
 
 export const errorTrigger = (name) => node(name, 'errorTrigger', 1, {});
-
-/**
- * Sticky note. Without `at.position` it is laid out like a node (graph.mjs); with it, it stays put.
- * @param {{position?:[number, number], width?:number}} [at]
- */
-export const note = (name, content, height = 200, at = {}) => ({
-  name, type: 'n8n-nodes-base.stickyNote', typeVersion: 1, parameters: { content, height, width: at.width ?? 420 },
-  ...(at.position ? { position: at.position } : {}),
-});

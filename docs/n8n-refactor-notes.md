@@ -483,3 +483,35 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   nodes, 196.3 KB.
 - **Release engineer:** no migration, credential or setting. Bubble sees the same job-status answers; jobs that a
   sweep catches mid-send now read `EMAIL_UNCERTAIN` instead of `TIMEOUT`.
+
+## Step 9b — explicit grid, section sticky notes sized from their nodes
+
+- **Changed:** new `n8n/workflows-src/lib/canvas.mjs` replaces the depth layout in `graph.mjs` (deleted:
+  `depths`, `layout`, `mainRow`) and the `note()` builder. Each workflow source now gives `grid` (node →
+  `[column, row]`, 260 × 200 px cells), `sections` (`{title, text, nodes}`) and `about` (markdown).
+  `placeOnGrid` fails the build for a node without a cell, two nodes in one cell or a cell naming no node.
+  `sectionNotes` draws one sticky note per section around its nodes' bounding box (60 px beside, 80 px under each
+  node for its name and note, a header sized to its text at the note's width by `noteHeight`) and fails the build
+  for an unknown node, a node in two sections, two overlapping sections or a title equal to a node name. The
+  About note sits 40 px above the highest section, from the left edge, at most 1200 px wide. build.mjs puts the
+  notes first, then the nodes.
+- **Sections:** royalty-summary Intake / Ledger / Data & facts / AI writer / Fact check / Render & deliver / Record
+  (the lead's list); approve-draft Intake / Load & decide / Send / Discard or check; deliver-email Save / Send once
+  / Record; job-status Intake / Answer; error-handler Fail the job / Alert; sweeper Sweep. job-status and the
+  sweeper got About notes. An empty column separates neighbouring sections; a section under another starts two
+  rows lower (approve-draft's Discard or check, royalty-summary's Record).
+- **approve-draft's Action** outputs are now in the order Send / Discard / Answer, so the top output feeds the
+  main row (the send path) and no edge crosses it. Behaviour is unchanged (Rules mode matches by value).
+- **Node notes added:** Select Jobs "html only with include=html", Sweep Stuck Jobs "TIMEOUT or EMAIL_UNCERTAIN".
+  deliver-email's edges now name their outputs (`'true'`, `'false'`, `'error'`); its JSON connections are unchanged.
+- **Tests (written first):** `n8n/tests/canvas.test.js` (unit: grid, section boxes and every build error,
+  `noteHeight`; every workflow: each node on its own cell, inside exactly one section note, no two notes
+  overlapping, About above all sections; royalty-summary's section titles left to right; job-status,
+  error-handler and sweeper read left to right on row 0). approve-draft tests updated for the Action order.
+- **Live checks (local):** contracts 40/40 after the deploy. Canvas screenshots in the n8n editor (ego-browser
+  TaskSpace 7, closed afterwards; files in the scratchpad, not committed): royalty-summary reads left to right on
+  row 0 with seven titled sections and the failure branches below; approve-draft's send path on row 0 with
+  Discard or check below Send; note titles and text readable when zoomed in.
+- **Sizes:** unchanged (64 working nodes, 10 Code nodes, 196.3 KB); 6 + 14 sticky notes (About + sections).
+- **Deviations:** the About note is capped at 1200 px instead of spanning the whole canvas (a 5,900 px line is not
+  readable). Long edges remain where several branches meet one node (the Record section, AI Failed).

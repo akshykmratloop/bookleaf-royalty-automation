@@ -1,5 +1,5 @@
 import { FAIL_JOB } from '../src/pipeline/sql-failures.js';
-import { errorTrigger, ifTrue, note, NOT_EMPTY, pg, sendAlert, withNote } from './lib/nodes.mjs';
+import { errorTrigger, ifTrue, NOT_EMPTY, pg, sendAlert, withNote } from './lib/nodes.mjs';
 
 /**
  * "BookLeaf - Error Handler", the error workflow of Royalty Summary and Approve Draft. n8n runs it with
@@ -34,7 +34,6 @@ const ABOUT = [
 ].join('\n');
 
 const nodes = [
-  note('About', ABOUT, 220, { position: [-40, -280], width: 1000 }),
   errorTrigger('Error Trigger'),
   withNote(pg('Fail Job', FAIL_JOB, FAIL_PARAMS), 'By execution id; one row'),
   withNote(ifTrue('Alert Set?', '$json.alert_to', NOT_EMPTY), 'false: alert_email empty'),
@@ -42,4 +41,10 @@ const nodes = [
 ];
 const edges = [['Error Trigger', 'Fail Job'], ['Fail Job', 'Alert Set?'], ['Alert Set?', 'Send Alert', 'true']];
 
-export default { name: 'BookLeaf - Error Handler', nodes, edges, mainRow: ['Error Trigger', 'Fail Job', 'Alert Set?', 'Send Alert'] };
+const grid = { 'Error Trigger': [0, 0], 'Fail Job': [1, 0], 'Alert Set?': [3, 0], 'Send Alert': [4, 0] };
+const sections = [
+  { title: 'Fail the job', text: 'Found by the failed run\'s execution id.', nodes: ['Error Trigger', 'Fail Job'] },
+  { title: 'Alert', text: 'Emails alert_email, when set.', nodes: ['Alert Set?', 'Send Alert'] },
+];
+
+export default { name: 'BookLeaf - Error Handler', nodes, edges, grid, sections, about: ABOUT };
