@@ -37,15 +37,17 @@ Legend: ⬜ TODO · 🔄 In progress · ✅ Done (commit SHA) · ⛔ Blocked
 - ✅ Drafts no longer count as "in progress" (Review draft button); unanswered request fails after 12 min (f57df75)
 
 ## Step 5 — Phase 3: clean n8n + Fable inspection (plan approved 11 Nov)
-- 🔄 n8n clean-up on branch `refactor/n8n-clean`:
-  - settings table, Header Auth, Deliver Email sub-workflow;
-  - named branches, push path dropped;
-  - error handler by execution id, atomic duplicate check;
-  - import-ready export;
-  - Fable inspection rounds.
-- ⬜ Production release of the n8n clean-up: backup → migration 03 → deploy → `$env` blocked → contract tests → live smoke.
+- ✅ n8n clean-up merged into main (7d68188, branch `refactor/n8n-clean`):
+  - settings table, Header Auth, Deliver Email + Write Draft sub-workflows;
+  - named branches, push path dropped; error handler by execution id; atomic duplicate check; sweeper;
+  - import-ready export in `n8n/export/`; GitHub Actions CI;
+  - one Fable inspection (7.8/10, 16 findings, all fixed in fix round 1; second round stopped to save credits);
+  - default-model code review (no CRITICAL/HIGH) + security review (1 HIGH, 2 MEDIUM, fixed: 3650d35, 5bfee44, 002e41e);
+  - gates: unit 616, db 50, local contracts 45, build --check clean.
+- ⛔ Production release of the n8n clean-up: backup → migration 03 → settings → deploy → `$env` blocked → contract tests → live smoke. Blocked 12 Nov 02:4x: the auto-mode safety check refused the production migration; waits for the user's go-ahead.
 - ❌ Book-themed UI: dropped on 11 Nov at the user's request; the current UI stays (nothing was written to Bubble; 330d43a reverts the only commit).
-- ⬜ Final Fable inspection of the whole build (repo + n8n canvas + UI screenshots)
+- ⬜ Final inspection of the whole build (default model, per the user's Fable limit)
+- ⬜ System page text names the n8n settings instead of fixed numbers (after the release)
 
 ## Step 6 — Delivery (at the end, per the user)
 - ⬜ README + docs (no placeholders), n8n export link, video, Drive folder, collaborator attempt, draft reply email
