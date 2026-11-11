@@ -1,6 +1,6 @@
 /** Entry point of the "Check Settings" Code node (Royalty Summary and Approve Draft). */
 import { errorBody } from '../../src/pipeline/errors.js';
-import { readSettings } from '../../src/pipeline/settings.js';
+import { readSettings } from '../../src/pipeline/settings-checks.js';
 
 /**
  * The Load Settings row, checked on its own before the body is read. ok: `settings` are safe to use;

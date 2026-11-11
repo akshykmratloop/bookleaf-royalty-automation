@@ -48,6 +48,8 @@ async function bundle(entry) {
     stdin: { contents: `import { ${entry} as main } from ${JSON.stringify(file)};\n__bookleaf.main = main;`, resolveDir: HERE, loader: 'js' },
     bundle: true, write: false, format: 'iife', platform: 'neutral',
     target: 'es2022', legalComments: 'none', charset: 'utf8', logLevel: 'silent',
+    // `const X = Object.freeze({...})` that a node never reads is dropped (n8n/src never freezes as a bare statement).
+    pure: ['Object.freeze'],
   });
   const text = r.outputFiles[0].text;
   // A module namespace object (`import * as x` used dynamically) relies on getters that come out

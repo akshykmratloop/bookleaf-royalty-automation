@@ -11,7 +11,8 @@
  */
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { SETTINGS_SCHEMA, settingProblem } from '../src/pipeline/settings.js';
+import { settingProblem } from '../src/pipeline/settings-checks.js';
+import { SETTINGS_SCHEMA } from '../src/pipeline/settings.js';
 import { parseEnvText, readEnvFile } from './env-file.mjs';
 import { literal } from './settings-seed.mjs';
 

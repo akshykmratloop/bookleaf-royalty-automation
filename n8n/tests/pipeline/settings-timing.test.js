@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readSettings } from '../../src/pipeline/settings.js';
+import { readSettings } from '../../src/pipeline/settings-checks.js';
 import { RUN_MARGIN_MS, worstCaseAiMs } from '../../src/pipeline/settings-timing.js';
 import { TUNING } from '../../src/pipeline/tuning.js';
 import { SETTINGS } from './settings-fixture.js';

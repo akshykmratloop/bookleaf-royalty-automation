@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { readSettings, SETTINGS_SCHEMA, settingProblem } from '../../src/pipeline/settings.js';
+import { SETTINGS_SCHEMA } from '../../src/pipeline/settings.js';
+import { readSettings, SETTING_CHECKS, settingProblem } from '../../src/pipeline/settings-checks.js';
 import { SETTINGS } from './settings-fixture.js';
 import { DRILLS } from '../../src/pipeline/request.js';
 
@@ -31,6 +32,10 @@ describe('settings schema', () => {
     const invalid = KEYS.filter((k) => settingProblem(k, dflt(k)) !== null);
     expect(invalid).toEqual(['email_from']);
     expect(settingProblem('email_from', '')).toMatch(/^email_from must be an email address/);
+  });
+  it('takes each check from settings-checks.js, which the workflows bundle without the defaults and descriptions', () => {
+    expect(Object.keys(SETTING_CHECKS)).toEqual(KEYS);
+    for (const key of KEYS) expect(SETTINGS_SCHEMA[key].check, key).toBe(SETTING_CHECKS[key]);
   });
   it('is frozen, defaults included', () => {
     expect(Object.isFrozen(SETTINGS_SCHEMA)).toBe(true);

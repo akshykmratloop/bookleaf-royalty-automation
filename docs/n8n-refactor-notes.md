@@ -734,3 +734,17 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   timing check of fix 5).
 - **Release engineer:** after the first successful Error Handler run on an instance the address is remembered; until
   then a database outage alerts nobody. Static data survives a redeploy through the public API (seen locally).
+
+## Fix 7a — Code nodes carry only what they run (HIGH, part 2 of 4)
+
+- **Changed:** the settings checks moved to `n8n/src/pipeline/settings-checks.js` (`SETTING_CHECKS`, `settingProblem`,
+  `readSettings`); `settings.js` keeps the defaults and descriptions (the seed tool and tests use them) and takes each
+  `check` from `SETTING_CHECKS`. Check Settings no longer carries 16 descriptions: 11.0 → **9.0 KB** (×2). esbuild now
+  treats `Object.freeze(...)` as pure, so a frozen constant a node never reads is dropped (AI Failed 9.9 → **5.6 KB**:
+  no provider parser left in it); a test keeps `n8n/src` free of bare-statement `Object.freeze(x)` calls, which a pure
+  marking would drop.
+- **Tests (written first, RED):** `SETTING_CHECKS` keys and identity with the schema's checks; Check Settings has no
+  description text and is under 10 KB; AI Failed has no provider parser; the bare-freeze scan; total budget 198 →
+  165 KB, per node 36 → 35 KB.
+- **Gates:** npm test 555/555, build --check clean, test:db 43/43, contracts 41/41.
+- **Sizes:** 12 Code nodes, 172.7 → **160.6 KB**.
