@@ -1,10 +1,11 @@
 import { CLAIM_DRAFT, DISCARD_DRAFT, SELECT_DRAFT } from '../src/pipeline/sql-approve.js';
 import { LOAD_SETTINGS, UPDATE_JOB } from '../src/pipeline/sql.js';
-import { code, KEY_HASHES_PLACEHOLDER, note, pg, respond, route, sendEmail, webhook } from './lib/nodes.mjs';
+import { code, note, pg, respond, route, sendEmail, webhook } from './lib/nodes.mjs';
 
 /**
  * POST /webhook/royalty-summary/approve {job_id, action: check|send|discard, subject, body}.
- * Every business outcome answers HTTP 200 with the same fields; 400/403 only for a bad body or key.
+ * Every business outcome answers HTTP 200 with the same fields; 400 for a bad body (n8n answers 403
+ * for a missing or wrong key before the workflow starts).
  */
 const WEBHOOK = "$('Approve Webhook').first().json";
 const PARSED = "$('Parse Request').first().json";
@@ -12,10 +13,10 @@ const DECIDED = "$('Decide').first().json";
 const JOB_ID = `${PARSED}.job_id`;
 
 const nodes = [
-  note('About', '## BookLeaf approve draft\nPOST /webhook/royalty-summary/approve with header X-BookLeaf-Key.\n**check** re-runs the fact check on the edited subject/body and returns a preview; **send** checks, claims the draft atomically (one email per draft, however many clicks), answers at once, then sends; **discard** closes the draft. Code nodes are generated from n8n/src by n8n/build.mjs.', 260),
+  note('About', '## BookLeaf approve draft\nPOST /webhook/royalty-summary/approve with header X-BookLeaf-Key (n8n Header Auth).\n**check** re-runs the fact check on the edited subject/body and returns a preview; **send** checks, claims the draft atomically (one email per draft, however many clicks), answers at once, then sends; **discard** closes the draft. Code nodes are generated from n8n/src by n8n/build.mjs.', 260),
   webhook('Approve Webhook', 'POST', 'royalty-summary/approve'),
   pg('Load Settings', LOAD_SETTINGS, null),
-  code('Parse Request', 'parseApprove', `return main({ body: ${WEBHOOK}.body, headers: ${WEBHOOK}.headers, keyHashes: '${KEY_HASHES_PLACEHOLDER}', settings: $json.settings });`),
+  code('Parse Request', 'parseApprove', `return main({ body: ${WEBHOOK}.body, settings: $json.settings });`),
   route('Valid?', 2, '$json.route'),
   respond('Respond Rejected'),
   pg('Load Draft', SELECT_DRAFT, `${PARSED}.params`, { alwaysOutputData: true }),

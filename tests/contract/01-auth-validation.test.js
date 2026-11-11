@@ -1,16 +1,34 @@
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { payloadFor } from '../fixtures/payloads.js';
-import { DEMO_INBOX, enqueue, jobStatus } from './client.js';
+import { approve, DEMO_INBOX, enqueue, jobStatus } from './client.js';
+import { executionsMentioning, newestExecutionId } from './executions.js';
+
+/** Time n8n gets to save an execution that (wrongly) started, before the executions are read. */
+const SAVE_WAIT_MS = 2000;
+const settle = () => new Promise((r) => setTimeout(r, SAVE_WAIT_MS));
+/** One request per endpoint, each carrying `marker`, so an execution it started can be found. */
+const probeAll = (marker, key) => Promise.all([
+  enqueue({ marker }, key), approve({ job_id: marker, action: 'discard' }, key), jobStatus({ ids: marker }, key),
+]);
 
 /** No AI calls and no emails in this file. */
-describe('webhook authentication (key checked in the workflow: missing or wrong key → 403)', () => {
-  it('rejects a request without X-BookLeaf-Key', async () => {
-    const r = await enqueue(payloadFor('AUTH002'), null);
-    expect(r.status).toBe(403);
-  });
-  it('rejects a wrong key', async () => {
-    expect((await enqueue(payloadFor('AUTH002'), 'wrong-key')).status).toBe(403);
-    expect((await jobStatus({ ids: '00000000-0000-4000-8000-000000000000' }, 'wrong-key')).status).toBe(403);
+describe('webhook authentication (n8n Header Auth: a missing or wrong key → 403 before any workflow runs)', () => {
+  for (const [label, key] of [['no X-BookLeaf-Key header', null], ['a wrong key', 'wrong-key']]) {
+    it(`${label}: all three endpoints answer 403 with n8n's text and start no execution`, async () => {
+      const marker = `auth-probe-${randomUUID()}`;
+      const before = await newestExecutionId();
+      for (const r of await probeAll(marker, key)) expect(r).toEqual({ status: 403, body: 'Authorization data is wrong!' });
+      await settle();
+      expect(await executionsMentioning(marker, before)).toEqual([]);
+    });
+  }
+  it('control: with the right key the same probe runs the workflow and its execution is found', async () => {
+    const marker = `auth-probe-${randomUUID()}`;
+    const before = await newestExecutionId();
+    expect((await jobStatus({ ids: marker })).status).toBe(400);
+    await settle();
+    expect(await executionsMentioning(marker, before)).toHaveLength(1);
   });
 });
 

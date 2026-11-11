@@ -206,3 +206,44 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   workflows needs the line `N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"` back in the n8n `environment:`
   block and `app.env` (still rendered from SSM).
 - **Sizes:** unchanged (71 working nodes; 19 Code nodes, 224.8 KB).
+
+## Step 4 — n8n Header Auth on the three webhooks
+
+- **Changed:** the webhooks (royalty-summary, job-status, approve-draft) use `authentication:
+  'headerAuth'` with the new credential **BookLeaf Webhook Key** (`httpHeaderAuth`: header
+  `X-BookLeaf-Key`, value `BOOKLEAF_WEBHOOK_KEY` from `.secrets/webhook.env`,
+  `allowedHttpRequestDomains: 'none'` so no HTTP Request node can send it). `deploy.mjs` creates or
+  updates it like the other credentials. n8n answers a missing or wrong key with 403 and the plain
+  text `Authorization data is wrong!` (header `WWW-Authenticate: Basic realm="Webhook"`) before the
+  workflow starts. Removed: the key check in Prepare Job / Parse Request / Parse Query (they no
+  longer get headers), `src/pipeline/auth.js` and its test, the `__WEBHOOK_KEY_HASHES__`
+  placeholder (nodes.mjs, deploy.mjs) and the `FORBIDDEN` error code (no workflow can answer it now).
+  `sha256.js` stays (ids.js and build.mjs use it). `webhookKeys()` became `webhookKey()`: one key,
+  32–256 printable characters without spaces; a leftover `BOOKLEAF_WEBHOOK_KEY_NEXT` stops the deploy.
+- **Bubble-visible change:** only the 403 body (n8n's text instead of `{error:{code:'FORBIDDEN'}}`),
+  which Bubble sees only when its key is wrong. Same paths, header name and key. Rotation now has a
+  short gap (one key): new key in `.secrets/webhook.env`, deploy, then update Bubble (PAYLOAD.md).
+- **Tests:** build test (Header Auth + the credential on all three webhooks; no Code node mentions
+  the key, `keyHashes` or `FORBIDDEN`; the Code nodes run without headers); new
+  `n8n/tests/secrets.test.js` (key file generated once, `_NEXT` refused, weak/spaced keys refused
+  with messages that name the variable, never the value; the credential data). Contract 01: no key
+  and a wrong key → all three endpoints 403 with n8n's text, and no execution contains the
+  request's marker (executions newer than the newest before the probe, read through the n8n API
+  2 s later); a control with the right key finds its execution, so the check is not vacuous.
+- **Live checks (local):** contracts 36/36. Rotation: switching the credential to a temporary key
+  made the old key 403 and the new one 200 at once (no republish); a redeploy restored the real key.
+  The key appears 0 times in the n8n container log (default log level).
+- **Sizes:** 71 working nodes (unchanged); Code 19 nodes, 224.8 → **214.0 KB** (Prepare Job 28.9 KB).
+- **Deviations:** "no new execution" is checked with a per-request marker instead of "the newest
+  execution id did not change", because the sweeper (failed runs) or a still-finishing job may add
+  executions meanwhile. The public API leaves out running executions; the control shows a run is
+  saved well within the 2 s wait. The contract suite now needs `N8N_API_KEY` in its env file (the
+  deploy env files have it). The key strength check is new (the existing local key passes).
+- **Known (unchanged by this step):** the request headers, key included, are kept in the saved
+  execution data of the three webhook workflows (as before), visible to n8n users.
+- **Release engineer:** no box change. Deploy from a machine whose `.secrets/webhook.env` holds the
+  key Bubble uses (the one production was deployed with); the deploy creates the credential.
+  `deploy.mjs` never deletes credentials: the stale "BookLeaf Webhook Key (X-BookLeaf-Key)" (from
+  commit 023b5b2) and "BookLeaf Bubble API (bearer)" (step 3a) stay on an instance until deleted by
+  hand in n8n, after the rollback window. Rollback: the previous tag's workflows check the key in a
+  Code node again (same `webhook.env`).

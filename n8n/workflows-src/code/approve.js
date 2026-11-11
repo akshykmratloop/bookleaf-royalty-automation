@@ -1,16 +1,14 @@
 /** Entry points for the approve-draft workflow's Code nodes. All logic lives in n8n/src/pipeline. */
 import { approvedFailedUpdate, approvedSentUpdate, claimOutcome, decideApproval, discardOutcome } from '../../src/pipeline/approve.js';
 import { validateApprove } from '../../src/pipeline/approve-request.js';
-import { authFailure, isAuthorized } from '../../src/pipeline/auth.js';
 import { errorBody } from '../../src/pipeline/errors.js';
 import { readSettings } from '../../src/pipeline/settings.js';
 
 const item = (json) => [{ json }];
 const rejected = (f) => item({ route: 0, http_status: f.http_status, response: errorBody(f) });
 
-/** Key, server settings (Load Settings) and body. route 0 = reject (403/400/500), 1 = load the draft. */
-export function parseApprove({ body, headers, keyHashes, settings }) {
-  if (!isAuthorized(headers, keyHashes)) return rejected(authFailure());
+/** Server settings (Load Settings) and body. route 0 = reject (400/500), 1 = load the draft. */
+export function parseApprove({ body, settings }) {
   const read = readSettings(settings);
   if (!read.ok) return rejected(read);
   const r = validateApprove(body);

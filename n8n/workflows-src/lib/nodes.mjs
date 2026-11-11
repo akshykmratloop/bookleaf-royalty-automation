@@ -16,15 +16,12 @@ export const route = (name, outputs, expression) =>
   node(name, 'switch', 3.2, { mode: 'expression', numberOutputs: outputs, output: `={{ ${expression} }}` });
 
 /**
- * Webhook answered by a Respond node. The X-BookLeaf-Key check runs in the first Code node (see
- * src/pipeline/auth.js), so a current and a next key can both be accepted during a rotation.
+ * Webhook answered by a Respond node. n8n checks the X-BookLeaf-Key header itself (Header Auth with
+ * the webhookKey credential): a missing or wrong key gets 403 and the workflow never starts.
  */
 export const webhook = (name, method, path) => node(name, 'webhook', 2.1, {
-  httpMethod: method, path, authentication: 'none', responseMode: 'responseNode', options: {},
-}, { webhookId: `bookleaf-${path.replace(/\W+/g, '-')}` });
-
-/** deploy.mjs replaces this with the SHA-256 hashes of the accepted webhook keys (never the keys). */
-export const KEY_HASHES_PLACEHOLDER = '__WEBHOOK_KEY_HASHES__';
+  httpMethod: method, path, authentication: 'headerAuth', responseMode: 'responseNode', options: {},
+}, { webhookId: `bookleaf-${path.replace(/\W+/g, '-')}`, credentials: credentialRef('webhookKey') });
 
 /** Respond to Webhook with JSON from `$json.response` and the status in `$json.http_status`. */
 export const respond = (name, statusExpr = '$json.http_status', bodyExpr = '$json.response') => node(name, 'respondToWebhook', 1.1, {

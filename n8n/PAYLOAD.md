@@ -1,7 +1,8 @@
 # Royalty summary webhook: the contract Bubble sends
 
-Three endpoints, all protected by the header `X-BookLeaf-Key`. A missing or wrong key gets **403**
-`{ "error": { "code": "FORBIDDEN", … } }` before anything else happens.
+Three endpoints, all protected by the header `X-BookLeaf-Key`, which n8n checks itself (the webhooks'
+Header Auth). A missing or wrong key gets **403** with n8n's plain-text body `Authorization data is
+wrong!` (not JSON) before the workflow starts: no execution, no database work.
 
 | Endpoint | Purpose |
 |---|---|
@@ -9,12 +10,16 @@ Three endpoints, all protected by the header `X-BookLeaf-Key`. A missing or wron
 | `GET /webhook/royalty-summary/jobs?ids=<id>,<id>[&include=html]` | Poll the status of up to 50 jobs. |
 | `POST /webhook/royalty-summary/approve` | Check, send or discard a draft (`delivery: "draft"`). |
 
-**Key rotation.** The key is checked inside each workflow (first Code node), against SHA-256 hashes
-that `n8n/deploy.mjs` writes in from `.secrets/webhook.env`: `BOOKLEAF_WEBHOOK_KEY` and, while a
-rotation is in progress, `BOOKLEAF_WEBHOOK_KEY_NEXT`. Either key is accepted (constant-time
-comparison of the hashes); the keys themselves never leave `.secrets/`. To rotate: add
-`BOOKLEAF_WEBHOOK_KEY_NEXT`, deploy, switch Bubble to the new key, move it to
-`BOOKLEAF_WEBHOOK_KEY`, remove `_NEXT`, deploy again.
+**The key.** One key, `BOOKLEAF_WEBHOOK_KEY` in `.secrets/webhook.env` (generated on the first
+deploy; 32–256 printable characters, no spaces). `n8n/deploy.mjs` writes it into the n8n credential
+**BookLeaf Webhook Key** (Header Auth on `X-BookLeaf-Key`, usable by no HTTP Request node). n8n
+compares it as a plain string (not constant-time). The request headers, key included, stay in the
+saved execution data of the three webhook workflows, which only n8n users can open.
+
+**Key rotation.** Header Auth checks exactly one key, so there is a short gap: put a new
+`BOOKLEAF_WEBHOOK_KEY` in `.secrets/webhook.env`, run `n8n/deploy.mjs` (the credential changes at
+once; Bubble's calls get 403 from here), then paste the new key into Bubble's API Connector. Do it
+when no one is sending. `BOOKLEAF_WEBHOOK_KEY_NEXT` is no longer used; the deploy stops if it is set.
 
 ## POST body
 
@@ -76,7 +81,7 @@ Bubble date (ISO instant, read in India time), or empty.
 | 202 | New job queued | `{ "job_id": "…", "status": "QUEUED", "duplicate": false }` |
 | 200 | Same request within the idempotency window (double click) | `{ "job_id": "<the existing job>", "status": "<its current status>", "duplicate": true }` |
 | 400 | Validation | `{ "error": { "code": "VALIDATION", "message": "…", "retryable": false, "fields": [{ "path": "books[0].copies_sold", "code": "TYPE", "message": "must be an integer" }] } }` |
-| 403 | Missing / wrong `X-BookLeaf-Key` | `{ "error": { "code": "FORBIDDEN", "message": "…", "retryable": false } }` |
+| 403 | Missing / wrong `X-BookLeaf-Key` (n8n answers; the workflow never starts) | plain text `Authorization data is wrong!` |
 | 422 | `NO_RECIPIENT` | error object as above |
 | 429 | `max_sends_per_hour` jobs (failed and discarded ones not counted) in the last hour | `{ "error": { "code": "RATE_LIMITED", … } }` |
 | 500 | The server settings are missing or invalid (each one named, no value shown) | `{ "error": { "code": "INTERNAL", "message": "… Server settings are invalid: email_from must be an email address." } }` |
@@ -177,7 +182,6 @@ a bad key):
 | Code | Meaning | Retry helps? |
 |---|---|---|
 | `VALIDATION` | Bad request fields (answered synchronously). | No |
-| `FORBIDDEN` | Missing or wrong `X-BookLeaf-Key` (synchronous, 403). | No |
 | `NO_RECIPIENT` | No safe demo inbox (synchronous). | No |
 | `RATE_LIMITED` | Hourly limit reached (synchronous). | Later |
 | `INTEGRITY` | Figures do not add up (earned ≠ copies × royalty, paid + pending ≠ earned, payout in the future). No email is written. | No, fix the data |

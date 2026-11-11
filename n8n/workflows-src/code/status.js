@@ -1,14 +1,13 @@
 /** Entry points for the job-status, error-handler and sweeper workflows' Code nodes. */
-import { authFailure, isAuthorized } from '../../src/pipeline/auth.js';
 import { errorBody } from '../../src/pipeline/errors.js';
 import { internalFailureUpdate, jobIdFromExecution } from '../../src/pipeline/error-handler.js';
 import { parseStatusQuery, shapeJobs } from '../../src/pipeline/status.js';
 
 const item = (json) => [{ json }];
 
-/** route 0 = reject (403 bad key, 400 bad query), 1 = query. */
-export function parseQuery({ query, headers, keyHashes }) {
-  const r = isAuthorized(headers, keyHashes) ? parseStatusQuery(query) : authFailure();
+/** route 0 = reject (400 bad query), 1 = query. */
+export function parseQuery({ query }) {
+  const r = parseStatusQuery(query);
   if (!r.ok) return item({ route: 0, http_status: r.http_status, response: errorBody(r) });
   return item({ route: 1, ids: r.ids, include_html: r.includeHtml, params: r.params });
 }

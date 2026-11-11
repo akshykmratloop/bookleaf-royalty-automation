@@ -3,7 +3,6 @@
  * passes $json and earlier nodes' output) and returns n8n items. All logic lives in n8n/src.
  */
 import { afterAi, AI_ROUTES } from '../../src/pipeline/after-ai.js';
-import { authFailure, isAuthorized } from '../../src/pipeline/auth.js';
 import { classifyInsert } from '../../src/pipeline/classify.js';
 import { buildContext } from '../../src/pipeline/context.js';
 import { errorBody, failure } from '../../src/pipeline/errors.js';
@@ -17,11 +16,10 @@ const failItem = (job, f, extra) => item({ route: 0, update: failedUpdate(job, f
 const rejected = (f) => item({ route: 0, http_status: f.http_status, response: errorBody(f) });
 
 /**
- * Check the key, then the settings (Load Settings) and the webhook body. route 0 = reject (respond
- * 4xx/500), 1 = insert the job. `keyHashes` is written in at deploy time (SHA-256 of the accepted keys).
+ * Check the settings (Load Settings) and the webhook body (the webhook already checked the key).
+ * route 0 = reject (respond 4xx/500), 1 = insert the job.
  */
-export function prepare({ body, headers, keyHashes, settings, now }) {
-  if (!isAuthorized(headers, keyHashes)) return rejected(authFailure());
+export function prepare({ body, settings, now }) {
   const r = prepareJob(body, settings, now);
   if (!r.ok) return rejected(r);
   return item({ route: 1, job: r.job, insert_params: insertParams(r.job) });

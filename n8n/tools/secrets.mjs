@@ -8,16 +8,25 @@ import { randomSecret, readEnvFile, requireKeys, writeSecretEnvFile } from './en
  */
 const DEFAULT_SSM_PARAM = '/bookleaf-a2/postgres/password';
 
+/** A header value n8n compares exactly: printable ASCII without spaces, 32+ characters (too long to guess). */
+const STRONG_KEY = /^[\x21-\x7e]{32,256}$/;
+
 /**
- * The accepted webhook keys from .secrets/webhook.env (mode 600; the current key is generated once):
- * BOOKLEAF_WEBHOOK_KEY, plus BOOKLEAF_WEBHOOK_KEY_NEXT while a rotation is in progress.
- * @returns {string[]} current key first, then the next key when set
+ * The webhook key, BOOKLEAF_WEBHOOK_KEY in .secrets/webhook.env (mode 600; generated once). The
+ * webhooks' Header Auth checks exactly one key, so a leftover BOOKLEAF_WEBHOOK_KEY_NEXT from the
+ * old two-key rotation is refused: rotate by changing the key, deploying, then updating Bubble.
+ * @param {string} path @returns {string}
+ * @throws {Error} naming the variable (never the value) when the key is missing, weak or not alone
  */
-export function webhookKeys(path) {
+export function webhookKey(path) {
   if (!existsSync(path)) writeSecretEnvFile(path, { BOOKLEAF_WEBHOOK_KEY: randomSecret(32) });
   const env = readEnvFile(path);
-  const current = requireKeys(env, ['BOOKLEAF_WEBHOOK_KEY'], path).BOOKLEAF_WEBHOOK_KEY;
-  return env.BOOKLEAF_WEBHOOK_KEY_NEXT ? [current, env.BOOKLEAF_WEBHOOK_KEY_NEXT] : [current];
+  const key = requireKeys(env, ['BOOKLEAF_WEBHOOK_KEY'], path).BOOKLEAF_WEBHOOK_KEY;
+  if (env.BOOKLEAF_WEBHOOK_KEY_NEXT !== undefined) {
+    throw new Error(`${path}: BOOKLEAF_WEBHOOK_KEY_NEXT is not used any more (one key, checked by n8n); remove it`);
+  }
+  if (!STRONG_KEY.test(key)) throw new Error(`${path}: BOOKLEAF_WEBHOOK_KEY must be 32 to 256 printable characters without spaces`);
+  return key;
 }
 
 /** Postgres settings from the target env file; the password may come from AWS SSM (production). */
@@ -49,7 +58,7 @@ export const aiKeys = (path) => requireKeys(readEnvFile(path), ['ANTHROPIC_API_K
  * Credential name → {type, data}, keyed like workflows-src/lib/credentials.mjs.
  * @returns {Record<string, Object>}
  */
-export function credentialData({ db, smtp, ai, n8nApiKey }) {
+export function credentialData({ db, smtp, ai, n8nApiKey, webhookKey: key }) {
   const only = (domain) => ({ allowedHttpRequestDomains: 'domains', allowedDomains: domain });
   return {
     postgres: { ...db, ssl: 'disable', allowUnauthorizedCerts: false, sshTunnel: false },
@@ -58,5 +67,6 @@ export function credentialData({ db, smtp, ai, n8nApiKey }) {
     smtp: { ...smtp, disableStartTls: false },
     smtpDrill: { host: '127.0.0.1', port: 9, secure: false, user: 'drill', password: 'drill', disableStartTls: true },
     n8nApi: { name: 'X-N8N-API-KEY', value: n8nApiKey },
+    webhookKey: { name: 'X-BookLeaf-Key', value: key, allowedHttpRequestDomains: 'none' },
   };
 }

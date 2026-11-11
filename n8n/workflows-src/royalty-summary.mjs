@@ -1,7 +1,7 @@
 import { ANTHROPIC_VERSION, FALLBACK_BETA, URL as ANTHROPIC_URL } from '../src/providers/anthropic.js';
 import { URL as OPENAI_URL } from '../src/providers/openai.js';
 import { INSERT_JOB, LOAD_SETTINGS, MARK_PROCESSING, SET_STAGE, UPDATE_JOB } from '../src/pipeline/sql.js';
-import { code, http, KEY_HASHES_PLACEHOLDER, note, pg, respond, route, sendEmail, webhook } from './lib/nodes.mjs';
+import { code, http, note, pg, respond, route, sendEmail, webhook } from './lib/nodes.mjs';
 import { TUNING } from './lib/tuning.mjs';
 
 /**
@@ -26,10 +26,10 @@ const RENDERED = "$('Render Email').first().json";
 const FIRST_ANSWER = "$('Call OpenAI (fallback)').isExecuted ? $('Call OpenAI (fallback)').first().json : $('Call Anthropic').first().json";
 
 const nodes = [
-  note('About', '## BookLeaf royalty summary\nPOST /webhook/royalty-summary with header X-BookLeaf-Key (checked in Prepare Job; current and next key accepted).\nServer settings come from the bookleaf_settings table (Load Settings). Answers 202 {job_id} at once, then writes, fact-checks and sends the email (or saves a DRAFTED job for approval when delivery=draft) and records the result in royalty_jobs, with a live `stage`. Every failure branch ends in **Update Job**. Code nodes are generated from n8n/src by n8n/build.mjs.', 260),
+  note('About', '## BookLeaf royalty summary\nPOST /webhook/royalty-summary with header X-BookLeaf-Key (n8n Header Auth: a missing or wrong key gets 403 before the workflow starts).\nServer settings come from the bookleaf_settings table (Load Settings). Answers 202 {job_id} at once, then writes, fact-checks and sends the email (or saves a DRAFTED job for approval when delivery=draft) and records the result in royalty_jobs, with a live `stage`. Every failure branch ends in **Update Job**. Code nodes are generated from n8n/src by n8n/build.mjs.', 260),
   webhook('Royalty Summary Webhook', 'POST', 'royalty-summary'),
   pg('Load Settings', LOAD_SETTINGS, null),
-  code('Prepare Job', 'prepare', `return main({ body: ${WEBHOOK}.body, headers: ${WEBHOOK}.headers, keyHashes: '${KEY_HASHES_PLACEHOLDER}', settings: $json.settings, now: Date.now() });`),
+  code('Prepare Job', 'prepare', `return main({ body: ${WEBHOOK}.body, settings: $json.settings, now: Date.now() });`),
   route('Valid?', 2, '$json.route'),
   respond('Respond Rejected'),
   pg('Insert Job', INSERT_JOB, '$json.insert_params'),

@@ -118,13 +118,16 @@ Each author is a separate job. One failure never stops the others.
 
 | Direction | How |
 |---|---|
-| Bubble to n8n | Header `X-BookLeaf-Key`. The key is stored in Bubble's API Connector marked "Private", so it is applied on Bubble's server and never reaches the browser. |
-| n8n to Bubble | A Bubble API token, held only in n8n credentials, sent as a Bearer token. |
+| Bubble to n8n | Header `X-BookLeaf-Key`. The key is stored in Bubble's API Connector marked "Private", so it is applied on Bubble's server and never reaches the browser. n8n checks it itself (Header Auth on all three webhooks): a missing or wrong key gets 403 and no workflow runs. |
+| n8n to Bubble | None. n8n never calls Bubble; Bubble polls the job status (see "Upgrade path" in `n8n/PAYLOAD.md`). |
 
-**Key rotation:** n8n accepts two keys at once, `current` and `next`. To rotate: add `next` in
-n8n, change the key in Bubble, then promote `next` to `current`. There is no downtime.
+**Key rotation:** n8n checks one key. To rotate: put a new key in `.secrets/webhook.env`, run
+`n8n/deploy.mjs` (n8n switches at once), then change the key in Bubble. Calls in between get 403,
+so rotate when no one is sending.
 
-Keys are compared in constant time and never written to logs. {{VERIFY}}
+The key is compared as a plain string, not in constant time. It does not appear in n8n's logs at
+the default log level, but the request headers (key included) are kept in saved executions, which
+only n8n users can open.
 
 ## Idempotency (a double click must not send two emails)
 
