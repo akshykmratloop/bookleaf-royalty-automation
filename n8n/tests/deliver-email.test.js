@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WORKFLOW_SOURCES } from '../build.mjs';
-import { MARK_EMAIL_FAILED, MARK_SENT, UPDATE_JOB } from '../src/pipeline/sql.js';
+import { MARK_EMAIL_FAILED, MARK_SENDING, MARK_SENT } from '../src/pipeline/sql.js';
 import { DELIVER_EMAIL } from '../workflows-src/deliver-email.mjs';
 import { built, evaluate, nodeOf, ofType, outputsOf, targets } from './built.js';
 
@@ -50,7 +50,7 @@ describe('Deliver Email sub-workflow', () => {
       expect(targets(WF, send, 0), send).toEqual(['Mark Sent']);
       expect(targets(WF, send, 1), send).toEqual(['Mark Failed']);
     }
-    expect(nodeOf(WF, 'Mark Sending')).toMatchObject({ alwaysOutputData: true, parameters: { query: UPDATE_JOB } });
+    expect(nodeOf(WF, 'Mark Sending')).toMatchObject({ alwaysOutputData: true, parameters: { query: MARK_SENDING } });
     expect(nodeOf(WF, 'Mark Sent').parameters.query).toBe(MARK_SENT);
     expect(nodeOf(WF, 'Mark Failed').parameters.query).toBe(MARK_EMAIL_FAILED);
   });

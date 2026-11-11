@@ -22,7 +22,7 @@ export function aiColumns(ai) {
  * @typedef {{from:string, to:string, subject:string, html:string, text:string}} Email
  * @typedef {Object} Delivery the inputs of the "BookLeaf - Deliver Email" sub-workflow
  * @property {string} job_id @property {Email} email @property {boolean} drill the email_down drill
- * @property {Object} record more job columns saved with the email (never status, stage, sent_to or the email)
+ * @property {Object} record AI usage and author code saved with the email (MARK_SENDING writes no other column)
  */
 
 /**

@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { MARK_EMAIL_FAILED, MARK_SENT, UPDATE_JOB } from '../../n8n/src/pipeline/sql.js';
+import { MARK_EMAIL_FAILED, MARK_SENDING, MARK_SENT } from '../../n8n/src/pipeline/sql.js';
 import { dropDatabase, psql, scratchDatabase } from './psql.js';
 
 /**
- * The three queries of "BookLeaf - Deliver Email" against real Postgres: Mark Sending (UPDATE_JOB),
+ * The three queries of "BookLeaf - Deliver Email" against real Postgres: Mark Sending,
  * Mark Sent and Mark Failed. n8n's Postgres node writes its parameter into the SQL as a literal, and
  * so does run().
  */
@@ -30,27 +30,32 @@ const set = (assignments) => psql(db, `UPDATE royalty_jobs SET ${assignments};`)
 const sending = (record = RECORD) => ({ ...record, job_id: JOB, stage: 'sending', ...EMAIL });
 const failWith = (error) => run(MARK_EMAIL_FAILED, { job_id: JOB, error });
 
-describe('Mark Sending (UPDATE_JOB at stage sending)', () => {
+describe('Mark Sending', () => {
   it('saves the email and the record on a running job, at stage sending, and returns the row', () => {
-    expect(run(UPDATE_JOB, sending())).toEqual([{ job_id: JOB, status: 'PROCESSING', stage: 'sending', error_code: null }]);
+    expect(run(MARK_SENDING, sending())).toEqual([{ job_id: JOB, status: 'PROCESSING', stage: 'sending', error_code: null }]);
     expect(job()).toMatchObject({ status: 'PROCESSING', stage: 'sending', staged_now: true, ...EMAIL, ...RECORD, sent_to: null, completed: false });
   });
   it('an empty record saves just the email (an approved draft)', () => {
     set("author_code = 'AUTH002', provider = 'openai'");
-    run(UPDATE_JOB, sending({}));
+    run(MARK_SENDING, sending({}));
     expect(job()).toMatchObject({ stage: 'sending', ...EMAIL, author_code: 'AUTH002', provider: 'openai' });
+  });
+  it('writes only the email and the AI usage: a record naming status, error, recipient or stage changes none of them', () => {
+    const forged = { ...RECORD, status: 'SENT', stage: 'sent', error_code: 'TIMEOUT', error: 'forged', sent_to: 'other@inbox.test', edit_text: 'x' };
+    expect(run(MARK_SENDING, sending(forged))).toEqual([{ job_id: JOB, status: 'PROCESSING', stage: 'sending', error_code: null }]);
+    expect(job()).toMatchObject({ status: 'PROCESSING', stage: 'sending', error_code: null, error: null, sent_to: null, completed: false, ...RECORD });
   });
   it('returns nothing and changes nothing once the job has ended (the sweeper failed it): nothing is sent', () => {
     set("status = 'FAILED', stage = 'failed', error_code = 'TIMEOUT', completed_at = now()");
     const before = job();
-    expect(run(UPDATE_JOB, sending())).toEqual([]);
+    expect(run(MARK_SENDING, sending())).toEqual([]);
     expect(job()).toEqual(before);
   });
 });
 
 describe('Mark Sent', () => {
   it('ends the job SENT at stage sent, with the recipient and a completion time; the saved email stays', () => {
-    run(UPDATE_JOB, sending());
+    run(MARK_SENDING, sending());
     expect(run(MARK_SENT, { job_id: JOB, sent_to: 'demo@inbox.test' })).toEqual([{ job_id: JOB, status: 'SENT', stage: 'sent' }]);
     expect(job()).toMatchObject({ status: 'SENT', stage: 'sent', staged_now: true, sent_to: 'demo@inbox.test', completed: true, ...EMAIL });
   });
@@ -63,7 +68,7 @@ describe('Mark Sent', () => {
 
 describe('Mark Failed (EMAIL_FAILED)', () => {
   it('ends the job FAILED with the standard message and the server\'s; the email stays for the log, sent_to stays empty', () => {
-    run(UPDATE_JOB, sending());
+    run(MARK_SENDING, sending());
     expect(failWith('connect ECONNREFUSED 127.0.0.1:9')).toEqual([{ job_id: JOB, status: 'FAILED', stage: 'failed', error_code: 'EMAIL_FAILED' }]);
     expect(job()).toMatchObject({
       status: 'FAILED', stage: 'failed', error_code: 'EMAIL_FAILED', error: `${STANDARD} smtp: connect ECONNREFUSED 127.0.0.1:9`,

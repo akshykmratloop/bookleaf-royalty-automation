@@ -1,4 +1,4 @@
-import { MARK_EMAIL_FAILED, MARK_SENT, UPDATE_JOB } from '../src/pipeline/sql.js';
+import { MARK_EMAIL_FAILED, MARK_SENDING, MARK_SENT } from '../src/pipeline/sql.js';
 import { sendEmail, subWorkflowTrigger } from './lib/flow-nodes.mjs';
 import { ifTrue, IS_FALSE, NOT_EMPTY, pg, withNote } from './lib/nodes.mjs';
 
@@ -17,7 +17,7 @@ export const DELIVER_EMAIL = Object.freeze({
 });
 
 const CALL = "$('When Called').first().json";
-/** Mark Sending's row: the caller's columns first, so they can never change the job, the stage or the email. */
+/** Mark Sending's row: the caller's columns first, so they can never change the job or the email; MARK_SENDING writes nothing else. */
 const SENDING = 'JSON.stringify(Object.assign({}, $json.record, { job_id: $json.job_id, stage: \'sending\', '
   + 'subject: $json.email.subject, html: $json.email.html, text_body: $json.email.text }))';
 
@@ -35,7 +35,7 @@ const ABOUT = [
 
 const nodes = [
   subWorkflowTrigger('When Called', DELIVER_EMAIL.inputs),
-  withNote(pg('Mark Sending', UPDATE_JOB, SENDING, { alwaysOutputData: true, retry: true }), 'Saves email; stage sending'),
+  withNote(pg('Mark Sending', MARK_SENDING, SENDING, { alwaysOutputData: true, retry: true }), 'Saves email; stage sending'),
   withNote(ifTrue('Still Running?', '$json.job_id', NOT_EMPTY), 'false: job already ended'),
   withNote(ifTrue('Real SMTP?', `${CALL}.drill`, IS_FALSE), 'false: the email_down drill'),
   withNote(sendEmail('Send Email', 'smtp', `${CALL}.email`), 'One try, never retried'),

@@ -3,13 +3,19 @@ import { ERROR_CODES, MAX_ERROR_LENGTH } from '../../src/pipeline/errors.js';
 import { MAX_SUMMARY_LENGTH } from '../../src/pipeline/node-errors.js';
 import { CLAIM_DRAFT, DISCARD_DRAFT, SELECT_DRAFT } from '../../src/pipeline/sql-approve.js';
 import {
-  ENQUEUE_JOB, LOAD_SETTINGS, MARK_EMAIL_FAILED, MARK_PROCESSING, MARK_SENT, SELECT_JOBS, SET_STAGE, UPDATE_JOB,
+  ENQUEUE_JOB, LOAD_SETTINGS, MARK_EMAIL_FAILED, MARK_PROCESSING, MARK_SENDING, MARK_SENT, SELECT_JOBS, SET_STAGE, UPDATE_JOB,
 } from '../../src/pipeline/sql.js';
 
 /** The SQL is exercised live by the contract suite; these pin the guards that keep it safe. */
 describe('job ledger SQL guards', () => {
   it('Load Settings reads every setting as one JSON object', () => {
     expect(LOAD_SETTINGS).toBe('SELECT jsonb_object_agg(key, value) AS settings FROM bookleaf_settings');
+  });
+  it('MARK_SENDING sets stage sending and can write only the email and the AI usage, on a running job', () => {
+    expect(MARK_SENDING).toMatch(/stage = 'sending'/);
+    expect(MARK_SENDING).toMatch(/WHERE j\.job_id = p\.job_id AND j\.status IN \('QUEUED', 'PROCESSING'\)/);
+    const writes = MARK_SENDING.slice(0, MARK_SENDING.indexOf('WHERE'));
+    for (const col of ['status', 'error', 'sent_to', 'completed_at', 'edit_text']) expect(writes).not.toContain(col);
   });
   it('UPDATE_JOB still only touches unfinished jobs and records the stage', () => {
     expect(UPDATE_JOB).toMatch(/WHERE j\.job_id = p\.job_id AND j\.status IN \('QUEUED', 'PROCESSING'\)/);

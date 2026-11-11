@@ -70,8 +70,24 @@ WHERE j.job_id = p.job_id AND j.status IN ('QUEUED', 'PROCESSING')
 RETURNING j.job_id::text AS job_id, j.status, j.stage, j.error_code`;
 
 /**
+ * Deliver Email, before the send: the email and the caller's AI usage, at stage sending. Its column
+ * list is the whole of what it can write, so a caller's record can never set the status, an error,
+ * the recipient or the stage. Returns no row once the job has ended: then nothing is sent.
+ */
+export const MARK_SENDING = `UPDATE royalty_jobs AS j SET stage = 'sending', stage_at = now(),
+  subject = p.subject, html = p.html, text_body = p.text_body,
+  author_code = COALESCE(p.author_code, j.author_code), figures_verified = COALESCE(p.figures_verified, j.figures_verified),
+  ai_attempts = COALESCE(p.ai_attempts, j.ai_attempts), provider = COALESCE(p.provider, j.provider), model = COALESCE(p.model, j.model),
+  input_tokens = COALESCE(p.input_tokens, j.input_tokens), output_tokens = COALESCE(p.output_tokens, j.output_tokens),
+  cost_usd = COALESCE(p.cost_usd, j.cost_usd), updated_at = now()
+FROM jsonb_to_record(${P}) AS p(job_id uuid, subject text, html text, text_body text, author_code text, figures_verified int,
+  ai_attempts int, provider text, model text, input_tokens int, output_tokens int, cost_usd numeric)
+WHERE j.job_id = p.job_id AND j.status IN ('QUEUED', 'PROCESSING')
+RETURNING j.job_id::text AS job_id, j.status, j.stage, j.error_code`;
+
+/**
  * Deliver Email, after the SMTP server took the email ({job_id, sent_to}). The email itself was saved
- * by Mark Sending (UPDATE_JOB at stage sending) before the send.
+ * by Mark Sending before the send.
  */
 export const MARK_SENT = `UPDATE royalty_jobs SET status = 'SENT', stage = 'sent', stage_at = now(), sent_to = ${P}->>'sent_to',
   completed_at = now(), updated_at = now()

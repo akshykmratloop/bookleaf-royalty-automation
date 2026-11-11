@@ -813,3 +813,15 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
 - **Local:** migration 03 re-applied to the local `bookleaf` database (re-runnable; the stored setting rows are kept,
   so the local description row still has the old text). 104 jobs counted in the last hour against the local 300.
 - **Gates:** npm test 564/564, build --check clean, test:db 48/48, contracts 41/41.
+
+## Fix 10 — Mark Sending writes only the email and the AI usage (LOW "Deliver Email trusts the caller's record")
+
+- **Changed:** Mark Sending uses its own query, `MARK_SENDING`, instead of the general `UPDATE_JOB`. Its column list
+  (`jsonb_to_record … AS p(job_id, subject, html, text_body, author_code, figures_verified, ai_attempts, provider,
+  model, input_tokens, output_tokens, cost_usd)`) is all it can write, and it sets stage `sending` itself. A caller's
+  `record` naming `status`, `error_code`, `error`, `sent_to`, `stage` or `edit_text` now changes nothing. Same
+  guard as before: no row once the job has ended, so nothing is sent.
+- **Tests (written first, RED):** real Postgres: a forged record leaves status PROCESSING, no error, no recipient;
+  the SQL pin (nothing but the email and usage columns before `WHERE`); Mark Sending's node uses `MARK_SENDING`.
+- **Gates:** npm test 565/565, build --check clean, test:db 49/49, contracts 41/41 (send, draft-approve and
+  email-failed contracts unchanged).
