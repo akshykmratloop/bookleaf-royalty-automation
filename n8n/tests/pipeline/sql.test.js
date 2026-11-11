@@ -40,7 +40,7 @@ describe('job ledger SQL guards', () => {
   });
   it('a draft is claimed atomically: only DRAFTED, only within draft_ttl_hours', () => {
     const fresh = "drafted_at > now() - make_interval(hours => bookleaf_setting('draft_ttl_hours')::int)";
-    expect(CLAIM_DRAFT).toMatch(/SET status = 'PROCESSING', stage = 'sending'/);
+    expect(CLAIM_DRAFT).toMatch(/SET status = 'PROCESSING', stage = 'sending', execution_id = \$1::jsonb->>'execution_id'/);
     expect(CLAIM_DRAFT).toContain(`AND status = 'DRAFTED' AND ${fresh}`);
     expect(SELECT_DRAFT).toContain(`(${fresh}) AS fresh`);
     expect(`${CLAIM_DRAFT}${SELECT_DRAFT}`).not.toMatch(/interval '\d+ hours'/);

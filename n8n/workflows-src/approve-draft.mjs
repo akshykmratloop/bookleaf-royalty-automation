@@ -1,7 +1,8 @@
+import { APPROVE_ACTIONS } from '../src/pipeline/approve.js';
 import { CLAIM_DRAFT, DISCARD_DRAFT, SELECT_DRAFT } from '../src/pipeline/sql-approve.js';
 import { LOAD_SETTINGS } from '../src/pipeline/sql.js';
 import { DELIVER_EMAIL } from './deliver-email.mjs';
-import { code, executeWorkflow, note, pg, respond, route, webhook, withNote } from './lib/nodes.mjs';
+import { code, executeWorkflow, ifTrue, IS_TRUE, note, NOT_EMPTY, pg, respond, switchRules, webhook, withNote } from './lib/nodes.mjs';
 
 /**
  * POST /webhook/royalty-summary/approve {job_id, action: check|send|discard, subject, body}.
@@ -11,35 +12,49 @@ import { code, executeWorkflow, note, pg, respond, route, webhook, withNote } fr
 const WEBHOOK = "$('Approve Webhook').first().json";
 const PARSED = "$('Parse Request').first().json";
 const DECIDED = "$('Decide').first().json";
-const JOB_ID = `${PARSED}.job_id`;
+
+const ABOUT = [
+  '## BookLeaf approve draft',
+  'POST /webhook/royalty-summary/approve with header X-BookLeaf-Key (n8n Header Auth). Every business answer is HTTP 200 with the same fields.',
+  '**Decide** re-runs the fact check on the edited subject/body and works out every answer: **check** returns a preview at once; '
+  + '**discard** closes the draft; **send** claims it atomically for this execution (one email per draft, however many clicks), '
+  + 'answers at once, then hands the email to the **Deliver Email** sub-workflow. Code nodes are generated from n8n/src by n8n/build.mjs.',
+].join('\n');
 
 const nodes = [
-  note('About', '## BookLeaf approve draft\nPOST /webhook/royalty-summary/approve with header X-BookLeaf-Key (n8n Header Auth).\n**check** re-runs the fact check on the edited subject/body and returns a preview; **send** checks, claims the draft atomically (one email per draft, however many clicks), answers at once, then hands the email to the **Deliver Email** sub-workflow; **discard** closes the draft. Code nodes are generated from n8n/src by n8n/build.mjs.', 260),
+  note('About', ABOUT, 200, { position: [-40, -260], width: 1200 }),
   webhook('Approve Webhook', 'POST', 'royalty-summary/approve'),
   pg('Load Settings', LOAD_SETTINGS, null),
   code('Parse Request', 'parseApprove', `return main({ body: ${WEBHOOK}.body, settings: $json.settings });`),
-  route('Valid?', 2, '$json.route'),
+  ifTrue('Request Valid?', '$json.ok', IS_TRUE),
   respond('Respond Rejected'),
   pg('Load Draft', SELECT_DRAFT, `${PARSED}.params`, { alwaysOutputData: true }),
-  code('Decide', 'decide', `return main({ request: ${PARSED}.request, row: $json, settings: ${PARSED}.settings });`),
-  route('Action', 3, '$json.route'),
-  respond('Respond Result'),
-  pg('Discard Draft', DISCARD_DRAFT, `${DECIDED}.params`, { alwaysOutputData: true }),
-  code('Discard Result', 'discarded', `return main({ row: $json, jobId: ${JOB_ID} });`),
-  pg('Claim Draft', CLAIM_DRAFT, `${DECIDED}.params`, { alwaysOutputData: true }),
-  code('Claim Result', 'claimed', `return main({ row: $json, decided: ${DECIDED} });`),
-  route('Claimed?', 2, '$json.route'),
-  respond('Respond Sending'),
+  withNote(code('Decide', 'decide', `return main({ request: ${PARSED}.request, row: $json, settings: ${PARSED}.settings, executionId: $execution.id });`), 'Checks the edit; all answers'),
+  switchRules('Action', '$json.action', [
+    { output: 'Answer', equals: APPROVE_ACTIONS.ANSWER }, { output: 'Discard', equals: APPROVE_ACTIONS.DISCARD }, { output: 'Send', equals: APPROVE_ACTIONS.SEND },
+  ]),
+  withNote(pg('Discard Draft', DISCARD_DRAFT, `${DECIDED}.params`, { alwaysOutputData: true }), 'Only while still DRAFTED'),
+  respond('Respond Discard', '200', `$json.job_id ? ${DECIDED}.response : ${DECIDED}.fallback`),
+  respond('Respond Answer', '200'),
+  withNote(pg('Claim Draft', CLAIM_DRAFT, `${DECIDED}.params`, { alwaysOutputData: true }), 'Atomic: one click wins'),
+  withNote(ifTrue('Claimed?', '$json.job_id', NOT_EMPTY), 'false: another click won'),
+  respond('Respond Sending', '200', `${DECIDED}.response`),
+  respond('Respond Already Sent', '200', `${DECIDED}.fallback`),
   withNote(executeWorkflow('Deliver Email', DELIVER_EMAIL, `${DECIDED}.deliver`), 'Saves, sends once, records'),
 ];
 
 const edges = [
-  ['Approve Webhook', 'Load Settings'], ['Load Settings', 'Parse Request'], ['Parse Request', 'Valid?'], ['Valid?', 'Respond Rejected', 0], ['Valid?', 'Load Draft', 1],
+  ['Approve Webhook', 'Load Settings'], ['Load Settings', 'Parse Request'], ['Parse Request', 'Request Valid?'],
+  ['Request Valid?', 'Load Draft', 'true'], ['Request Valid?', 'Respond Rejected', 'false'],
   ['Load Draft', 'Decide'], ['Decide', 'Action'],
-  ['Action', 'Respond Result', 0], ['Action', 'Discard Draft', 1], ['Action', 'Claim Draft', 2],
-  ['Discard Draft', 'Discard Result'], ['Discard Result', 'Respond Result'],
-  ['Claim Draft', 'Claim Result'], ['Claim Result', 'Claimed?'], ['Claimed?', 'Respond Result', 0], ['Claimed?', 'Respond Sending', 1],
+  ['Action', 'Respond Answer', 'Answer'], ['Action', 'Discard Draft', 'Discard'], ['Action', 'Claim Draft', 'Send'],
+  ['Discard Draft', 'Respond Discard'],
+  ['Claim Draft', 'Claimed?'], ['Claimed?', 'Respond Sending', 'true'], ['Claimed?', 'Respond Already Sent', 'false'],
   ['Respond Sending', 'Deliver Email'],
 ];
 
-export default { name: 'BookLeaf - Approve Draft', nodes, edges, errorWorkflow: 'BookLeaf - Error Handler' };
+/** The send path: one row, left to right. */
+const mainRow = ['Approve Webhook', 'Load Settings', 'Parse Request', 'Request Valid?', 'Load Draft', 'Decide', 'Action',
+  'Claim Draft', 'Claimed?', 'Respond Sending', 'Deliver Email'];
+
+export default { name: 'BookLeaf - Approve Draft', nodes, edges, mainRow, errorWorkflow: 'BookLeaf - Error Handler' };

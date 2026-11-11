@@ -9,8 +9,12 @@ export const SELECT_DRAFT = `SELECT job_id::text AS job_id, status, stage, deliv
   sections, facts, titles, drills, drafted_at, (${FRESH}) AS fresh
 FROM royalty_jobs WHERE ${BY_ID}`;
 
-/** Atomic claim: of two concurrent sends exactly one gets the row back, so one email goes out. */
-export const CLAIM_DRAFT = `UPDATE royalty_jobs SET status = 'PROCESSING', stage = 'sending', stage_at = now(), updated_at = now()
+/**
+ * Atomic claim: of two concurrent sends exactly one gets the row back, so one email goes out. The job
+ * now belongs to this execution (its id replaces the enqueue's), for the error workflow.
+ */
+export const CLAIM_DRAFT = `UPDATE royalty_jobs SET status = 'PROCESSING', stage = 'sending', execution_id = ${P}->>'execution_id',
+  stage_at = now(), updated_at = now()
 WHERE ${BY_ID} AND status = 'DRAFTED' AND ${FRESH}
 RETURNING job_id::text AS job_id, status`;
 

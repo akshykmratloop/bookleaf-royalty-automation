@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { afterAi } from '../../src/pipeline/after-ai.js';
-import { APPROVE_ROUTES, claimOutcome, decideApproval, discardOutcome } from '../../src/pipeline/approve.js';
+import { APPROVE_ACTIONS, decideApproval } from '../../src/pipeline/approve.js';
 import { approveResponse, validateApprove } from '../../src/pipeline/approve-request.js';
 import { buildContext } from '../../src/pipeline/context.js';
 import { draftUpdate } from '../../src/pipeline/finalize.js';
@@ -20,7 +20,7 @@ const row = (over = {}) => ({
   recipient: job.recipient, sections: draft.sections, facts: draft.facts, titles: draft.titles, drills: job.drills, fresh: true, ...over,
 });
 const req = (over = {}) => ({ job_id: ID, action: 'check', subject: draft.subject, body: draft.edit_text, ...over });
-const decide = (r, rw = row(), settings = SETTINGS) => decideApproval({ request: req(r), row: rw, settings });
+const decide = (r, rw = row(), settings = SETTINGS) => decideApproval({ request: req(r), row: rw, settings, executionId: '512' });
 
 describe('draftUpdate', () => {
   it('stores a DRAFTED row with sections, facts, titles and editable text', () => {
@@ -68,11 +68,12 @@ describe('decideApproval', () => {
       ok: false, error_code: 'DRAFT_EXPIRED', status: 'DRAFTED', error: 'This draft is more than 24 hours old. Create a new draft.',
     });
     expect(decide({}, row({ fresh: false }), { ...SETTINGS, draft_ttl_hours: 6 }).response.error).toContain('more than 6 hours old');
-    for (const r of [decide({}, {}), decide({}, row({ fresh: false }))]) expect(r).toMatchObject({ route: APPROVE_ROUTES.RESPOND, http_status: 200 });
+    for (const r of [decide({}, {}), decide({}, row({ fresh: false }))]) expect(Object.keys(r)).toEqual(['action', 'response']);
+    expect(decide({}, {}).action).toBe(APPROVE_ACTIONS.ANSWER);
   });
   it('check: runs the checker, returns a preview, changes nothing', () => {
     const r = decide({});
-    expect(r.route).toBe(APPROVE_ROUTES.RESPOND);
+    expect(r.action).toBe(APPROVE_ACTIONS.ANSWER);
     expect(r.response).toMatchObject({ ok: true, status: 'DRAFTED', passed: true, error_code: '' });
     expect(r.response.html).toContain('₹13,024');
     expect(r.response.figures_verified).toBe(ai.verified_figures);
@@ -85,19 +86,20 @@ describe('decideApproval', () => {
   });
   it('send: blocking issues → EDIT_BLOCKED, nothing claimed', () => {
     const r = decide({ action: 'send', body: draft.edit_text.replace('₹5,280', '₹9,999') });
-    expect(r.route).toBe(APPROVE_ROUTES.RESPOND);
+    expect(r.action).toBe(APPROVE_ACTIONS.ANSWER);
     expect(r.response).toMatchObject({ ok: false, error_code: 'EDIT_BLOCKED', passed: false, html: '' });
   });
-  it('send: a clean edit is claimed, then handed to Deliver Email for the stored demo inbox', () => {
+  it('send: a clean edit is claimed by this execution, then handed to Deliver Email for the stored demo inbox', () => {
     const r = decide({ action: 'send', subject: 'Edited subject' });
-    expect(r.route).toBe(APPROVE_ROUTES.CLAIM);
-    expect(JSON.parse(r.params)).toEqual({ job_id: ID });
+    expect(r.action).toBe(APPROVE_ACTIONS.SEND);
+    expect(JSON.parse(r.params)).toEqual({ job_id: ID, execution_id: '512' });
     expect(Object.keys(r.deliver)).toEqual(['job_id', 'email', 'drill', 'record']);
     expect(r.deliver).toMatchObject({ job_id: ID, drill: false, record: {} });
     expect(r.deliver.email).toMatchObject({ to: 'demo@inbox.test', subject: 'Edited subject', from: 'BookLeaf Author Relations <sender@bookleaf.test>' });
     expect(r.deliver.email.text).toMatch(/Warm regards,\nAnita Rao$/);
     expect(r.deliver.email.html).toContain('₹13,024');
     expect(r.response).toMatchObject({ ok: true, status: 'PROCESSING', passed: true, html: '' });
+    expect(r.fallback).toMatchObject({ ok: false, error_code: 'ALREADY_SENT', job_id: ID, status: 'PROCESSING' });
   });
   it('send: sender, brand and default signature come from the settings', () => {
     const { email } = decide({ action: 'send' }, row({ sign_off: '' }), { ...SETTINGS, sender_name: 'Royalty Desk', brand_name: 'Leaf Co' }).deliver;
@@ -108,19 +110,11 @@ describe('decideApproval', () => {
   it('send: the email-down drill stored on the job is honoured', () => {
     expect(decide({ action: 'send' }, row({ drills: { email_down: true } })).deliver.drill).toBe(true);
   });
-  it('discard: routes to the discard update (even for an expired draft)', () => {
-    expect(decide({ action: 'discard' }, row({ fresh: false })).route).toBe(APPROVE_ROUTES.DISCARD);
-  });
-});
-
-describe('claim and discard outcomes', () => {
-  const decided = decide({ action: 'send' });
-  it('a claimed row continues to the email; no row means a double click → ALREADY_SENT', () => {
-    expect(claimOutcome({ row: { job_id: ID, status: 'PROCESSING' }, decided })).toMatchObject({ route: 1, response: decided.response });
-    expect(claimOutcome({ row: {}, decided })).toMatchObject({ route: 0, http_status: 200, response: { ok: false, error_code: 'ALREADY_SENT' } });
-  });
-  it('discard: DISCARDED, or NOT_A_DRAFT when it changed meanwhile', () => {
-    expect(discardOutcome({ row: { job_id: ID, status: 'DISCARDED' }, jobId: ID }).response).toMatchObject({ ok: true, status: 'DISCARDED' });
-    expect(discardOutcome({ row: {}, jobId: ID }).response).toMatchObject({ ok: false, error_code: 'NOT_A_DRAFT' });
+  it('discard: the discard update (even for an expired draft), with its answer and the one if the draft changed meanwhile', () => {
+    const r = decide({ action: 'discard' }, row({ fresh: false }));
+    expect(r.action).toBe(APPROVE_ACTIONS.DISCARD);
+    expect(JSON.parse(r.params)).toEqual({ job_id: ID });
+    expect(r.response).toMatchObject({ ok: true, job_id: ID, status: 'DISCARDED' });
+    expect(r.fallback).toMatchObject({ ok: false, job_id: ID, error_code: 'NOT_A_DRAFT' });
   });
 });

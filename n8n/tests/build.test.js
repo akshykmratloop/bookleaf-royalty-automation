@@ -126,8 +126,8 @@ describe('bundled Code nodes run standalone', () => {
       $json: { settings }, $: outputsOf({ 'Approve Webhook': { body } }),
     })[0].json;
     const body = { job_id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', action: 'discard' };
-    expect(run(body)).toMatchObject({ route: 1, job_id: body.job_id, settings: SETTINGS });
-    expect(run({ action: 'x' })).toMatchObject({ route: 0, http_status: 400 });
-    expect(run(body, { ...SETTINGS, draft_ttl_hours: 0 })).toMatchObject({ route: 0, http_status: 500 });
+    expect(run(body)).toMatchObject({ ok: true, job_id: body.job_id, settings: SETTINGS });
+    expect(run({ action: 'x' })).toMatchObject({ ok: false, http_status: 400 });
+    expect(run(body, { ...SETTINGS, draft_ttl_hours: 0 })).toMatchObject({ ok: false, http_status: 500 });
   });
 });

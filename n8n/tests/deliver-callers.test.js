@@ -99,18 +99,18 @@ describe('approve-draft → Deliver Email', () => {
   });
   /** Decide's item for a send, run through the built Code node. */
   const decided = (r) => runCode(nodeOf('approve-draft', 'Decide'), {
-    $json: r, $: outputsOf({ 'Parse Request': { request: { job_id: ID, action: 'send', subject: 'Edited', body: draft.edit_text }, settings: SETTINGS } }),
+    $json: r, $execution: { id: '77' }, $: outputsOf({ 'Parse Request': { request: { job_id: ID, action: 'send', subject: 'Edited', body: draft.edit_text }, settings: SETTINGS } }),
   })[0].json;
 
   it('runs only after the draft is claimed and the webhook is answered', () => {
-    expect(targets('approve-draft', 'Claimed?', 1)).toEqual(['Respond Sending']);
+    expect(targets('approve-draft', 'Claimed?', 0)).toEqual(['Respond Sending']);
     expect(targets('approve-draft', 'Respond Sending')).toEqual(['Deliver Email']);
     expect(targets('approve-draft', 'Deliver Email')).toEqual([]);
   });
   it('hands over the edited email to the stored demo inbox and the stored drill; nothing else to record', () => {
     const d = decided(row());
-    expect(d.route).toBe(2);
-    const sending = { route: 1, http_status: 200, response: d.response };
+    expect(d.action).toBe('send');
+    const sending = { job_id: ID, status: 'PROCESSING' };
     const inputs = inputsOf('approve-draft', { $json: sending, $: outputsOf({ Decide: d }) });
     expectDeclaredTypes(inputs);
     expect(inputs).toMatchObject({ job_id: ID, drill: false, email: { to: 'demo@inbox.test', subject: 'Edited' } });

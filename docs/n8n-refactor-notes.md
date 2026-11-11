@@ -376,3 +376,33 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
 - **Release engineer:** needs migration 03 (the function) on the target before this deploy; no new
   credential, no new setting. Bubble sees the same paths, bodies and status codes; the duplicate window
   now slides (10 minutes back from each click instead of fixed 10-minute buckets).
+
+## Step 7 — approve-draft: Decide works out every answer, named outputs, claim records the execution
+
+- **Changed:** approve-draft is the design's 16 nodes: Approve Webhook → Load Settings → Parse Request →
+  **Request Valid?** (IF 2.2) → Respond Rejected / Load Draft → **Decide** → **Action** (Switch 3.2 Rules mode:
+  *Answer* / *Discard* / *Send*). Answer → **Respond Answer**. Discard → **Discard Draft** → **Respond
+  Discard** (`$json.job_id ? response : fallback`). Send → **Claim Draft** → **Claimed?** (IF 2.2, `job_id`
+  not empty) → **Respond Sending** → Deliver Email, or **Respond Already Sent**. Removed the Code nodes
+  Discard Result and Claim Result (and `claimOutcome`, `discardOutcome`, `APPROVE_ROUTES`) and the shared
+  Respond Result. `decideApproval` returns `action` (`APPROVE_ACTIONS`), `response`, and for discard/send a
+  `fallback` (NOT_A_DRAFT / ALREADY_SENT, the answer when the update takes no row), so no Code runs after
+  the database. `CLAIM_DRAFT` sets `execution_id` to the approving execution (`$execution.id`, passed by
+  Decide in `params`): the job now belongs to the run that sends it, for step 8's error handler.
+- **Tests (written first):** `n8n/tests/approve-draft.test.js` (counts and types, Action's named outputs,
+  both IFs, wiring, the five Respond bodies evaluated like n8n, the send path on row 0, node notes);
+  `tests/db/approve.test.js` (5, real Postgres: claim records the execution id, a second click claims nothing
+  and keeps the first id, an expired draft is never claimed, discard works on an expired draft and returns
+  nothing once the job is no longer a draft); unit tests for the new Decide shape.
+- **Live checks (local):** contracts 37/37 (04: check, EDIT_BLOCKED, send + ALREADY_SENT on the second click,
+  discard, NOT_FOUND, 400/403). The approved job's `execution_id` was the approve-draft execution, whose
+  path was Approve Webhook → … → Claim Draft → Claimed? → Respond Sending → Deliver Email. Canvas
+  screenshots of both workflows in the local editor (scratchpad, not committed): the happy path on one
+  row, the other branches below.
+- **Sizes:** approve-draft 16 → **16** working nodes (Code 4 → 2, Switch 3 → 1, IF 0 → 2, Respond 3 → 5); all
+  workflows **66**, Switch **6**, IF **8**. Code 13 → **11** nodes, 201.6 → **198.0 KB** (budget 205 → 200 KB).
+- **Deviations:** Claim Draft and Discard Draft keep `RETURNING` + `alwaysOutputData` (an empty item when no
+  row was taken) instead of returning a `claimed`/`discarded` flag: the same pattern as Deliver Email's Still
+  Running?, and Claim Draft's `job_id` is what today's error handler reads. Every approve answer is a
+  literal HTTP 200 (Decide no longer carries `http_status`).
+- **Release engineer:** no migration, credential or setting. Bubble sees the same answers.

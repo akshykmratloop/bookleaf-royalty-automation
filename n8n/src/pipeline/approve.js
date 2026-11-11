@@ -3,8 +3,8 @@ import { approveError, approveResponse } from './approve-request.js';
 import { checkEdited, formatIssues, renderEdited } from './edit.js';
 import { brandOf, senderFor } from './finalize.js';
 
-/** Switch outputs after "Decide": answer now, discard the draft, or claim it and send. */
-export const APPROVE_ROUTES = Object.freeze({ RESPOND: 0, DISCARD: 1, CLAIM: 2 });
+/** What "Decide" chose; the Action Switch names its outputs after these: answer now, discard, or claim and send. */
+export const APPROVE_ACTIONS = Object.freeze({ ANSWER: 'answer', DISCARD: 'discard', SEND: 'send' });
 const SENDING = ['PROCESSING', 'SENT'];
 
 /**
@@ -15,7 +15,7 @@ const SENDING = ['PROCESSING', 'SENT'];
  * @property {{email_down?:boolean}|null} drills @property {boolean} fresh drafted within draft_ttl_hours
  */
 
-const respond = (response) => ({ route: APPROVE_ROUTES.RESPOND, http_status: 200, response });
+const respond = (response) => ({ action: APPROVE_ACTIONS.ANSWER, response });
 
 /** Status checks shared by every action. @returns {Object|null} an answer, or null to go on */
 function statusGate(request, row) {
@@ -39,39 +39,31 @@ function checkAndRender(request, row, settings) {
 }
 
 /**
- * The "Decide" step after the draft row is loaded. A clean send is claimed (route CLAIM), then
- * `deliver` goes to the Deliver Email sub-workflow: the edited email for the job's stored demo inbox,
- * with the drill stored on the job and nothing else to record.
- * @param {{request:import('./approve-request.js').ApproveRequest, row:DraftRow|Object, settings:import('./settings.js').Settings}} input
+ * The "Decide" step after the draft row is loaded. It works out every answer the request can get, so the
+ * nodes after it only pick one: `response` when the discard or claim takes the row, `fallback` when
+ * it does not (the draft changed meanwhile, or another click claimed it). A clean send is claimed by
+ * this execution, then `deliver` goes to the Deliver Email sub-workflow: the edited email for the job's
+ * stored demo inbox, with the drill stored on the job and nothing else to record.
+ * @param {{request:import('./approve-request.js').ApproveRequest, row:DraftRow|Object,
+ *   settings:import('./settings.js').Settings, executionId:string}} input
  */
-export function decideApproval({ request, row, settings }) {
+export function decideApproval({ request, row, settings, executionId }) {
   const gated = statusGate(request, row);
   if (gated) return gated;
-  const params = JSON.stringify({ job_id: request.job_id });
-  if (request.action === 'discard') return { route: APPROVE_ROUTES.DISCARD, params };
-  if (!row.fresh) return respond(approveError('DRAFT_EXPIRED', request.job_id, row.status, {}, { hours: settings.draft_ttl_hours }));
+  const id = request.job_id;
+  if (request.action === 'discard') {
+    const response = approveResponse({ ok: true, job_id: id, status: 'DISCARDED' });
+    return { action: APPROVE_ACTIONS.DISCARD, params: JSON.stringify({ job_id: id }), response, fallback: approveError('NOT_A_DRAFT', id, '') };
+  }
+  if (!row.fresh) return respond(approveError('DRAFT_EXPIRED', id, row.status, {}, { hours: settings.draft_ttl_hours }));
   const { check, rendered, summary } = checkAndRender(request, row, settings);
   if (request.action === 'check') return respond(approveResponse({ ...summary, ok: true, html: rendered.html }));
-  if (!check.passed) return respond(approveError('EDIT_BLOCKED', request.job_id, row.status, summary));
+  if (!check.passed) return respond(approveError('EDIT_BLOCKED', id, row.status, summary));
   const email = { from: senderFor(settings), to: row.recipient, subject: rendered.subject, html: rendered.html, text: rendered.text };
   /** @type {import('./finalize.js').Delivery} */
-  const deliver = { job_id: request.job_id, email, drill: row.drills?.email_down === true, record: {} };
-  const response = approveResponse({ ...summary, ok: true, status: 'PROCESSING' });
-  return { route: APPROVE_ROUTES.CLAIM, params, deliver, response };
-}
-
-/**
- * After CLAIM_DRAFT. route 1 = claimed (answer, then send); 0 = nothing claimed: another click won.
- * @param {{row:Object, decided:{params:string, response:Object}}} input
- */
-export function claimOutcome({ row, decided }) {
-  if (row && row.job_id) return { route: 1, http_status: 200, response: decided.response };
-  const jobId = JSON.parse(decided.params).job_id;
-  return { route: 0, http_status: 200, response: approveError('ALREADY_SENT', jobId, 'PROCESSING') };
-}
-
-/** After DISCARD_DRAFT. @param {{row:Object, jobId:string}} input */
-export function discardOutcome({ row, jobId }) {
-  if (row && row.job_id) return respond(approveResponse({ ok: true, job_id: jobId, status: 'DISCARDED' }));
-  return respond(approveError('NOT_A_DRAFT', jobId, ''));
+  const deliver = { job_id: id, email, drill: row.drills?.email_down === true, record: {} };
+  return {
+    action: APPROVE_ACTIONS.SEND, params: JSON.stringify({ job_id: id, execution_id: executionId }), deliver,
+    response: approveResponse({ ...summary, ok: true, status: 'PROCESSING' }), fallback: approveError('ALREADY_SENT', id, 'PROCESSING'),
+  };
 }
