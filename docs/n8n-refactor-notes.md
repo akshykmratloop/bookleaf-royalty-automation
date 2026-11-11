@@ -515,3 +515,60 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
 - **Sizes:** unchanged (64 working nodes, 10 Code nodes, 196.3 KB); 6 + 14 sticky notes (About + sections).
 - **Deviations:** the About note is capped at 1200 px instead of spanning the whole canvas (a 5,900 px line is not
   readable). Long edges remain where several branches meet one node (the Record section, AI Failed).
+
+## Step 10 — import-ready export, docs, size budget
+
+- **Changed:** new `n8n/tools/export.mjs` (`node n8n/tools/export.mjs --env .secrets/n8n-local.env`) reads the six
+  BookLeaf workflows from an n8n's public API and writes `n8n/export/<source>.json`: `id`, `name`, `active: false`,
+  `nodes` (every credential `id` set to `null`, name and type kept), `connections`, `settings`, `pinData: {}`;
+  no version, owner, tags or static data. It stops when a workflow is missing or two share a name. Workflow ids
+  are kept, so the `errorWorkflow` settings and the Deliver Email calls point at workflows in the export. The
+  committed export was produced from the LOCAL deployment.
+- **Found and fixed:** n8n gives every Send Email node a `webhookId` and invents a new one whenever a save lacks
+  it, so each deploy changed the three email nodes. `emailNode` now sets a fixed one (`stableUuid('emailSend/<name>')`):
+  the deployed workflows equal the build again.
+- **Tests:** `n8n/tests/export.test.js` (written first; failed with ENOENT, then on the email nodes' `webhookId`):
+  `exportable()` keeps only the importable fields and nulls credential ids without touching its input; the export
+  holds exactly the six workflows and matches the committed build (credential placeholders → `null`, workflow
+  placeholders → the exported ids), so a forgotten re-export fails `npm test`; cross-workflow references resolve
+  inside the export; a secret scan (no credential id, API-key or private-key shapes, no `password`/`token`/
+  `secret`/`apiKey` fields, no email address, no pinned or static data, and none of the values in the local
+  `.secrets/webhook.env`, `.secrets/n8n-local.env` and `.env`, checked without printing them).
+- **Import checked:** `n8n import:workflow --separate --input=/import` in a throwaway `n8nio/n8n:2.45.4`
+  container (no network, its own database, deleted afterwards) imported all 6 with their ids, inactive. Credential
+  linking was read in n8n's source, not exercised (the throwaway had no credentials): `replaceInvalidCredentials`
+  (`dist/workflow-helpers.js`, called by `commands/import/workflow.js`) gives a node whose credential id is `null`
+  the one credential of that name and type in the project; with none or several it stays unlinked.
+- **Docs:** `docs/integration.md` rewritten for the current design (pull only; contract with author/books and 403;
+  lifecycle with drafts; enqueue function; Deliver Email; the six workflows; the export and how to import it;
+  push left as the paid-plan upgrade path in PAYLOAD.md). `docs/error-handling.md` rewritten: every failure with
+  its real code and behaviour (retries 2 × 2 s, one rewrite, one SMTP try, error workflow by execution id,
+  `EMAIL_UNCERTAIN`, sweeper every minute), the five drills, the test suites. No `{{TODO}}`/`{{VERIFY}}` left in
+  either. README's doc index line updated. PAYLOAD.md was brought up to date in steps 8 and 9a.
+- **Size budget:** `code-size.test.js` total 200 → **198 KB** (measured 196.3 KB), per node 40 → **36 KB** (largest
+  34.2 KB, Check Rewrite).
+- **Gates (final tree):** npm test 522/522 (39 files), `build.mjs --check` clean, test:db 42/42, contracts 40/40
+  on the local n8n.
+
+## Summary of the clean-up (main @ f57df75 → this branch)
+
+| Workflow | Working nodes before → after | Code nodes | Code KB |
+|---|---|---|---|
+| Royalty Summary | 45 → 27 | → 6 | 145.7 |
+| Approve Draft | 20 → 16 | → 2 | 45.4 |
+| Deliver Email | new → 8 | 0 | 0 |
+| Job Status | 7 → 7 | 2 | 5.2 |
+| Error Handler | 6 → 4 | 1 → 0 | 0 |
+| Stuck Job Sweeper | 2 → 2 | 0 | 0 |
+| **All** | **80 → 64** | **23 → 10** | **415.1 → 196.3** |
+
+Switch 17 → 3 (all Rules mode with named outputs), IF 0 → 10. Largest Code nodes: Check Rewrite 34.2, Check Draft
+34.1, Decide 31.9, Prepare Job 29.1, Build Context 26.8 KB.
+
+**Release engineer, in order (production; done by the lead):** migration 03 (`scripts/ops/migrate-prod.sh`,
+backs up first) → production settings SQL (step 3b) → `n8n/deploy.mjs` with the current `BOOKLEAF_WEBHOOK_KEY`
+(creates "BookLeaf Webhook Key", publishes Error Handler and Deliver Email first) → contracts against production →
+remove `N8N_BLOCK_ENV_ACCESS_IN_NODE` from the box's compose and restart (step 3e) → contracts again and a Bubble
+smoke test → after the rollback window, delete the credentials "BookLeaf n8n API (X-N8N-API-KEY)", "BookLeaf
+Bubble API (bearer)" and "BookLeaf Webhook Key (X-BookLeaf-Key)" by hand. `n8n/export/` holds local workflow ids:
+a deploy to another instance should use `deploy.mjs`, an import there keeps those ids.

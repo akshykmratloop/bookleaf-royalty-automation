@@ -73,7 +73,7 @@ flowchart LR
 | Doc | What is in it |
 |---|---|
 | [docs/schema.md](docs/schema.md) | Bubble database, privacy rules, and why it is shaped this way |
-| [docs/integration.md](docs/integration.md) | Bubble to n8n flow, auth, idempotency, push and pull |
+| [docs/integration.md](docs/integration.md) | Bubble to n8n flow, auth, idempotency, the n8n workflows and their import-ready export |
 | [docs/ai-prompt-strategy.md](docs/ai-prompt-strategy.md) | How the AI is used and kept honest |
 | [docs/error-handling.md](docs/error-handling.md) | Every failure, how it is caught, what the user sees |
 | [docs/decisions.md](docs/decisions.md) | Why each big choice was made |

@@ -100,14 +100,16 @@ export function http(name, o) {
 }
 
 /**
- * Send Email (SMTP), one try: when the server's answer is lost, a second try could send twice.
+ * Send Email (SMTP), one try: when the server's answer is lost, a second try could send twice. n8n gives
+ * every Send Email node a webhookId (for its unused "send and wait" mode) and invents a new one on each
+ * save that lacks it; a fixed one keeps the deployed workflow equal to the build.
  * @param {{from:string, to:string, subject:string, text:string, html?:string}} fields expressions; no html = plain text
  */
 const emailNode = (name, credential, fields, extra) => node(name, 'emailSend', 2.1, {
   resource: 'email', operation: 'send', fromEmail: `={{ ${fields.from} }}`, toEmail: `={{ ${fields.to} }}`,
   subject: `={{ ${fields.subject} }}`, emailFormat: fields.html ? 'both' : 'text', text: `={{ ${fields.text} }}`,
   ...(fields.html ? { html: `={{ ${fields.html} }}` } : {}), options: { appendAttribution: false },
-}, { credentials: credentialRef(credential), ...extra, retryOnFail: false });
+}, { webhookId: stableUuid(`emailSend/${name}`), credentials: credentialRef(credential), ...extra, retryOnFail: false });
 
 /**
  * An author's email, HTML and text; a failure goes to the second output as the input item plus

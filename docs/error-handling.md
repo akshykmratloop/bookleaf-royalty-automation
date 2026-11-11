@@ -1,35 +1,33 @@
 # Error handling
 
-**Principle: never silent.** Every request ends as Sent or Failed, with a reason a person can
-read. Nothing is left spinning, nothing is swallowed, and a wrong email is never preferred over
-a failed one.
+**Principle: never silent.** Every request ends as Sent or Failed (or a draft waiting for an admin),
+with a reason a person can read. Nothing is left spinning, nothing is swallowed, and a wrong email
+is never preferred over a failed one.
 
-Every failure does three things: it is detected at its own boundary, it sets the job (and the
-Bubble log) to Failed with a reason, and it is written to the job ledger with an error code.
+Every failure is detected at its own boundary, sets the job to FAILED with an `error_code` and a
+readable `error`, and is kept in the job ledger. Bubble shows it on the next poll. The codes are
+listed in [`n8n/PAYLOAD.md`](../n8n/PAYLOAD.md#error-codes-error_code).
 
 ## Failure table
 
-| Failure | How it is detected | What the user sees in Bubble | Log entry |
-|---|---|---|---|
-| Missing or wrong key | Webhook auth check | Toast: "Could not reach the email service". Log set to Failed. | n8n: 401, no job created |
-| Invalid payload (bad id, bad date, too long) | Schema validation, field by field | Failed, with the field that was wrong | 400 with error list; no job |
-| Data integrity mismatch (earned is not copies x rate, paid + pending is not earned) | Integrity check before any AI call | Failed: "Data problem: ..." names the book and rule | Job FAILED, code from `integrity` |
-| Author not found | Empty Data API result | Failed: "Author not found" | Job FAILED |
-| Bubble Data API unreachable (push mode) | HTTP error or timeout, retried with backoff | Failed: "Could not read author data" | Job FAILED, retries counted |
-| AI down, timeout or API error | HTTP error from the provider | Nothing yet: fails over to the second provider. If both fail: Failed. | Provider name and error code on the job |
-| AI refusal, truncated or empty answer | Stop reason / missing content | Same as above | `REFUSED`, `TRUNCATED`, `EMPTY` |
-| AI returns invalid JSON or missing sections | Parser and shape check | One more attempt, then failover, then Failed | `INVALID_JSON`, `INVALID_SHAPE` |
-| Fact-check failure (wrong figure, banned phrase, placeholder) | Checker on the finished text | One regeneration with feedback. If still blocked: Failed, "AI wrote a figure that does not match the data". Nothing is sent. | Job FAILED with the blocked excerpts |
-| SMTP failure (rejected, timeout) | Send node error | Failed: "Email could not be delivered" | Job FAILED, code `SMTP_*` |
-| Callback to Bubble fails (push mode) | Non-2xx or timeout | Log may stay Processing briefly; result is held and reconciled | `callback_status = FAILED` after 3 retries |
-| n8n unreachable from Bubble | API Connector error or timeout | Toast with the error; the log is marked Failed. No endless spinner. | Bubble log only (n8n never saw it) |
-| Webhook slow (more than about 50 s) | Not applicable: webhook replies 202 at once | Normal "Queued" then "Sent" | - |
-| Crash in the workflow (unhandled) | n8n error workflow | Job becomes Failed, reason "Unexpected error" | Job FAILED, execution id kept |
-| Job stuck (worker died, n8n restarted) | Sweeper runs every 5 minutes; looks for QUEUED/PROCESSING older than a limit | Log moves to Failed: "Timed out" | Job FAILED, code `STUCK` |
-| Rate limit (too many requests) | Webhook limiter and provider 429 | 429 on the webhook: Bubble shows "Too many requests, try again". Provider 429: retried, then failover. | Code `RATE_LIMITED` {{VERIFY}} |
-| Duplicate request | `enqueue_royalty_job` (one advisory lock; same author + fingerprint within `duplicate_window_minutes`) | The second click is marked Duplicate and points to the first job | The function returns the existing job |
-
-Exact retry counts, limits and on-screen wording: {{VERIFY}} against the final workflow and app.
+| Failure | How it is detected | Answer or job result |
+|---|---|---|
+| Missing or wrong key | n8n Header Auth on the webhook | 403 `Authorization data is wrong!` (plain text); no execution, no job |
+| Invalid payload (bad id, bad date, too long) | Field-by-field validation in Prepare Job | 400 `VALIDATION` with the list of fields; no job |
+| No safe recipient | Neither `demo_inbox` nor the `default_demo_inbox` setting | 422 `NO_RECIPIENT`; no job |
+| Missing or invalid server setting | Load Settings, checked against the settings schema | 500 `INTERNAL` naming the setting (never its value); no job |
+| Duplicate request | `enqueue_royalty_job` (one advisory lock; same author + fingerprint within `duplicate_window_minutes`) | 200 with the first job's id and `duplicate: true` |
+| Too many sends | `enqueue_royalty_job`: `max_sends_per_hour` jobs in the last hour | 429 `RATE_LIMITED`, naming the limit |
+| Figures do not add up (earned is not copies x rate, paid + pending is not earned) | Integrity check before any AI call | FAILED `INTEGRITY`, naming the book and rule; no AI call |
+| Author data withheld | The `data_down` drill | FAILED `DATA_UNAVAILABLE` |
+| AI down, timeout (`ai_timeout_ms`, 45 s) or API error | HTTP error from the provider | Each call is retried twice, 2 s apart; then the OpenAI fallback; if both fail, FAILED `AI_UNAVAILABLE` naming both providers' errors |
+| AI refusal, truncated, empty or malformed answer | Stop reason, parser and shape check | One more try (the rewrite step, Anthropic then OpenAI); unusable twice: FAILED `AI_UNAVAILABLE` |
+| Fact-check failure (wrong figure, banned phrase, placeholder) | Checker on the finished text | One rewrite with the checker's notes (Anthropic, then OpenAI). If still blocked: FAILED `AI_FACT_CHECK_FAILED`. Nothing is sent. |
+| SMTP refused or unreachable | Send Email's error output | FAILED `EMAIL_FAILED`, ending with the server's own message. Tried once, never retried. The email stays on the job. |
+| Unexpected error in a run (a bug, a database or SMTP outage) | n8n runs the Error Handler workflow | The job owned by that execution becomes FAILED `INTERNAL` (naming the node and message), or `EMAIL_UNCERTAIN` if it stopped while sending. `alert_email` gets an email. |
+| Job stuck (n8n restarted mid-run) | The sweeper, every minute, reads the ledger | After `stuck_job_minutes` (10): FAILED `TIMEOUT`, or `EMAIL_UNCERTAIN` if it was at stage `sending` |
+| n8n unreachable from Bubble | API Connector error or timeout | Bubble marks the log Failed; an unanswered request fails after 12 minutes on Bubble's side. n8n never saw it. |
+| Webhook slow (more than about 50 s) | Not applicable: the webhook replies 202 at once | Normal "Queued", then "Sent" |
 
 ## Detail on the important paths
 
@@ -37,31 +35,44 @@ Exact retry counts, limits and on-screen wording: {{VERIFY}} against the final w
 the exact list of problems, and if it still fails the email is not sent. The author never sees a
 number that was not in the data.
 
-**Stuck job.** Any step can die silently (server restart, out of memory). The sweeper is a separate
-scheduled workflow. It looks at the ledger, not at n8n executions, so it catches jobs that no
-longer have a running execution. Each swept job is reported back to Bubble like any other failure.
+**Email sent at most once.** Deliver Email saves the finished email on the job (stage `sending`)
+before the send, sends once, and records SENT or EMAIL_FAILED. It never sends for a job that has
+already ended (for example one the sweeper failed). If a run stops between the send and the record,
+nobody can tell whether the email went out: the job is labelled `EMAIL_UNCERTAIN`, and the alert
+and the message say to check the inbox before sending again.
 
-**Callback failure.** The email may already be sent when the callback fails. So the ledger keeps the
-result and `callback_status`. When Bubble is reachable again, the result is delivered, so a log is
-never wrong about a sent email.
+**Error workflow.** "BookLeaf - Error Handler" is the error workflow of Royalty Summary and Approve
+Draft. n8n gives it the failed execution's id, last node and error. Fail Job ends the job whose
+`execution_id` is that id, only while it is still QUEUED/PROCESSING, and always returns the
+`alert_email` setting; Send Alert emails that address (empty = no alert). A duplicate request's run
+owns no job, so it can never fail the earlier one. It needs no n8n API key. If the alert itself
+fails, the Error Handler's run fails and shows in n8n's executions list.
 
-**Error workflow.** One shared n8n error workflow catches anything that escapes. It marks the job
-FAILED with the execution id, so a person can open the exact run.
+**Stuck job.** Any step can die silently (a restart, out of memory). The sweeper is a separate
+scheduled workflow that looks at the ledger, not at n8n executions, so it catches jobs that no
+longer have a running execution. It saves only failed sweeps.
 
 ## Failure drills
 
-Admin switches in Bubble Settings, honoured by n8n only when `ALLOW_DRILLS=true` on the server:
+A request may force a failure with `drills`, honoured only when the `allow_drills` setting is true
+(otherwise 400, never ignored). It is true on the local stack and, for this demo, in production.
 
 | Drill | Effect | Expected result |
 |---|---|---|
-| AI down | The AI calls fail on purpose | Failover, then Failed with an AI reason |
-| Email down | The send step fails on purpose | Failed with an email reason |
-| Data down | The Data API fetch fails on purpose (push mode) | Failed with a data reason |
+| `ai_down` | Both AI calls ask for a model that does not exist | FAILED `AI_UNAVAILABLE`, naming both providers |
+| `primary_down` | Only the Anthropic call fails | The OpenAI fallback writes the email; SENT |
+| `email_down` | Deliver Email uses an SMTP server that cannot be reached | FAILED `EMAIL_FAILED` with `ECONNREFUSED` |
+| `data_down` | The author data is withheld | FAILED `DATA_UNAVAILABLE`, no AI call |
+| `crash` | Build Context throws, like a bug | The Error Handler fails the job `INTERNAL` and sends the alert |
 
-They exist so the error paths can be shown live and tested, instead of only described. On the
-production-style server `ALLOW_DRILLS` is {{TODO}}.
+They exist so the error paths can be shown live and tested, instead of only described.
 
 ## Tests
 
-Contract tests cover 401, 400, 202, duplicate request, every sample author sent, and each drill
-returning FAILED with a reason. {{VERIFY}}
+`npm run test:contract` runs against a live n8n (`--env` picks it): `01` authentication (403 without
+or with a wrong key, no execution started; job-status keeps no successful run) and validation; `02`
+the `ai_down`, `email_down` and `data_down` drills and an integrity failure; `03` sends; `04` drafts
+and approval (check, `EDIT_BLOCKED`, send once, `ALREADY_SENT`, discard, `NOT_FOUND`, `primary_down`);
+`05` three identical requests at once give one job; `06` the `crash` drill ends `INTERNAL` and the
+Error Handler sends its alert. `npm run test:db` runs the ledger SQL (enqueue, Deliver Email, approval,
+Fail Job, the sweeper) on real Postgres; `npm test` runs the unit and build tests.

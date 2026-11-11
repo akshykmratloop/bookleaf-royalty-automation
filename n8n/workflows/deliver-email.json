@@ -210,6 +210,7 @@
           "appendAttribution": false
         }
       },
+      "webhookId": "6281c8be-7a62-4661-a188-bfab36a01188",
       "credentials": {
         "smtp": {
           "id": "__CREDENTIAL_smtp__",
@@ -243,6 +244,7 @@
           "appendAttribution": false
         }
       },
+      "webhookId": "c60fb56c-9c78-4103-a5c5-a0782d77c5b0",
       "credentials": {
         "smtp": {
           "id": "__CREDENTIAL_smtpDrill__",

@@ -135,6 +135,7 @@
           "appendAttribution": false
         }
       },
+      "webhookId": "2407b70d-d2d2-45f5-ae0d-a4c21199f7e3",
       "credentials": {
         "smtp": {
           "id": "__CREDENTIAL_smtp__",

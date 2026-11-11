@@ -1,0 +1,101 @@
+{
+  "id": "MC6OjoWmYpgIqL6C",
+  "name": "BookLeaf - Stuck Job Sweeper",
+  "active": false,
+  "nodes": [
+    {
+      "id": "f19a5efa-bc53-492c-aae4-24df93794cc0",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -294
+      ],
+      "parameters": {
+        "content": "## BookLeaf stuck job sweeper\nFails any job still QUEUED/PROCESSING `stuck_job_minutes` (a setting, 10) after it started: EMAIL_UNCERTAIN if it stopped while sending, TIMEOUT otherwise. Drafts are never touched. Only failed sweeps are saved.",
+        "height": 160,
+        "width": 480
+      }
+    },
+    {
+      "id": "ffae6c6e-1fa6-4708-a0ec-cc5185ef3f07",
+      "name": "Sweep",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -94
+      ],
+      "parameters": {
+        "content": "## Sweep\nEvery minute; a sweep that finds nothing changes nothing.",
+        "height": 294,
+        "width": 480
+      }
+    },
+    {
+      "id": "4dff84af-29f8-408b-ace4-724b33013554",
+      "name": "Every Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6e468925-4d77-46a0-a677-77b24d82b9dc",
+      "name": "Sweep Stuck Jobs",
+      "notesInFlow": true,
+      "notes": "TIMEOUT or EMAIL_UNCERTAIN",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH s AS (SELECT bookleaf_setting('stuck_job_minutes')::int AS minutes)\nUPDATE royalty_jobs AS j\nSET status = 'FAILED', stage = 'failed', stage_at = now(),\n    error_code = CASE WHEN j.stage = 'sending' THEN 'EMAIL_UNCERTAIN' ELSE 'TIMEOUT' END,\n    error = CASE WHEN j.stage = 'sending'\n      THEN 'The workflow stopped while the email was being sent, so it may or may not have arrived. Check the inbox before sending it again.' || format(' It was still sending %s minutes after it started, so it was stopped.', s.minutes)\n      ELSE format('The job did not finish within %s minutes, so it was stopped. Send it again if needed.', s.minutes) END,\n    completed_at = now(), updated_at = now()\nFROM s\nWHERE status IN ('QUEUED', 'PROCESSING')\n  AND (CASE WHEN j.drafted_at IS NULL THEN j.created_at ELSE j.stage_at END) < now() - make_interval(mins => s.minutes)\nRETURNING j.job_id::text AS job_id, j.log_id, j.author_id, j.error_code",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "BookLeaf Postgres (bookleaf db)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Minute": {
+      "main": [
+        [
+          {
+            "node": "Sweep Stuck Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {}
+}

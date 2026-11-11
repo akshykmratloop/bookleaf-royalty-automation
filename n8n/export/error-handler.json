@@ -1,0 +1,197 @@
+{
+  "id": "5xCSXfteGFFG7fL8",
+  "name": "BookLeaf - Error Handler",
+  "active": false,
+  "nodes": [
+    {
+      "id": "24499601-96a9-4a6b-a792-d50248b57752",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -294
+      ],
+      "parameters": {
+        "content": "## BookLeaf error handler\nRuns when **Royalty Summary** or **Approve Draft** stops with an unexpected error (a crash, a database or SMTP outage, the `crash` drill).\n**Fail Job** ends the job that belongs to the failed execution (its `execution_id`), only while it is still QUEUED/PROCESSING: `EMAIL_UNCERTAIN` when it stopped at stage `sending` (the email may already be out), `INTERNAL` otherwise. It always returns one row with the `alert_email` setting; **Send Alert** tells that address (empty = nobody). A failed alert fails this run.",
+        "height": 160,
+        "width": 1200
+      }
+    },
+    {
+      "id": "e8e0db84-7bc6-4d2a-ac56-c8d324d1bf05",
+      "name": "Fail the job",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -94
+      ],
+      "parameters": {
+        "content": "## Fail the job\nFound by the failed run's execution id.",
+        "height": 294,
+        "width": 480
+      }
+    },
+    {
+      "id": "60a52341-3e86-487b-a3ca-0a983cd1bc00",
+      "name": "Alert",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -94
+      ],
+      "parameters": {
+        "content": "## Alert\nEmails alert_email, when set.",
+        "height": 294,
+        "width": 480
+      }
+    },
+    {
+      "id": "fcadf375-d7d8-4e1b-a3b3-d5a206d7f476",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "107df283-2046-4026-ad70-364d3d02259a",
+      "name": "Fail Job",
+      "notesInFlow": true,
+      "notes": "By execution id; one row",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH failed AS (\n  UPDATE royalty_jobs SET status = 'FAILED', stage = 'failed', stage_at = now(),\n    error_code = CASE WHEN stage = 'sending' THEN 'EMAIL_UNCERTAIN' ELSE 'INTERNAL' END,\n    error = left(CASE WHEN stage = 'sending' THEN 'The workflow stopped while the email was being sent, so it may or may not have arrived. Check the inbox before sending it again.' ELSE 'An unexpected error stopped the workflow.' END\n      || format(' Node \"%s\": %s', coalesce(nullif(btrim(regexp_replace($1::jsonb->>'node', '\\s+', ' ', 'g')), ''), 'unknown node'), coalesce(nullif(btrim(regexp_replace($1::jsonb->>'message', '\\s+', ' ', 'g')), ''), 'no message')), 1000),\n    completed_at = now(), updated_at = now()\n  WHERE execution_id = $1::jsonb->>'execution_id' AND status IN ('QUEUED', 'PROCESSING')\n  RETURNING job_id::text AS job_id, error_code)\nSELECT (SELECT job_id FROM failed LIMIT 1) AS job_id, (SELECT error_code FROM failed LIMIT 1) AS error_code,\n  bookleaf_setting('alert_email') #>> '{}' AS alert_to,\n  format('%s <%s>', bookleaf_setting('sender_name') #>> '{}', bookleaf_setting('email_from') #>> '{}') AS alert_from",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify({ execution_id: String(($json.execution || {}).id || ''), node: ($json.execution || {}).lastNodeExecuted || '', message: (($json.execution || {}).error || {}).message || '' }) }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": null,
+          "name": "BookLeaf Postgres (bookleaf db)"
+        }
+      }
+    },
+    {
+      "id": "0ef5cbd9-94c7-43fa-ad29-71edb69c5b91",
+      "name": "Alert Set?",
+      "notesInFlow": true,
+      "notes": "false: alert_email empty",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "80be60f0-ba0c-48de-ad0a-833952eb23ce",
+              "leftValue": "={{ $json.alert_to }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1b36d03a-79fb-412d-a518-560a94ec9804",
+      "name": "Send Alert",
+      "webhookId": "2407b70d-d2d2-45f5-ae0d-a4c21199f7e3",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "retryOnFail": false,
+      "position": [
+        1040,
+        0
+      ],
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "fromEmail": "={{ $json.alert_from }}",
+        "toEmail": "={{ $json.alert_to }}",
+        "subject": "={{ 'BookLeaf alert: ' + $('Error Trigger').first().json.workflow.name + ' failed' }}",
+        "emailFormat": "text",
+        "text": "={{ ['A BookLeaf workflow stopped with an unexpected error.', '', 'Workflow: ' + $('Error Trigger').first().json.workflow.name, 'Execution: ' + (($('Error Trigger').first().json.execution || {}).url || ($('Error Trigger').first().json.execution || {}).id || 'none (the trigger could not start)'), 'Node: ' + (($('Error Trigger').first().json.execution || {}).lastNodeExecuted || 'unknown'), 'Error: ' + ((($('Error Trigger').first().json.execution || {}).error || ($('Error Trigger').first().json.trigger || {}).error || {}).message || 'no message'), '', ($json.job_id ? 'Job ' + $json.job_id + ' is now FAILED (' + $json.error_code + ').' : 'No running job belonged to this execution, so no job was changed.'), ($json.error_code === 'EMAIL_UNCERTAIN' ? 'Its email may or may not have gone out: check the inbox before sending it again.' : '')].join('\\n') }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": null,
+          "name": "BookLeaf SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fail Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Job": {
+      "main": [
+        [
+          {
+            "node": "Alert Set?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Set?": {
+      "main": [
+        [
+          {
+            "node": "Send Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {}
+}
