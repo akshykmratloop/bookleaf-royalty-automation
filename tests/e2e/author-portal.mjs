@@ -59,7 +59,9 @@ async function readDashboard(page, titles) {
     if (i >= 0) badges[t] = lines.slice(i, i + 8).find((l) => Object.values(BADGE_LABELS).includes(l));
   }
   const otherTitlesVisible = text;
-  return { earned: after('TOTAL EARNED'), paid: after('PAID'), pending: after('PENDING'), badges, otherTitlesVisible };
+  const statements = text.split('My statements')[1] ?? '';
+  const statementCount = (statements.match(/\bView\b/g) ?? []).length;
+  return { earned: after('TOTAL EARNED'), paid: after('PAID'), pending: after('PENDING'), badges, otherTitlesVisible, statementCount, statements };
 }
 
 export async function checkAuthor(page, base, author, referenceDate, allTitles) {
@@ -72,5 +74,9 @@ export async function checkAuthor(page, base, author, referenceDate, allTitles) 
   const leaked = allTitles.filter((t) => !want.titles.includes(t) && got.otherTitlesVisible.includes(t));
   if (leaked.length) problems.push(`PRIVACY: sees other authors' books: ${leaked.join(', ')}`);
   for (const t of want.titles) if (!got.otherTitlesVisible.includes(t)) problems.push(`missing own book: ${t}`);
+  // Every demo author with money pending has been sent at least one summary, so an empty list means
+  // the statements search (or its privacy rule) is broken. Drafts must never reach an author.
+  if (want.pending !== '₹0' && got.statementCount === 0) problems.push('statements list is empty although summaries were sent');
+  if (/Draft ready|Discarded/.test(got.statements)) problems.push('PRIVACY: a draft or discarded email is visible to the author');
   return { author: author.author_id, ok: problems.length === 0, problems };
 }
