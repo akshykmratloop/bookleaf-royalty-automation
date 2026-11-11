@@ -20,10 +20,23 @@ const GAP = 40;
 /** Wider than this, a line of the About note is too long to read. */
 const ABOUT_MAX_WIDTH = 1200;
 
-const sticky = (name, content, box) => ({
+/**
+ * n8n's sticky-note colours (1 yellow, 2 gold, 3 red, 4 green, 5 blue, 6 purple, 7 neutral). About is blue;
+ * a section is neutral unless its `tone` says it calls the AI (purple) or only handles failures (red).
+ */
+export const STICKY_COLORS = Object.freeze({ about: 5, flow: 7, ai: 6, failure: 3 });
+
+const sticky = (name, content, box, color) => ({
   name, type: 'n8n-nodes-base.stickyNote', typeVersion: 1,
-  parameters: { content, height: box.height, width: box.width }, position: [box.x, box.y],
+  parameters: { content, height: box.height, width: box.width, color }, position: [box.x, box.y],
 });
+
+/** @param {{title:string, tone?:string}} section @returns {number} @throws {Error} for an unknown tone */
+function colorOf(section) {
+  const tone = section.tone ?? 'flow';
+  if (tone === 'about' || !Object.hasOwn(STICKY_COLORS, tone)) throw new Error(`Section "${section.title}" has unknown tone "${tone}"`);
+  return STICKY_COLORS[tone];
+}
 
 /**
  * @param {string} content markdown (a `## ` title line, then text) @param {number} width px
@@ -78,21 +91,21 @@ function membersOf(byName, owner, section) {
 }
 
 /**
- * @param {Object[]} placed nodes with positions @param {{title:string, text:string, nodes:string[]}[]} sections
+ * @param {Object[]} placed nodes with positions @param {{title:string, text:string, nodes:string[], tone?:string}[]} sections
  * @returns {Object[]} one sticky note per section, named by its title
- * @throws {Error} for an unknown node, a node in two sections, or two sections that overlap
+ * @throws {Error} for an unknown node, a node in two sections, two sections that overlap, or an unknown tone
  */
 export function sectionNotes(placed, sections) {
   const byName = new Map(placed.map((n) => [n.name, n]));
   const owner = new Map();
   const notes = sections.map((s) => {
     const content = `## ${s.title}\n${s.text}`;
-    return { title: s.title, content, box: boxAround(membersOf(byName, owner, s), content) };
+    return { title: s.title, content, box: boxAround(membersOf(byName, owner, s), content), color: colorOf(s) };
   });
   notes.forEach((a, i) => notes.slice(i + 1).forEach((b) => {
     if (overlaps(a.box, b.box)) throw new Error(`Sections "${a.title}" and "${b.title}" overlap`);
   }));
-  return notes.map((n) => sticky(n.title, n.content, n.box));
+  return notes.map((n) => sticky(n.title, n.content, n.box, n.color));
 }
 
 /** The About note: from the left edge of the section notes, at most ABOUT_MAX_WIDTH wide, just above the highest one. */
@@ -101,7 +114,7 @@ export function aboutNote(content, notes) {
   const width = Math.min(ABOUT_MAX_WIDTH, Math.max(...notes.map((n) => n.position[0] + n.parameters.width)) - left);
   const height = noteHeight(content, width);
   const top = Math.min(...notes.map((n) => n.position[1]));
-  return sticky('About', content, { x: left, y: top - GAP - height, width, height });
+  return sticky('About', content, { x: left, y: top - GAP - height, width, height }, STICKY_COLORS.about);
 }
 
 /**

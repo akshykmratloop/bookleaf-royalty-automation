@@ -825,3 +825,15 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   the SQL pin (nothing but the email and usage columns before `WHERE`); Mark Sending's node uses `MARK_SENDING`.
 - **Gates:** npm test 565/565, build --check clean, test:db 49/49, contracts 41/41 (send, draft-approve and
   email-failed contracts unchanged).
+
+## Fix 11 — coloured sticky notes (LOW)
+
+- **Changed:** `lib/canvas.mjs` gives every note a colour from n8n's palette (`STICKY_COLORS`, read from the n8n
+  2.45 editor's styles: 3 red, 5 blue, 6 purple, 7 neutral). The About note is blue; a section is neutral unless its
+  `tone` is `ai` (purple: the AI writer in Royalty Summary and Write Draft, where the money is spent) or `failure`
+  (red: both Error Handler sections). An unknown tone fails the build. Only the sticky notes changed; no working node
+  moved.
+- **Tests (written first, RED):** the palette, tone → colour, the unknown-tone error; every note in every built
+  workflow has a palette colour and About is blue; the AI and error-handler sections. The export test confirms n8n
+  kept the colours after the deploy.
+- **Gates:** npm test 574/574, build --check clean, test:db 49/49, contracts 41/41.

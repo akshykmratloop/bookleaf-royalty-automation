@@ -53,8 +53,8 @@ const edges = [
 
 const grid = { 'Error Trigger': [0, 0], 'Fail Job': [1, 0], 'Alert Address': [3, 0], 'Alert Set?': [4, 0], 'Send Alert': [5, 0] };
 const sections = [
-  { title: 'Fail the job', text: 'Found by the failed run\'s execution id.', nodes: ['Error Trigger', 'Fail Job'] },
-  { title: 'Alert', text: 'Emails alert_email, when set; the last known address if the database is down.', nodes: ['Alert Address', 'Alert Set?', 'Send Alert'] },
+  { title: 'Fail the job', text: 'Found by the failed run\'s execution id.', nodes: ['Error Trigger', 'Fail Job'], tone: 'failure' },
+  { title: 'Alert', text: 'Emails alert_email, when set; the last known address if the database is down.', nodes: ['Alert Address', 'Alert Set?', 'Send Alert'], tone: 'failure' },
 ];
 
 export default { name: 'BookLeaf - Error Handler', nodes, edges, grid, sections, about: ABOUT };

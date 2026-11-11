@@ -103,7 +103,7 @@ const sections = [
   { title: 'Ledger', text: 'One locked call: a new job (202), a double click (200, the same job) or the hourly cap (429).',
     nodes: ['Enqueue Job', 'Outcome', 'Respond 202', 'Respond Duplicate', 'Respond 429', 'Respond 500', 'Mark Processing'] },
   { title: 'Data & facts', text: 'Figures checked, facts and prompt built.', nodes: ['Build Context', 'Context OK?'] },
-  { title: 'AI writer', text: 'Sub-workflow: Anthropic, OpenAI if it fails, then the fact check.', nodes: ['Write Draft'] },
+  { title: 'AI writer', text: 'Sub-workflow: Anthropic, OpenAI if it fails, then the fact check.', nodes: ['Write Draft'], tone: 'ai' },
   { title: 'Fact check', text: 'Pass, one rewrite with the checker\'s notes, or fail.',
     nodes: ['Draft OK?', 'Stage: Rewriting', 'Rewrite Draft', 'Rewrite OK?', 'Stop: Unexpected'] },
   { title: 'Render & deliver', text: 'HTML and text email; Deliver Email sends it once.', nodes: ['Render Email', 'Send Now?', 'Deliver Email'] },

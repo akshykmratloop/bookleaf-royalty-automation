@@ -9,7 +9,8 @@
       "parameters": {
         "content": "## BookLeaf error handler\nRuns when **Royalty Summary**, **Approve Draft**, **Job Status** or the **Stuck Job Sweeper** stops with an unexpected error (a crash, a database or SMTP outage, the `crash` drill). The two sub-workflows have none: their caller fails instead.\n**Fail Job** ends the job that belongs to the failed execution (its `execution_id`), only while it is still QUEUED/PROCESSING: `EMAIL_UNCERTAIN` when it stopped at stage `sending` (the email may already be out), `INTERNAL` otherwise. It always returns one row with the `alert_email` setting. **Alert Address** remembers it in this workflow's static data; when the database is down (Fail Job's error output) it uses the last remembered address, at most once every 15 minutes. **Send Alert** tells that address (empty = nobody). A failed alert fails this run.",
         "height": 204,
-        "width": 1200
+        "width": 1200,
+        "color": 5
       },
       "position": [
         -60,
@@ -24,7 +25,8 @@
       "parameters": {
         "content": "## Fail the job\nFound by the failed run's execution id.",
         "height": 294,
-        "width": 480
+        "width": 480,
+        "color": 3
       },
       "position": [
         -60,
@@ -39,7 +41,8 @@
       "parameters": {
         "content": "## Alert\nEmails alert_email, when set; the last known address if the database is down.",
         "height": 294,
-        "width": 740
+        "width": 740,
+        "color": 3
       },
       "position": [
         720,

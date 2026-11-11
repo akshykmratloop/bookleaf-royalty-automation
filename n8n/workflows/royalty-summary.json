@@ -9,7 +9,8 @@
       "parameters": {
         "content": "## BookLeaf royalty summary\nPOST /webhook/royalty-summary with header X-BookLeaf-Key (n8n Header Auth: a missing or wrong key gets 403 before the workflow starts). Server settings come from the bookleaf_settings table (Load Settings, then Check Settings).\n**Enqueue Job** calls enqueue_royalty_job, which makes the job id: a double click gets the first job back (200, duplicate), more than max_sends_per_hour gets 429, anything else 202 {job_id} at once. Then the **Write Draft** sub-workflow writes and fact-checks the email (Anthropic, OpenAI if it fails); **Rewrite Draft** runs it once more with the checker's notes. **Deliver Email** sends it and records SENT or EMAIL_FAILED. A draft (delivery=draft) and every failure end in **Record Result**. Code nodes are generated from n8n/src by n8n/build.mjs.",
         "height": 204,
-        "width": 1200
+        "width": 1200,
+        "color": 5
       },
       "position": [
         -60,
@@ -24,7 +25,8 @@
       "parameters": {
         "content": "## Intake\nThe settings are checked (bad settings: 500), then the body (a bad body: 400). Database down before the answer: 503.",
         "height": 694,
-        "width": 1780
+        "width": 1780,
+        "color": 7
       },
       "position": [
         -60,
@@ -39,7 +41,8 @@
       "parameters": {
         "content": "## Ledger\nOne locked call: a new job (202), a double click (200, the same job) or the hourly cap (429).",
         "height": 894,
-        "width": 1000
+        "width": 1000,
+        "color": 7
       },
       "position": [
         1760,
@@ -54,7 +57,8 @@
       "parameters": {
         "content": "## Data & facts\nFigures checked, facts and prompt built.",
         "height": 294,
-        "width": 480
+        "width": 480,
+        "color": 7
       },
       "position": [
         2800,
@@ -69,7 +73,8 @@
       "parameters": {
         "content": "## AI writer\nSub-workflow: Anthropic, OpenAI if it fails, then the fact check.",
         "height": 338,
-        "width": 220
+        "width": 220,
+        "color": 6
       },
       "position": [
         3320,
@@ -84,7 +89,8 @@
       "parameters": {
         "content": "## Fact check\nPass, one rewrite with the checker's notes, or fail.",
         "height": 694,
-        "width": 1000
+        "width": 1000,
+        "color": 7
       },
       "position": [
         3580,
@@ -99,7 +105,8 @@
       "parameters": {
         "content": "## Render & deliver\nHTML and text email; Deliver Email sends it once.",
         "height": 294,
-        "width": 740
+        "width": 740,
+        "color": 7
       },
       "position": [
         4620,
@@ -114,7 +121,8 @@
       "parameters": {
         "content": "## Record\nDrafts and every failure end here.",
         "height": 316,
-        "width": 220
+        "width": 220,
+        "color": 7
       },
       "position": [
         4880,

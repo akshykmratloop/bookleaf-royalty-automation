@@ -15,7 +15,8 @@
       "parameters": {
         "content": "## BookLeaf stuck job sweeper\nFails any job still QUEUED/PROCESSING `stuck_job_minutes` (a setting, 10) after it started: EMAIL_UNCERTAIN if it stopped while sending, TIMEOUT otherwise. Drafts are never touched. Only failed sweeps are saved.",
         "height": 160,
-        "width": 480
+        "width": 480,
+        "color": 5
       }
     },
     {
@@ -30,7 +31,8 @@
       "parameters": {
         "content": "## Sweep\nEvery minute; a sweep that finds nothing changes nothing.",
         "height": 294,
-        "width": 480
+        "width": 480,
+        "color": 7
       }
     },
     {

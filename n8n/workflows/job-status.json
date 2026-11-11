@@ -9,7 +9,8 @@
       "parameters": {
         "content": "## BookLeaf job status\nGET /webhook/royalty-summary/jobs?ids=<id>,<id>[&include=html] with header X-BookLeaf-Key (n8n Header Auth). Up to 50 ids; unknown ids come back in `missing`. Successful runs are not saved (Bubble polls every few seconds).",
         "height": 116,
-        "width": 1200
+        "width": 1200,
+        "color": 5
       },
       "position": [
         -60,
@@ -24,7 +25,8 @@
       "parameters": {
         "content": "## Intake\nA bad query gets 400.",
         "height": 494,
-        "width": 1000
+        "width": 1000,
+        "color": 7
       },
       "position": [
         -60,
@@ -39,7 +41,8 @@
       "parameters": {
         "content": "## Answer\nOne query answers the jobs, in the order asked; 503 if the database is down.",
         "height": 516,
-        "width": 480
+        "width": 480,
+        "color": 7
       },
       "position": [
         980,

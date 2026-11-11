@@ -15,7 +15,8 @@
       "parameters": {
         "content": "## BookLeaf approve draft\nPOST /webhook/royalty-summary/approve with header X-BookLeaf-Key (n8n Header Auth). Every business answer is HTTP 200 with the same fields.\n**Check Edit** re-runs the fact check on the edited subject/body; **Decide** works out every answer: **check** returns a preview at once; **discard** closes the draft; **send** claims it atomically for this execution (one email per draft, however many clicks), answers at once, then hands the email to the **Deliver Email** sub-workflow. Code nodes are generated from n8n/src by n8n/build.mjs.",
         "height": 160,
-        "width": 1200
+        "width": 1200,
+        "color": 5
       }
     },
     {
@@ -30,7 +31,8 @@
       "parameters": {
         "content": "## Intake\nThe settings (bad: 500), then the body (bad: 400). Database down before the answer: 503.",
         "height": 694,
-        "width": 1780
+        "width": 1780,
+        "color": 7
       }
     },
     {
@@ -45,7 +47,8 @@
       "parameters": {
         "content": "## Load & decide\nRe-checks the edit and works out every answer.",
         "height": 294,
-        "width": 1000
+        "width": 1000,
+        "color": 7
       }
     },
     {
@@ -60,7 +63,8 @@
       "parameters": {
         "content": "## Send\nOne click wins the draft; the email goes out once.",
         "height": 494,
-        "width": 1000
+        "width": 1000,
+        "color": 7
       }
     },
     {
@@ -75,7 +79,8 @@
       "parameters": {
         "content": "## Discard or check\nCloses the draft, or answers a preview.",
         "height": 694,
-        "width": 480
+        "width": 480,
+        "color": 7
       }
     },
     {

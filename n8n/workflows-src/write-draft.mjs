@@ -74,7 +74,7 @@ const grid = {
 };
 const sections = [
   { title: 'AI writer', text: 'Anthropic writes; OpenAI if it fails. Only a 429, 5xx or timeout is tried again.',
-    nodes: ['When Called', 'Call Anthropic', 'Anthropic Answer', 'Wait (Anthropic)', 'Call OpenAI (fallback)', 'OpenAI Answer', 'Wait (OpenAI)'] },
+    nodes: ['When Called', 'Call Anthropic', 'Anthropic Answer', 'Wait (Anthropic)', 'Call OpenAI (fallback)', 'OpenAI Answer', 'Wait (OpenAI)'], tone: 'ai' },
   { title: 'Fact check', text: 'The answer read and priced, then every figure checked against the data.', nodes: ['Read Answer', 'Check Draft'] },
   { title: 'Record', text: 'Neither provider answered.', nodes: ['AI Failed'] },
 ];

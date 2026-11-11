@@ -15,7 +15,8 @@
       "parameters": {
         "content": "## BookLeaf write draft\nCalled by **Royalty Summary** with `job`, `ctx`, `request` (both providers' bodies), `attempt` (1 draft, 2 rewrite) and `previous`.\n**Call Anthropic** writes; its answer Switch sends a 2xx to **Check Draft**, retries a 429, 5xx or timeout after a short wait (1 extra try, Retry-After honoured, at most 10 s), and hands anything else to **Call OpenAI (fallback)**, which works the same way and ends in **AI Failed**. **Read Answer** reads and prices the answer; **Check Draft** checks every figure: PASS, REWRITE (with both providers' rewrite bodies) or FAIL. No error workflow here: a crash fails the caller's node.",
         "height": 160,
-        "width": 1200
+        "width": 1200,
+        "color": 5
       }
     },
     {
@@ -30,7 +31,8 @@
       "parameters": {
         "content": "## AI writer\nAnthropic writes; OpenAI if it fails. Only a 429, 5xx or timeout is tried again.",
         "height": 894,
-        "width": 1260
+        "width": 1260,
+        "color": 6
       }
     },
     {
@@ -45,7 +47,8 @@
       "parameters": {
         "content": "## Fact check\nThe answer read and priced, then every figure checked against the data.",
         "height": 316,
-        "width": 480
+        "width": 480,
+        "color": 7
       }
     },
     {
@@ -60,7 +63,8 @@
       "parameters": {
         "content": "## Record\nNeither provider answered.",
         "height": 316,
-        "width": 220
+        "width": 220,
+        "color": 7
       }
     },
     {

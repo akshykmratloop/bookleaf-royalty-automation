@@ -15,7 +15,8 @@
       "parameters": {
         "content": "## BookLeaf deliver email\nSends one email for a job and records the result. Called by **Royalty Summary** (a send job, after Render Email) and **Approve Draft** (after a draft is claimed) with `job_id`, `email` {from, to, subject, html, text}, `drill` (the email_down drill) and `record` (more job columns to save: author code, AI usage).\n**Mark Sending** saves the email on the job at stage `sending`, but only while the job is QUEUED/PROCESSING: a job the sweeper has already failed is never emailed, and a failed send keeps its email for the log. **Real SMTP?** is false only for the email_down drill, whose server cannot be reached. **Send Email** tries once. **Mark Sent** / **Mark Failed** (`EMAIL_FAILED` with the server's message) end the job.\nNo error workflow here: a failure fails the caller's Deliver Email node, and the caller's error workflow handles it.",
         "height": 204,
-        "width": 1200
+        "width": 1200,
+        "color": 5
       }
     },
     {
@@ -30,7 +31,8 @@
       "parameters": {
         "content": "## Save\nThe email goes on the job first; an ended job is never emailed.",
         "height": 294,
-        "width": 740
+        "width": 740,
+        "color": 7
       }
     },
     {
@@ -45,7 +47,8 @@
       "parameters": {
         "content": "## Send once\nOne try, never retried.",
         "height": 494,
-        "width": 480
+        "width": 480,
+        "color": 7
       }
     },
     {
@@ -60,7 +63,8 @@
       "parameters": {
         "content": "## Record\nSENT or EMAIL_FAILED.",
         "height": 494,
-        "width": 220
+        "width": 220,
+        "color": 7
       }
     },
     {

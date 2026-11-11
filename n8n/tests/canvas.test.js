@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WORKFLOW_SOURCES } from '../build.mjs';
-import { GRID, NODE_SIZE, noteHeight, placeOnGrid, sectionNotes } from '../workflows-src/lib/canvas.mjs';
+import { GRID, NODE_SIZE, noteHeight, placeOnGrid, sectionNotes, STICKY_COLORS } from '../workflows-src/lib/canvas.mjs';
 import { built, nodeOf } from './built.js';
 
 /** How the canvas reads in the n8n editor: nodes on a grid, one sticky note per section around its nodes. */
@@ -40,6 +40,14 @@ describe('sectionNotes', () => {
       .toThrow('Node "A" is in two sections');
     expect(() => sectionNotes(placed, [{ title: 'S1', text: 'x', nodes: ['Q'] }])).toThrow('Section "S1" names unknown node "Q"');
   });
+  it('colours each note by its tone: neutral by default, purple for AI calls, red for failure handling; an unknown tone fails the build', () => {
+    expect(STICKY_COLORS).toEqual({ about: 5, flow: 7, ai: 6, failure: 3 });
+    const notes = sectionNotes(placed, [
+      { title: 'S1', text: 'x', nodes: ['A'] }, { title: 'S2', text: 'x', nodes: ['B'], tone: 'ai' }, { title: 'S3', text: 'x', nodes: ['C'], tone: 'failure' },
+    ]);
+    expect(notes.map((s) => s.parameters.color)).toEqual([7, 6, 3]);
+    expect(() => sectionNotes(placed, [{ title: 'S1', text: 'x', nodes: ['A'], tone: 'pink' }])).toThrow('Section "S1" has unknown tone "pink"');
+  });
   it('a longer text in a narrower note needs a taller note', () => {
     expect(noteHeight('## T\nshort', 400)).toBeLessThan(noteHeight(`## T\n${'word '.repeat(40)}`, 400));
     expect(noteHeight(`## T\n${'word '.repeat(40)}`, 400)).toBeLessThan(noteHeight(`## T\n${'word '.repeat(40)}`, 200));
@@ -62,6 +70,10 @@ describe('every built workflow', () => {
       for (const node of working) expect(sections.filter((s) => holds(boxOf(s), node)).map(titleOf), node.name).toHaveLength(1);
       notes.forEach((a, i) => notes.slice(i + 1).forEach((b) => expect(overlap(boxOf(a), boxOf(b)), `${a.name} / ${b.name}`).toBe(false)));
     });
+    it(`${wf}: every note has a colour; About is blue`, () => {
+      for (const note of notes) expect(Object.values(STICKY_COLORS), note.name).toContain(note.parameters.color);
+      expect(nodeOf(wf, 'About').parameters.color).toBe(STICKY_COLORS.about);
+    });
     it(`${wf}: the About note starts at the left edge, above every section, in lines short enough to read`, () => {
       const about = boxOf(nodeOf(wf, 'About'));
       expect(about.x).toBe(Math.min(...sections.map((s) => s.position[0])));
@@ -73,6 +85,11 @@ describe('every built workflow', () => {
     const sections = built['royalty-summary'].nodes.filter((x) => x.type === STICKY && x.name !== 'About');
     expect(sections.sort((a, b) => a.position[0] - b.position[0]).map(titleOf))
       .toEqual(['Intake', 'Ledger', 'Data & facts', 'AI writer', 'Fact check', 'Render & deliver', 'Record']);
+  });
+  it('the AI sections are purple and the error handler is red', () => {
+    for (const wf of ['royalty-summary', 'write-draft']) expect(nodeOf(wf, 'AI writer').parameters.color, wf).toBe(STICKY_COLORS.ai);
+    for (const title of ['Fail the job', 'Alert']) expect(nodeOf('error-handler', title).parameters.color, title).toBe(STICKY_COLORS.failure);
+    expect(nodeOf('royalty-summary', 'Intake').parameters.color).toBe(STICKY_COLORS.flow);
   });
   it.each([
     ['job-status', ['Job Status Webhook', 'Parse Query', 'Query Valid?', 'Select Jobs', 'Respond Jobs']],
