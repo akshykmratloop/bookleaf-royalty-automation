@@ -26,9 +26,19 @@ describe('webhook authentication (n8n Header Auth: a missing or wrong key → 40
   it('control: with the right key the same probe runs the workflow and its execution is found', async () => {
     const marker = `auth-probe-${randomUUID()}`;
     const before = await newestExecutionId();
-    expect((await jobStatus({ ids: marker })).status).toBe(400);
+    expect((await approve({ job_id: marker, action: 'discard' })).status).toBe(400);
     await settle();
     expect(await executionsMentioning(marker, before)).toHaveLength(1);
+  });
+});
+
+describe('saved executions', () => {
+  it('job-status keeps no successful run (Bubble polls it every few seconds; each run would hold the request headers)', async () => {
+    const marker = `poll-probe-${randomUUID()}`;
+    const before = await newestExecutionId();
+    expect((await jobStatus({ ids: marker })).status).toBe(400);
+    await settle();
+    expect(await executionsMentioning(marker, before)).toEqual([]);
   });
 });
 

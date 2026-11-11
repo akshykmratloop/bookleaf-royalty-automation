@@ -453,3 +453,33 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   the SMTP credential. After the rollout, delete the credential **BookLeaf n8n API (X-N8N-API-KEY)** on each
   instance by hand, and the n8n API key it held if nothing else uses it (deploy and the contract suite still use
   the key in the env file). Rollback to the previous tag recreates and needs that credential.
+
+## Step 9a — job-status keeps no successful run; the sweeper labels EMAIL_UNCERTAIN
+
+- **Changed:** job-status is Job Status Webhook → Parse Query → **Query Valid?** (IF 2.2 on `ok`; was the
+  expression-mode Switch `Valid?`) → Select Jobs → Shape Jobs → Respond Jobs, or Respond Rejected; its settings
+  add `saveDataSuccessExecution: 'none'` (failed runs are still saved). `parseQuery` returns `ok` instead of
+  `route`. The `route()` builder is deleted: every Switch left is in Rules mode with named outputs (build test).
+  `SWEEP_STUCK` moved to `sql-failures.js` next to `FAIL_JOB`: a job stuck at stage `sending` becomes
+  `EMAIL_UNCERTAIN` ("… It was still sending 10 minutes after it started, so it was stopped."), any other
+  `TIMEOUT` (text unchanged); it now also returns `error_code`. The sweeper still runs every minute
+  (`TUNING.sweepEveryMinutes`, threshold from `stuck_job_minutes`) and saves only failed runs.
+- **X-BookLeaf-Key in saved executions:** n8n 2.45.4 has execution-data redaction (workflow setting
+  `redactionPolicy`, `modules/redaction`), but it is licensed (`isDataRedactionLicensed`): on a Community instance
+  the setting is deleted when the workflow is created or updated, and redaction only masks data when it is viewed.
+  So the header cannot be kept out of saved executions here. What was done instead: job-status (the endpoint Bubble
+  calls every few seconds) no longer saves successful runs; royalty-summary and approve-draft still keep the
+  header in their saved runs, which only n8n users can open and which n8n prunes after 336 hours. Documented in
+  `n8n/PAYLOAD.md`.
+- **Tests (written first):** build tests for job-status (settings, the IF and its wiring; no expression-mode
+  Switch anywhere), Parse Query's `ok`; SWEEP_STUCK pins moved to `sql-failures.test.js` plus the
+  EMAIL_UNCERTAIN case; real Postgres (`tests/db/failures.test.js`, +3): TIMEOUT text, EMAIL_UNCERTAIN text, younger
+  job / draft / approved draft counted from its claim. Contract 01: a new test asserts a job-status probe leaves no
+  saved execution (it failed on the old deploy, execution 2795 was found); the right-key control now probes
+  approve-draft, which still saves its runs.
+- **Live checks (local):** contracts 40/40. A test row at stage `sending`, created 11 minutes ago, was failed by
+  the sweeper within ~15 s as `EMAIL_UNCERTAIN` with the new text (row deleted afterwards).
+- **Sizes:** working nodes unchanged (64; job-status 7). Switch 4 → **3** (all Rules mode), IF 9 → **10**. Code 10
+  nodes, 196.3 KB.
+- **Release engineer:** no migration, credential or setting. Bubble sees the same job-status answers; jobs that a
+  sweep catches mid-send now read `EMAIL_UNCERTAIN` instead of `TIMEOUT`.

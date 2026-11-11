@@ -4,11 +4,11 @@ import { parseStatusQuery, shapeJobs } from '../../src/pipeline/status.js';
 
 const item = (json) => [{ json }];
 
-/** route 0 = reject (400 bad query), 1 = query. */
+/** ok: Select Jobs gets `params`; not ok: the 400 answer for a bad query. */
 export function parseQuery({ query }) {
   const r = parseStatusQuery(query);
-  if (!r.ok) return item({ route: 0, http_status: r.http_status, response: errorBody(r) });
-  return item({ route: 1, ids: r.ids, include_html: r.includeHtml, params: r.params });
+  if (!r.ok) return item({ ok: false, http_status: r.http_status, response: errorBody(r) });
+  return item({ ok: true, ids: r.ids, include_html: r.includeHtml, params: r.params });
 }
 
 export function respondJobs({ rows, ids, includeHtml }) {

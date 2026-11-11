@@ -100,17 +100,3 @@ export const SELECT_JOBS = `SELECT job_id::text AS job_id, log_id, batch_id, aut
 FROM royalty_jobs
 WHERE job_id = ANY (ARRAY(SELECT jsonb_array_elements_text(${P}->'ids'))::uuid[])`;
 
-/**
- * A job still QUEUED/PROCESSING stuck_job_minutes after it started becomes FAILED (TIMEOUT). An
- * approved draft starts when it is claimed (stage_at), not when the draft was made. DRAFTED and
- * DISCARDED jobs are never touched.
- */
-export const SWEEP_STUCK = `WITH s AS (SELECT bookleaf_setting('stuck_job_minutes')::int AS minutes)
-UPDATE royalty_jobs
-SET status = 'FAILED', stage = 'failed', stage_at = now(), error_code = 'TIMEOUT',
-    error = format('The job did not finish within %s minutes, so it was stopped. Send it again if needed.', s.minutes),
-    completed_at = now(), updated_at = now()
-FROM s
-WHERE status IN ('QUEUED', 'PROCESSING')
-  AND (CASE WHEN drafted_at IS NULL THEN created_at ELSE stage_at END) < now() - make_interval(mins => s.minutes)
-RETURNING job_id::text AS job_id, log_id, author_id`;

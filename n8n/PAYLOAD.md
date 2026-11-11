@@ -14,7 +14,11 @@ wrong!` (not JSON) before the workflow starts: no execution, no database work.
 deploy; 32–256 printable characters, no spaces). `n8n/deploy.mjs` writes it into the n8n credential
 **BookLeaf Webhook Key** (Header Auth on `X-BookLeaf-Key`, usable by no HTTP Request node). n8n
 compares it as a plain string (not constant-time). The request headers, key included, stay in the
-saved execution data of the three webhook workflows, which only n8n users can open.
+saved execution data of royalty-summary and approve-draft, and of failed job-status runs (job-status
+keeps no successful run). Only n8n users can open them, and n8n deletes executions after 14 days
+(`EXECUTIONS_DATA_MAX_AGE` 336 hours in both compose files). n8n's own execution-data redaction (the
+workflow setting `redactionPolicy`) needs an Enterprise licence: a Community instance drops the
+setting when the workflow is saved, so the header cannot be redacted there.
 
 **Key rotation.** Header Auth checks exactly one key, so there is a short gap: put a new
 `BOOKLEAF_WEBHOOK_KEY` in `.secrets/webhook.env`, run `n8n/deploy.mjs` (the credential changes at
@@ -125,7 +129,7 @@ from there, through the approve endpoint, → PROCESSING → SENT/FAILED, or →
 stays QUEUED/PROCESSING: the error workflow ends the job of a run that stopped unexpectedly
 (`INTERNAL`, or `EMAIL_UNCERTAIN` when it stopped while sending) and emails `alert_email`, and the
 sweeper (every minute) marks anything not finished `stuck_job_minutes` (10) after it started (an
-approved draft: after it was claimed) `TIMEOUT`. The sweeper never touches DRAFTED or DISCARDED jobs. Poll every 3-5 seconds; a normal
+approved draft: after it was claimed) `TIMEOUT` (`EMAIL_UNCERTAIN` if it sat at stage `sending`). The sweeper never touches DRAFTED or DISCARDED jobs. Poll every 3-5 seconds; a normal
 job finishes in about 10-20 seconds.
 
 `stage` shows live progress:
@@ -195,7 +199,7 @@ a bad key):
 | `AI_FACT_CHECK_FAILED` | The draft quoted a figure not in the data, and the one rewrite with the checker's notes did too. Nothing was sent. | Yes |
 | `EMAIL_FAILED` | The SMTP server refused the email or could not be reached. Sending is tried once (a second try after a lost answer could email the author twice); `error` ends with the server's own message (`… smtp: connect ECONNREFUSED …`). The email is kept on the job. | Yes |
 | `TIMEOUT` | Not finished within `stuck_job_minutes` (sweeper). | Yes |
-| `EMAIL_UNCERTAIN` | The run stopped while the email was being sent (stage `sending`), so it may or may not have arrived: the SMTP server may have taken it before the stop. Set by the error workflow. | Check the inbox first |
+| `EMAIL_UNCERTAIN` | The run stopped while the email was being sent (stage `sending`), so it may or may not have arrived: the SMTP server may have taken it before the stop. Set by the error workflow, or by the sweeper when a job sat at stage `sending` for `stuck_job_minutes`. | Check the inbox first |
 | `INTERNAL` | Unexpected workflow error (the error workflow found the job by its execution id); `error` names the node and its message. `alert_email` gets an email. | Yes |
 
 ## Server settings
@@ -222,7 +226,7 @@ written with `n8n/tools/settings-sql.mjs` and never committed. Job status reads 
 | `max_sends_per_hour` | 60 | The 429 limit |
 | `duplicate_window_minutes` | 10 | The duplicate window (sliding) |
 | `draft_ttl_hours` | 24 | `DRAFT_EXPIRED` |
-| `stuck_job_minutes` | 10 | The sweeper's `TIMEOUT` |
+| `stuck_job_minutes` | 10 | The sweeper's `TIMEOUT` (`EMAIL_UNCERTAIN` for a job stuck at stage `sending`) |
 | `alert_email` | *(per environment)* | Who the error workflow emails about an unexpected error (empty = nobody) |
 
 Retries (AI requests only: an email is sent once, never retried) and the sweeper's schedule are node

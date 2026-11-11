@@ -80,6 +80,21 @@ describe('built workflows', () => {
     expect(built.sweeper.settings).toMatchObject({ saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all' });
     expect(built['royalty-summary'].settings.saveDataSuccessExecution).toBe('all');
   });
+  it('job-status (polled every few seconds) saves only failed runs, so its successful polls and their headers are not kept', () => {
+    expect(built['job-status'].settings).toMatchObject({ saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all' });
+  });
+  it('job-status is Parse Query → Query Valid? (IF 2.2) → Select Jobs → Shape Jobs → Respond Jobs, or Respond Rejected', () => {
+    const wf = built['job-status'];
+    const next = (from, i = 0) => (wf.connections[from]?.main[i] ?? []).map((c) => c.node);
+    expect(nodeOf('job-status', 'Query Valid?')).toMatchObject({ type: 'n8n-nodes-base.if', typeVersion: 2.2 });
+    expect([next('Parse Query'), next('Query Valid?', 0), next('Query Valid?', 1), next('Select Jobs'), next('Shape Jobs')])
+      .toEqual([['Query Valid?'], ['Select Jobs'], ['Respond Rejected'], ['Shape Jobs'], ['Respond Jobs']]);
+  });
+  it('no Switch picks its output by a computed number: every Switch is in Rules mode with named outputs', () => {
+    const switches = WORKFLOW_SOURCES.flatMap((wf) => ofType(wf, 'switch'));
+    expect(switches.length).toBeGreaterThan(0);
+    for (const n of switches) expect(n.parameters.mode, n.name).toBe('rules');
+  });
   it('royalty-summary and approve-draft name the error workflow', () => {
     expect(built['royalty-summary'].settings.errorWorkflow).toBe('__WORKFLOW_BookLeaf - Error Handler__');
     expect(built['approve-draft'].settings.errorWorkflow).toBe('__WORKFLOW_BookLeaf - Error Handler__');
@@ -126,8 +141,8 @@ describe('bundled Code nodes run standalone', () => {
   });
   it('Parse Query validates the job ids', () => {
     const run = (query) => runCode(nodeOf('job-status', 'Parse Query'), { $json: { query } })[0].json;
-    expect(run({ ids: 'nope' })).toMatchObject({ route: 0, http_status: 400 });
-    expect(run({ ids: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', include: 'html' })).toMatchObject({ route: 1, include_html: true });
+    expect(run({ ids: 'nope' })).toMatchObject({ ok: false, http_status: 400 });
+    expect(run({ ids: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', include: 'html' })).toMatchObject({ ok: true, include_html: true });
   });
   it('Parse Request (approve) validates the settings and the body', () => {
     const node = nodeOf('approve-draft', 'Parse Request');

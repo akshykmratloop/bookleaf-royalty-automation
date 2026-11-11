@@ -28,7 +28,7 @@
       "typeVersion": 2.6,
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH s AS (SELECT bookleaf_setting('stuck_job_minutes')::int AS minutes)\nUPDATE royalty_jobs\nSET status = 'FAILED', stage = 'failed', stage_at = now(), error_code = 'TIMEOUT',\n    error = format('The job did not finish within %s minutes, so it was stopped. Send it again if needed.', s.minutes),\n    completed_at = now(), updated_at = now()\nFROM s\nWHERE status IN ('QUEUED', 'PROCESSING')\n  AND (CASE WHEN drafted_at IS NULL THEN created_at ELSE stage_at END) < now() - make_interval(mins => s.minutes)\nRETURNING job_id::text AS job_id, log_id, author_id",
+        "query": "WITH s AS (SELECT bookleaf_setting('stuck_job_minutes')::int AS minutes)\nUPDATE royalty_jobs AS j\nSET status = 'FAILED', stage = 'failed', stage_at = now(),\n    error_code = CASE WHEN j.stage = 'sending' THEN 'EMAIL_UNCERTAIN' ELSE 'TIMEOUT' END,\n    error = CASE WHEN j.stage = 'sending'\n      THEN 'The workflow stopped while the email was being sent, so it may or may not have arrived. Check the inbox before sending it again.' || format(' It was still sending %s minutes after it started, so it was stopped.', s.minutes)\n      ELSE format('The job did not finish within %s minutes, so it was stopped. Send it again if needed.', s.minutes) END,\n    completed_at = now(), updated_at = now()\nFROM s\nWHERE status IN ('QUEUED', 'PROCESSING')\n  AND (CASE WHEN j.drafted_at IS NULL THEN j.created_at ELSE j.stage_at END) < now() - make_interval(mins => s.minutes)\nRETURNING j.job_id::text AS job_id, j.log_id, j.author_id, j.error_code",
         "options": {}
       },
       "credentials": {

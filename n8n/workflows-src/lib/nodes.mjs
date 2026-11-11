@@ -26,10 +26,6 @@ export const withNote = (n, text) => ({ ...n, notes: text, notesInFlow: true });
 /** @param {string} name @param {string} entry export of workflows-src/code/entries.js @param {string} body JS run in the node */
 export const code = (name, entry, body) => node(name, 'code', 2, { mode: 'runOnceForAllItems', language: 'javaScript' }, { entry, body });
 
-/** Switch in expression mode: `output` evaluates to the output index. */
-export const route = (name, outputs, expression) =>
-  node(name, 'switch', 3.2, { mode: 'expression', numberOutputs: outputs, output: `={{ ${expression} }}` });
-
 /** Filter options as the n8n 2.45 editor writes them for IF 2.2; without `version`, n8n would run the filter as version 1. */
 const FILTER_OPTIONS = Object.freeze({ caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 });
 /** True only for the boolean true. */

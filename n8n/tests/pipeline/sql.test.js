@@ -3,23 +3,12 @@ import { ERROR_CODES, MAX_ERROR_LENGTH } from '../../src/pipeline/errors.js';
 import { MAX_SUMMARY_LENGTH } from '../../src/pipeline/node-errors.js';
 import { CLAIM_DRAFT, DISCARD_DRAFT, SELECT_DRAFT } from '../../src/pipeline/sql-approve.js';
 import {
-  ENQUEUE_JOB, LOAD_SETTINGS, MARK_EMAIL_FAILED, MARK_PROCESSING, MARK_SENT, SELECT_JOBS, SET_STAGE, SWEEP_STUCK, UPDATE_JOB,
+  ENQUEUE_JOB, LOAD_SETTINGS, MARK_EMAIL_FAILED, MARK_PROCESSING, MARK_SENT, SELECT_JOBS, SET_STAGE, UPDATE_JOB,
 } from '../../src/pipeline/sql.js';
 import { shapeJobs } from '../../src/pipeline/status.js';
 
 /** The SQL is exercised live by the contract suite; these pin the guards that keep it safe. */
 describe('job ledger SQL guards', () => {
-  it('the sweeper only fails QUEUED/PROCESSING jobs, never drafts', () => {
-    expect(SWEEP_STUCK).toMatch(/WHERE status IN \('QUEUED', 'PROCESSING'\)/);
-    expect(SWEEP_STUCK).not.toMatch(/DRAFTED|DISCARDED/);
-    expect(SWEEP_STUCK).toMatch(/stage = 'failed'/);
-  });
-  it('the sweeper waits stuck_job_minutes and says so in the error', () => {
-    expect(SWEEP_STUCK).toContain("bookleaf_setting('stuck_job_minutes')::int");
-    expect(SWEEP_STUCK).toContain('< now() - make_interval(mins => s.minutes)');
-    expect(SWEEP_STUCK).toContain("format('The job did not finish within %s minutes");
-    expect(SWEEP_STUCK).not.toMatch(/interval '\d+ minutes'/);
-  });
   it('Load Settings reads every setting as one JSON object', () => {
     expect(LOAD_SETTINGS).toBe('SELECT jsonb_object_agg(key, value) AS settings FROM bookleaf_settings');
   });

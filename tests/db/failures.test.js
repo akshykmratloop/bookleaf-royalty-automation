@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ERROR_CODES } from '../../n8n/src/pipeline/errors.js';
-import { FAIL_JOB } from '../../n8n/src/pipeline/sql-failures.js';
+import { FAIL_JOB, SWEEP_STUCK } from '../../n8n/src/pipeline/sql-failures.js';
 import { seedSql } from '../../n8n/tools/settings-seed.mjs';
 import { dropDatabase, psql, scratchDatabase } from './psql.js';
 
 /**
- * The error handler's Fail Job against real Postgres. FAIL_JOB starts with a data-modifying WITH, which
+ * The error handler's Fail Job and the sweeper against real Postgres. FAIL_JOB starts with a data-modifying WITH, which
  * Postgres allows only at the top level, so it runs as it is and its one row is read column by column.
  */
 const JOB = '00000000-0000-4000-8000-000000000001';
@@ -64,5 +64,31 @@ describe('Fail Job', () => {
     expect(failJob({ execution_id: '231', node: '', message: 'x'.repeat(2000) })[0].alert_to).toBeNull();
     expect(job().error).toMatch(/Node "unknown node": x+$/);
     expect(job().error).toHaveLength(1000);
+  });
+});
+
+describe('Sweep Stuck Jobs', () => {
+  /** @returns {string[]} "job_id|error_code" per swept job */
+  const sweep = () => psql(db, SWEEP_STUCK).split('\n').filter(Boolean).map((l) => l.split('|').filter((_, i) => i === 0 || i === 3).join('|'));
+  it('fails a job not finished stuck_job_minutes (10) after it started as TIMEOUT', () => {
+    set("created_at = now() - interval '11 minutes'");
+    expect(sweep()).toEqual([`${JOB}|TIMEOUT`]);
+    expect(job()).toMatchObject({ status: 'FAILED', stage: 'failed', error_code: 'TIMEOUT', completed: true });
+    expect(job().error).toBe('The job did not finish within 10 minutes, so it was stopped. Send it again if needed.');
+  });
+  it('a job stuck at stage sending is EMAIL_UNCERTAIN: the email may have gone out', () => {
+    set("created_at = now() - interval '11 minutes', stage = 'sending'");
+    expect(sweep()).toEqual([`${JOB}|EMAIL_UNCERTAIN`]);
+    expect(job().error).toBe(`${ERROR_CODES.EMAIL_UNCERTAIN.message} It was still sending 10 minutes after it started, so it was stopped.`);
+  });
+  it('leaves a younger job, an ended job and a draft alone; an approved draft counts from its claim', () => {
+    set("created_at = now() - interval '9 minutes'");
+    expect(sweep()).toEqual([]);
+    set("created_at = now() - interval '2 days', status = 'DRAFTED', stage = 'drafted', drafted_at = now() - interval '2 days'");
+    expect(sweep()).toEqual([]);
+    set("status = 'PROCESSING', stage = 'sending', stage_at = now() - interval '1 minute'");
+    expect(sweep()).toEqual([]);
+    set("stage_at = now() - interval '11 minutes'");
+    expect(sweep()).toEqual([`${JOB}|EMAIL_UNCERTAIN`]);
   });
 });
