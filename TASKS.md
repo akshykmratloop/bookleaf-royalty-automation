@@ -36,7 +36,7 @@ Legend: ⬜ TODO · 🔄 In progress · ✅ Done (commit SHA) · ⛔ Blocked
 - ✅ Book titles with "&" no longer double-escaped in the email table (953cdf4)
 - ✅ Drafts no longer count as "in progress" (Review draft button); unanswered request fails after 12 min (f57df75)
 
-## Step 5 — Phase 3: clean n8n + book UI + Fable inspection (plan approved 11 Nov)
+## Step 5 — Phase 3: clean n8n + Fable inspection (plan approved 11 Nov)
 - 🔄 n8n clean-up on branch `refactor/n8n-clean`:
   - settings table, Header Auth, Deliver Email sub-workflow;
   - named branches, push path dropped;
@@ -44,11 +44,7 @@ Legend: ⬜ TODO · 🔄 In progress · ✅ Done (commit SHA) · ⛔ Blocked
   - import-ready export;
   - Fable inspection rounds.
 - ⬜ Production release of the n8n clean-up: backup → migration 03 → deploy → `$env` blocked → contract tests → live smoke.
-- ⬜ Book-themed UI:
-  - login is an open book, sign-in turns the page;
-  - author portal in chapters;
-  - admin as a two-page spread;
-  - page-turn transitions; e2e updated.
+- ❌ Book-themed UI: dropped on 11 Nov at the user's request; the current UI stays (nothing was written to Bubble; 330d43a reverts the only commit).
 - ⬜ Final Fable inspection of the whole build (repo + n8n canvas + UI screenshots)
 
 ## Step 6 — Delivery (at the end, per the user)
