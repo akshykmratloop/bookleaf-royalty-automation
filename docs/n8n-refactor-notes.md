@@ -868,7 +868,7 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   environment silently break the contract. The colours are the email's design, changed with the template and its
   tests, not per environment.
 
-## Summary of inspection 2 (271f145 … this commit)
+## Summary of inspection 2 (commits c321bf6 to 25e56e1)
 
 - **HIGH (Code-node size):** fixes 1, 7a, 7b, 7c. The id and fingerprint moved into Postgres; Prepare Job, After AI and
   Decide were split; the settings descriptions and unread constants left the bundles; Shape Jobs became SQL. Code:
