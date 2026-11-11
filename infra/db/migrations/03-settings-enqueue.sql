@@ -4,7 +4,7 @@
 -- infra/db/init/01-bookleaf.sql; checked by n8n/tests/ledger-schema.test.js and npm run test:db.
 --   local:      docker exec -i bookleaf-n8n-local-postgres-1 psql -U n8n -d bookleaf -v ON_ERROR_STOP=1 < infra/db/migrations/03-settings-enqueue.sql
 --   production: scripts/ops/migrate-prod.sh infra/db/migrations/03-settings-enqueue.sql (backs the database up first)
--- The per-environment settings (email_from, default_demo_inbox, allow_drills, alert_email) are seeded
+-- The per-environment settings (email_from, default_demo_inbox, allowed_demo_inboxes, allow_drills, alert_email) are seeded
 -- empty or off here; each environment writes its own values afterwards.
 -- Undo, only while no workflow reads them: drop the functions enqueue_royalty_job(jsonb) and
 -- bookleaf_setting(text), then the table bookleaf_settings. Keep the two new columns: they hold data.
@@ -25,6 +25,7 @@ INSERT INTO bookleaf_settings (key, value, description) VALUES
   ('email_from', '""', 'Sender address. Required: set it for each environment to an address the SMTP account may send from.'),
   ('support_email', '""', 'Support address printed in the email footer; empty leaves the line out.'),
   ('default_demo_inbox', '""', 'Inbox for requests that name no demo_inbox; empty makes such requests fail with NO_RECIPIENT. Never an author address.'),
+  ('allowed_demo_inboxes', '[]', 'Other inboxes a request may name as demo_inbox (a list of up to 20 addresses). Any address that is neither this list nor default_demo_inbox is refused with RECIPIENT_NOT_ALLOWED.'),
   ('allow_drills', 'false', 'true lets a request force failure drills (ai_down, email_down, data_down, primary_down, crash); keep false where real authors are emailed.'),
   ('reference_date_default', '"2025-12-31"', 'Date the royalty status is worked out against when a request gives none: YYYY-MM-DD, or "today" (IST).'),
   ('ai_primary', '{"model":"claude-sonnet-5-5","effort":"medium","max_tokens":8000}', 'Primary AI writer (Anthropic Messages API): model, effort (low, medium or high) and output token limit.'),

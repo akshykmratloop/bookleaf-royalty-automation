@@ -19,6 +19,11 @@ const displayName = (max) => (v) => text(max)(v)
   ?? unless(!/["\\,;:<>@\u0000-\u001f\u007f]/.test(v), 'must not contain quotes, commas, semicolons, colons, angle brackets, @, backslashes or line breaks');
 const email = (v) => unless(isEmail(v), 'must be an email address');
 const emailOrEmpty = (v) => unless(v === '' || isEmail(v), 'must be an email address, or empty');
+const MAX_ALLOWED_INBOXES = 20;
+const emailList = (v) => {
+  if (!Array.isArray(v) || !v.every((e) => isEmail(typeof e === 'string' ? e.trim() : e))) return 'must be a list of email addresses';
+  return unless(v.length <= MAX_ALLOWED_INBOXES, `must be a list of at most ${MAX_ALLOWED_INBOXES} email addresses`);
+};
 const flag = (v) => unless(typeof v === 'boolean', 'must be true or false');
 const whole = (min, max) => (v) => unless(Number.isInteger(v) && v >= min && v <= max, `must be a whole number from ${min} to ${max}`);
 const oneOf = (...allowed) => (v) => unless(allowed.includes(v), `must be one of ${allowed.join(', ')}`);
@@ -56,6 +61,7 @@ export const SETTING_CHECKS = Object.freeze({
   email_from: email,
   support_email: emailOrEmpty,
   default_demo_inbox: emailOrEmpty,
+  allowed_demo_inboxes: emailList,
   allow_drills: flag,
   reference_date_default: dateOrToday,
   ai_primary: fields({ model: text(100), effort: oneOf('low', 'medium', 'high'), max_tokens: whole(256, 64000) }),

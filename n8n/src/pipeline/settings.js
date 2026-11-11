@@ -37,6 +37,10 @@ export const SETTINGS_SCHEMA = deepFreeze({
     default: '', check: SETTING_CHECKS.default_demo_inbox, perEnvironment: true,
     description: 'Inbox for requests that name no demo_inbox; empty makes such requests fail with NO_RECIPIENT. Never an author address.',
   },
+  allowed_demo_inboxes: {
+    default: [], check: SETTING_CHECKS.allowed_demo_inboxes, perEnvironment: true,
+    description: 'Other inboxes a request may name as demo_inbox (a list of up to 20 addresses). Any address that is neither this list nor default_demo_inbox is refused with RECIPIENT_NOT_ALLOWED.',
+  },
   allow_drills: {
     default: false, check: SETTING_CHECKS.allow_drills, perEnvironment: true,
     description: 'true lets a request force failure drills (ai_down, email_down, data_down, primary_down, crash); keep false where real authors are emailed.',
@@ -93,7 +97,8 @@ export const SETTINGS_SCHEMA = deepFreeze({
  * The validated settings a workflow run uses, keyed as stored.
  * @typedef {Object} Settings
  * @property {string} brand_name @property {string} sender_name @property {string} email_from @property {string} support_email
- * @property {string} default_demo_inbox @property {boolean} allow_drills @property {string} reference_date_default
+ * @property {string} default_demo_inbox @property {string[]} allowed_demo_inboxes @property {boolean} allow_drills
+ * @property {string} reference_date_default
  * @property {{model:string, effort:'low'|'medium'|'high', max_tokens:number}} ai_primary
  * @property {{model:string, max_tokens:number}} ai_fallback @property {number} ai_timeout_ms
  * @property {Record<string, import('../providers/cost.js').Price>} model_prices @property {number} max_sends_per_hour

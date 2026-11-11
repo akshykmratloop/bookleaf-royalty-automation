@@ -15,6 +15,7 @@ listed in [`n8n/PAYLOAD.md`](../n8n/PAYLOAD.md#error-codes-error_code).
 | Missing or wrong key | n8n Header Auth on the webhook | 403 `Authorization data is wrong!` (plain text); no execution, no job |
 | Invalid payload (bad id, bad date, too long) | Field-by-field validation in Validate Body | 400 `VALIDATION` with the list of fields; no job |
 | No safe recipient | Neither `demo_inbox` nor the `default_demo_inbox` setting | 422 `NO_RECIPIENT`; no job |
+| Recipient not allowed | `demo_inbox` is neither `default_demo_inbox` nor in `allowed_demo_inboxes` (Validate Body) | 422 `RECIPIENT_NOT_ALLOWED`, naming the settings, never an address; no job, no AI call, no email. Never redirected to the default inbox. |
 | Missing or invalid server setting | Check Settings, against the settings schema, before the body is read | 500 `INTERNAL` naming the setting (never its value); no job |
 | Database down before the webhook answered (settings, enqueue, job status, a draft's load, claim or discard) | The Postgres node's error output | 503 `DB_UNAVAILABLE` (`retryable: true`), the standard error body; nothing changed. The run itself succeeds, so no alert: the sweeper's failing runs alert while the database stays down. |
 | Duplicate request | `enqueue_royalty_job` (one advisory lock; same author + fingerprint within `duplicate_window_minutes`) | 200 with the first job's id and `duplicate: true` |

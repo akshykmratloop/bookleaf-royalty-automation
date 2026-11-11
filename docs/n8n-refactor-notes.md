@@ -891,3 +891,47 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
 - **Release engineer:** migration 03 (edited in place; not yet in production) and the workflows go out together.
   After the first Error Handler run on an instance the alert address is remembered for database outages. The local
   `max_sends_per_hour` is 300 (local database only).
+
+---
+
+# Security review fixes — one entry per commit
+
+## Security fix 1 — emails go only to a configured demo inbox (HIGH: the caller chose the recipient)
+
+- **Changed:** new per-environment setting `allowed_demo_inboxes` (a list of up to 20 email addresses, default `[]`,
+  checked like the other settings). `recipientFor` (`n8n/src/pipeline/recipient.js`) now uses the request's
+  `demo_inbox` only when it equals, ignoring case and spaces, `default_demo_inbox` or an entry of
+  `allowed_demo_inboxes`, and then sends to the configured spelling. Any other address is refused with the new
+  error code `RECIPIENT_NOT_ALLOWED` (422, `retryable: false`); the message names the two settings and no address.
+  It is never redirected to the default inbox. No `demo_inbox` → `default_demo_inbox`; none at all → `NO_RECIPIENT`
+  as before. The author-address guard still runs after the allow check, so an author address is refused even if it
+  is configured. Approve keeps using the recipient stored on the job.
+- **Settings tool:** `n8n/tools/settings-sql.mjs` accepts `ALLOWED_DEMO_INBOXES` as a comma-separated list (entries
+  trimmed, empty entries dropped, an empty value = no entries); a bad entry names the variable, never the value.
+  Seed regenerated into 03 and 01 by `settings-seed.mjs`; the 03 header lists the new per-environment key.
+- **Docs:** `n8n/PAYLOAD.md` (the `demo_inbox` rule, the 422 answer, the error code, the settings table),
+  `docs/integration.md` (contract summary), `docs/error-handling.md` (failure table).
+- **Tests (written first, RED for the expected reasons):** recipient rules (allowed default and list, case and
+  spaces, refusal for three setting shapes with no address in the message, `NO_RECIPIENT`, the author guard on an
+  allowed address), `prepareJob` refuses with no job, the schema and check (`must be a list of email addresses`,
+  at most 20), `settings-sql` list parsing and refusal; real Postgres: the list written by the tool is a JSON array
+  that `bookleaf_setting()` reads, and a fresh install seeds `[]`. New contract `tests/contract/09-recipient.test.js`:
+  an outside `demo_inbox` → 422 `RECIPIENT_NOT_ALLOWED` without the address in the message, and (local stack) no
+  job row with the request's log id. It was not run against the old deploy on purpose: the old workflow would have
+  emailed the outside address.
+- **Local:** backup (`pg_dump` to the scratchpad), then 03 re-applied to the local `bookleaf` database: the seed added
+  `allowed_demo_inboxes = []` and changed no other row. The contract suite sends to the local `default_demo_inbox`, so
+  no allowed list is needed locally. Deployed with `node n8n/deploy.mjs --env .secrets/n8n-local.env`, exported with
+  `node n8n/tools/export.mjs --env .secrets/n8n-local.env`.
+- **Gates:** npm test 585/585, build --check clean, test:db 50/50, contracts 43/43.
+- **Sizes:** working nodes unchanged (80). Code 13 nodes, 162.7 → **165.1 KB**: the new error code is in the shared
+  error catalog that most Code nodes carry, and Check Settings carries the list check (9.0 → 9.5 KB ×2). Total budget
+  raised 163 → **166 KB** (+3 KB); per node unchanged (29 KB).
+- **Release engineer:** `readSettings` needs every key, so 03 (which seeds `allowed_demo_inboxes = []`) must be applied
+  before these workflows, as already planned. Write `DEFAULT_DEMO_INBOX` with the address Bubble's Settings
+  "Demo inbox" holds in production. If Bubble may send any other inbox, list it in `ALLOWED_DEMO_INBOXES`
+  (comma-separated) in the same env file for `settings-sql.mjs`; otherwise leave it out (empty list). A Bubble send to
+  an inbox on neither gets 422 `RECIPIENT_NOT_ALLOWED`.
+- **Deviation:** the refusal is synchronous (422, no job), the same path as `NO_RECIPIENT`, not a job that ends FAILED:
+  the recipient is decided in Validate Body before a job exists, so refusing there means no job row, no AI call and no
+  email at all.

@@ -3,7 +3,8 @@
  * Writes an environment's own settings (the `perEnvironment` keys of n8n/src/pipeline/settings.js)
  * into bookleaf_settings: prints idempotent SQL on stdout, to be piped straight into psql.
  *   node n8n/tools/settings-sql.mjs --env <file> [--env <file> ...] | <psql on the bookleaf database>
- * Each env file may set EMAIL_FROM, DEFAULT_DEMO_INBOX, ALLOW_DRILLS (true|false) and ALERT_EMAIL;
+ * Each env file may set EMAIL_FROM, DEFAULT_DEMO_INBOX, ALLOWED_DEMO_INBOXES (comma-separated addresses,
+ * empty = none), ALLOW_DRILLS (true|false) and ALERT_EMAIL;
  * `--env -` reads stdin, and a later file wins. EMAIL_FROM falls back to SMTP_USER_EMAIL, the SMTP
  * account the deploy used as the sender before settings existed. A setting the input does not name
  * keeps its stored value. Values are checked against the schema; an error names the variable, never
@@ -21,10 +22,20 @@ const PER_ENVIRONMENT = Object.keys(SETTINGS_SCHEMA).filter((k) => SETTINGS_SCHE
 export const ENV_NAMES = Object.freeze(Object.fromEntries(PER_ENVIRONMENT.map((k) => [k.toUpperCase(), k])));
 const FLAGS = Object.freeze({ true: true, false: false });
 
+/** A comma-separated env value as a list: entries trimmed, empty entries dropped ('' = no entries). */
+const list = (raw) => raw.split(',').map((s) => s.trim()).filter(Boolean);
+
+/** @returns {unknown} the env text typed like the setting's default (boolean, list or text); undefined = not a flag */
+function typed(key, raw) {
+  const sample = SETTINGS_SCHEMA[key].default;
+  if (typeof sample === 'boolean') return FLAGS[raw];
+  return Array.isArray(sample) ? list(raw) : raw;
+}
+
 /** @returns {{value?:unknown, problem?:string}} the typed value of one variable, or what is wrong with it */
 function parseOne(name, raw) {
   const key = ENV_NAMES[name];
-  const value = typeof SETTINGS_SCHEMA[key].default === 'boolean' ? FLAGS[raw] : raw;
+  const value = typed(key, raw);
   if (value === undefined) return { problem: `${name}: must be true or false` };
   const problem = settingProblem(key, value);
   return problem ? { problem: `${name}: ${problem}` } : { value };

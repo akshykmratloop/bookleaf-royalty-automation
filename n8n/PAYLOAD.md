@@ -67,7 +67,7 @@ Bubble date (ISO instant, read in India time), or empty.
 | `requested_by` | Required. Admin email or name, 1-254 chars. |
 | `mode` | Required. `single` or `bulk`. |
 | `reference_date` | Optional. "Figures as of" date. Empty = the `reference_date_default` setting (2025-12-31, or `today`). |
-| `demo_inbox` | Optional email. **Emails never go to `author.email`.** Empty = the `default_demo_inbox` setting; neither set = job refused with `NO_RECIPIENT` (422). |
+| `demo_inbox` | Optional email. **Emails go only to a configured demo inbox, never to `author.email`.** It must equal (ignoring case and spaces) the `default_demo_inbox` setting or one of the `allowed_demo_inboxes` setting; any other address is refused with `RECIPIENT_NOT_ALLOWED` (422, no job, nothing written or sent), never redirected. Empty = the `default_demo_inbox` setting; neither set = refused with `NO_RECIPIENT` (422). |
 | `attempt` | Optional, 1-20, default 1. Bump it for a deliberate "send again" within the duplicate window (see idempotency). |
 | `drills` | Optional. Failure drills, honoured only when the `allow_drills` setting is true (otherwise **400**, never silently ignored). `ai_down` fails both AI providers; `primary_down` fails only Anthropic, so the OpenAI fallback writes the email (the job's `provider`/`model` show OpenAI); `email_down` points SMTP at an unreachable server; `data_down` fails the data step; `crash` makes the workflow throw after the 202 (like a bug), so the error workflow ends the job `INTERNAL` and sends the alert. Bubble maps its flat `ai_down`/`email_down`/`data_down`/`primary_down` parameters into this object. |
 | `delivery` | Optional. `send` (default): write, check and send. `draft`: write, check and render, then stop as `DRAFTED` for an admin to approve (see the approve endpoint). |
@@ -86,7 +86,7 @@ Bubble date (ISO instant, read in India time), or empty.
 | 200 | Same request within `duplicate_window_minutes` (double click) | `{ "job_id": "<the existing job>", "status": "<its current status>", "duplicate": true }` |
 | 400 | Validation | `{ "error": { "code": "VALIDATION", "message": "…", "retryable": false, "fields": [{ "path": "books[0].copies_sold", "code": "TYPE", "message": "must be an integer" }] } }` |
 | 403 | Missing / wrong `X-BookLeaf-Key` (n8n answers; the workflow never starts) | plain text `Authorization data is wrong!` |
-| 422 | `NO_RECIPIENT` | error object as above |
+| 422 | `NO_RECIPIENT`, or `RECIPIENT_NOT_ALLOWED` (a `demo_inbox` that is not a configured inbox) | error object as above |
 | 429 | `max_sends_per_hour` jobs in the last hour (discarded ones, and failed ones that got no AI answer, not counted) | `{ "error": { "code": "RATE_LIMITED", … } }` |
 | 500 | The server settings are missing or invalid (each one named, no value shown) | `{ "error": { "code": "INTERNAL", "message": "… Server settings are invalid: email_from must be an email address." } }` |
 | 500 | n8n itself failed before answering | `{ "message": "Error in workflow" }` |
@@ -192,6 +192,7 @@ a bad key):
 |---|---|---|
 | `VALIDATION` | Bad request fields (answered synchronously). | No |
 | `NO_RECIPIENT` | No safe demo inbox (synchronous). | No |
+| `RECIPIENT_NOT_ALLOWED` | The request's `demo_inbox` is neither `default_demo_inbox` nor in `allowed_demo_inboxes` (synchronous; no job). The message names the settings, never an address. | No, fix the inbox or the setting |
 | `RATE_LIMITED` | Hourly limit reached (synchronous). | Later |
 | `INTEGRITY` | Figures do not add up (earned ≠ copies × royalty, paid + pending ≠ earned, payout in the future). No email is written. | No, fix the data |
 | `DATA_UNAVAILABLE` | The author data was withheld (the `data_down` drill). | Yes |
@@ -217,7 +218,8 @@ written with `n8n/tools/settings-sql.mjs` and never committed. Job status reads 
 | `sender_name` | BookLeaf Author Relations | From line and the default signature (no `" , ; : < > @ \`) |
 | `email_from` | *(per environment, required)* | From address |
 | `support_email` | empty | Footer line (left out when empty) |
-| `default_demo_inbox` | *(per environment)* | Recipient when the request names no `demo_inbox` |
+| `default_demo_inbox` | *(per environment)* | Recipient when the request names no `demo_inbox`; also an allowed `demo_inbox` |
+| `allowed_demo_inboxes` | empty list *(per environment)* | Other inboxes a request may name as `demo_inbox` (up to 20; `ALLOWED_DEMO_INBOXES` in settings-sql.mjs, comma-separated) |
 | `allow_drills` | false *(per environment)* | Whether `drills` are accepted |
 | `reference_date_default` | 2025-12-31 | "Figures as of" when the request gives none (`today` = India date) |
 | `ai_primary` | claude-sonnet-5-5, effort medium, 8000 tokens | Anthropic request |

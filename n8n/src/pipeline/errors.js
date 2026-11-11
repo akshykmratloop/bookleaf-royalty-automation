@@ -6,6 +6,7 @@ export const ERROR_CODES = Object.freeze({
   VALIDATION: { http: 400, retryable: false, message: 'The request is missing fields or has invalid values.' },
   INTEGRITY: { http: 422, retryable: false, message: 'The royalty figures do not add up, so no email was written.' },
   NO_RECIPIENT: { http: 422, retryable: false, message: 'No demo inbox is configured, so the email has nowhere safe to go.' },
+  RECIPIENT_NOT_ALLOWED: { http: 422, retryable: false, message: 'The demo_inbox in the request is not a configured demo inbox, so nothing was written or sent.' },
   RATE_LIMITED: { http: 429, retryable: true, message: 'Too many emails were sent in the last hour.' },
   DATA_UNAVAILABLE: { http: 502, retryable: true, message: 'The author data could not be loaded.' },
   AI_UNAVAILABLE: { http: 502, retryable: true, message: 'Neither AI provider returned a usable draft.' },

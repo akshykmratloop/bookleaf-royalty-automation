@@ -92,8 +92,13 @@ describe('prepareJob', () => {
     expect(r).toMatchObject({ ok: false, code: 'NO_RECIPIENT', http_status: 422 });
     expect(r.message).toContain('default_demo_inbox');
   });
-  it('uses the request demo inbox over the server default', () => {
+  it('uses the request demo inbox over the server default when it is an allowed inbox', () => {
     expect(prep(payloadFor('AUTH001', { demo_inbox: 'qa@inbox.test' })).job.recipient).toBe('qa@inbox.test');
+  });
+  it('refuses a request demo inbox that is not allowed (422 RECIPIENT_NOT_ALLOWED, no job)', () => {
+    const r = prep(payloadFor('AUTH001', { demo_inbox: 'victim@elsewhere.test' }));
+    expect(r).toMatchObject({ ok: false, code: 'RECIPIENT_NOT_ALLOWED', http_status: 422, retryable: false });
+    expect(r.job).toBeUndefined();
   });
   it('validates attempt bounds', () => {
     expect(prep(payloadFor('AUTH001', { attempt: 0 })).fields[0].path).toBe('attempt');
@@ -125,11 +130,35 @@ describe('prepareJob', () => {
 });
 
 describe('recipientFor', () => {
-  it('never uses the author dataset address', () => {
+  it('never uses the author dataset address (here it is not an allowed inbox either)', () => {
     const r = recipientFor({ demo_inbox: 'priya.sharma@email.com' }, SETTINGS, 'Priya.Sharma@email.com');
-    expect(r).toMatchObject({ ok: false, code: 'NO_RECIPIENT' });
+    expect(r).toMatchObject({ ok: false, code: 'RECIPIENT_NOT_ALLOWED' });
   });
   it('falls back to the server inbox', () => expect(recipientFor({ demo_inbox: null }, SETTINGS, 'a@b.co').recipient).toBe('demo@inbox.test'));
+  it('accepts the default inbox or an allowed one, ignoring case and spaces, and sends to the configured address', () => {
+    const settings = { ...SETTINGS, default_demo_inbox: 'Demo@Inbox.test', allowed_demo_inboxes: [' QA@inbox.test ', 'ops2@inbox.test'] };
+    expect(recipientFor({ demo_inbox: 'demo@INBOX.test' }, settings, null)).toEqual({ ok: true, recipient: 'Demo@Inbox.test' });
+    expect(recipientFor({ demo_inbox: ' qa@inbox.TEST' }, settings, null)).toEqual({ ok: true, recipient: 'QA@inbox.test' });
+    expect(recipientFor({ demo_inbox: 'ops2@inbox.test' }, settings, null)).toEqual({ ok: true, recipient: 'ops2@inbox.test' });
+  });
+  it('refuses any other address instead of redirecting it, naming the settings but no address', () => {
+    for (const settings of [SETTINGS, { ...SETTINGS, allowed_demo_inboxes: [] }, { ...SETTINGS, default_demo_inbox: '' }]) {
+      const r = recipientFor({ demo_inbox: 'victim@elsewhere.test' }, settings, null);
+      expect(r).toMatchObject({ ok: false, code: 'RECIPIENT_NOT_ALLOWED', http_status: 422, retryable: false });
+      expect(r.message).toContain('allowed_demo_inboxes');
+      expect(r.message).toContain('default_demo_inbox');
+      for (const address of ['victim@elsewhere.test', 'demo@inbox.test', 'qa@inbox.test']) expect(r.message).not.toContain(address);
+    }
+  });
+  it('no inbox anywhere is still NO_RECIPIENT', () => {
+    const r = recipientFor({ demo_inbox: null }, { ...SETTINGS, default_demo_inbox: '', allowed_demo_inboxes: ['qa@inbox.test'] }, null);
+    expect(r).toMatchObject({ ok: false, code: 'NO_RECIPIENT' });
+  });
+  it('the author address guard applies even when that address is allowed', () => {
+    const settings = { ...SETTINGS, default_demo_inbox: 'priya.sharma@email.com', allowed_demo_inboxes: ['priya.sharma@email.com'] };
+    expect(recipientFor({ demo_inbox: 'priya.sharma@email.com' }, settings, 'Priya.Sharma@email.com')).toMatchObject({ ok: false, code: 'NO_RECIPIENT' });
+    expect(recipientFor({ demo_inbox: null }, settings, 'Priya.Sharma@email.com')).toMatchObject({ ok: false, code: 'NO_RECIPIENT' });
+  });
 });
 
 describe('resolveReferenceDate', () => {

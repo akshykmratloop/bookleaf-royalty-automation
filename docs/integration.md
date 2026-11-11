@@ -12,6 +12,9 @@ explains the flow and the reasons behind it.
   `log_id` (the NotificationLog row), `requested_by`, optional `reference_date`, `demo_inbox`,
   writing options (`delivery`, `tone`, `length`, `note`, `sign_off`) and `drills`, plus the author's
   data (`author`, `books`): n8n never reads Bubble's database.
+- Emails go only to a configured demo inbox: `demo_inbox` must be the `default_demo_inbox` setting or
+  one of `allowed_demo_inboxes`. Any other address gets **422** `RECIPIENT_NOT_ALLOWED` and no job, so
+  the webhook key alone cannot make n8n email an outside address.
 - Every field is checked for type, length and format. Bad input gets **400** with a list of
   errors. A missing or wrong `X-BookLeaf-Key` gets **403** from n8n before any workflow runs.
 - Success is **202 Accepted** with `{job_id, status, duplicate: false}`. The email is not sent yet:

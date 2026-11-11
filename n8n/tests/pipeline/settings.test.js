@@ -5,11 +5,11 @@ import { SETTINGS } from './settings-fixture.js';
 import { DRILLS } from '../../src/pipeline/request.js';
 
 const KEYS = [
-  'brand_name', 'sender_name', 'email_from', 'support_email', 'default_demo_inbox', 'allow_drills', 'reference_date_default',
+  'brand_name', 'sender_name', 'email_from', 'support_email', 'default_demo_inbox', 'allowed_demo_inboxes', 'allow_drills', 'reference_date_default',
   'ai_primary', 'ai_fallback', 'ai_timeout_ms', 'model_prices', 'max_sends_per_hour', 'duplicate_window_minutes',
   'draft_ttl_hours', 'stuck_job_minutes', 'alert_email',
 ];
-const PER_ENVIRONMENT = ['email_from', 'default_demo_inbox', 'allow_drills', 'alert_email'];
+const PER_ENVIRONMENT = ['email_from', 'default_demo_inbox', 'allowed_demo_inboxes', 'allow_drills', 'alert_email'];
 const dflt = (key) => SETTINGS_SCHEMA[key].default;
 
 describe('settings schema', () => {
@@ -64,6 +64,10 @@ describe('settingProblem', () => {
     ['duplicate_window_minutes', '10', 'must be a whole number from 1 to 1440'],
     ['draft_ttl_hours', 721, 'must be a whole number from 1 to 720'],
     ['stuck_job_minutes', 4, 'must be a whole number from 5 to 240'],
+    ['allowed_demo_inboxes', 'qa@inbox.test', 'must be a list of email addresses'],
+    ['allowed_demo_inboxes', ['qa@inbox.test', 'nope'], 'must be a list of email addresses'],
+    ['allowed_demo_inboxes', [''], 'must be a list of email addresses'],
+    ['allowed_demo_inboxes', Array.from({ length: 21 }, (_, i) => `qa${i}@inbox.test`), 'must be a list of at most 20 email addresses'],
   ])('%s = %j → "%s"', (key, value, problem) => {
     expect(settingProblem(key, value)).toBe(`${key} ${problem}`);
   });
@@ -71,6 +75,8 @@ describe('settingProblem', () => {
     expect(settingProblem('reference_date_default', 'today')).toBeNull();
     expect(settingProblem('email_from', 'sender@bookleaf.test')).toBeNull();
     expect(settingProblem('alert_email', '')).toBeNull();
+    expect(settingProblem('allowed_demo_inboxes', [])).toBeNull();
+    expect(settingProblem('allowed_demo_inboxes', ['qa@inbox.test', 'QA2@Inbox.test'])).toBeNull();
     expect(settingProblem('ai_primary', { model: 'claude-x', effort: 'high', max_tokens: 64000 })).toBeNull();
   });
   it('names an unknown key', () => {
