@@ -25,6 +25,8 @@ export const TYPES = {
   RoyaltyRecord: {
     book: 'Book', author: 'Author', owner: 'User', copies_sold: 'number', earned: 'number',
     paid: 'number', pending: 'number', last_payout_date: 'date',
+    // last payout, or publication date if never paid: the date the 90-day overdue rule counts from
+    due_anchor_date: 'date',
   },
   NotificationLog: {
     author: 'Author', owner: 'User', triggered_by: 'User', mode: 'text', batch_id: 'text',
