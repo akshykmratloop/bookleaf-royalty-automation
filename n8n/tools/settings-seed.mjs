@@ -17,7 +17,7 @@ export const SEED_BEGIN = '-- BEGIN settings seed: generated from n8n/src/pipeli
 export const SEED_END = '-- END settings seed';
 
 /** @param {unknown} s @returns {string} a standard SQL string literal */
-const literal = (s) => `'${String(s).replaceAll("'", "''")}'`;
+export const literal = (s) => `'${String(s).replaceAll("'", "''")}'`;
 
 /**
  * @param {Record<string, {default:unknown, description:string}>} [schema]

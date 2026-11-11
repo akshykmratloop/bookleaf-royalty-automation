@@ -95,3 +95,33 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   deployed; delete it on each instance after the rollout (it is still on the local one). The narrative
   docs (`README.md` diagram, `docs/integration.md`, `docs/error-handling.md`, `docs/decisions.md`,
   `docs/learning-log.md`) still describe push mode: step 10.
+
+## Step 3b — per-environment settings tool
+
+- **Changed:** `n8n/tools/settings-sql.mjs` prints idempotent SQL that writes an environment's own
+  settings (the schema's `perEnvironment` keys) for piping straight into psql:
+  `node n8n/tools/settings-sql.mjs --env <file> [--env <file> ...] | <psql -d bookleaf>`. Env names
+  are the keys upper-cased: `EMAIL_FROM` (falls back to `SMTP_USER_EMAIL`, the address deploy used
+  to fill in), `DEFAULT_DEMO_INBOX`, `ALLOW_DRILLS` (`true`/`false`), `ALERT_EMAIL`; `--env -` reads
+  stdin; a later file wins; unnamed settings keep their stored value; a value is checked by the
+  schema and an error names the variable, never the value. Each upsert changes a row (and its
+  `updated_at`) only when the value differs. `docker/bootstrap.mjs` now writes the local values after
+  the stack is up (SMTP account sends, demo inbox receives and gets the alerts, drills on).
+  `env-file.mjs` gained `parseEnvText` (stdin input).
+- **Tests:** `n8n/tests/settings-sql.test.js` (10), `tests/db/settings-sql.test.js` (3: typed values
+  readable by `bookleaf_setting()`, a re-run changes nothing, only named settings change).
+- **Applied locally** (values never printed): `{ echo ALLOW_DRILLS=true; sed -n
+  's/^DEFAULT_DEMO_INBOX=/ALERT_EMAIL=/p' .secrets/n8n-local.compose.env; } | node
+  n8n/tools/settings-sql.mjs --env .env --env .secrets/n8n-local.compose.env --env - | docker exec -i
+  bookleaf-n8n-local-postgres-1 psql -X -q -U n8n -d bookleaf -v ON_ERROR_STOP=1`. All four set;
+  `alert_email` = `default_demo_inbox`; the sender equals the SMTP account. Contracts 35/35 on the
+  old workflows (they do not read the table yet).
+- **Release engineer (production):** before deploying the settings-reading workflows, build an env
+  file outside the repo with `DEFAULT_DEMO_INBOX` and `ALLOW_DRILLS` from the SSM parameter
+  `n8n/app_env` (`ALLOW_DRILLS=true` for this demo), `EMAIL_FROM` = the SMTP account address
+  (`SMTP_USER_EMAIL` in `.env`) and `ALERT_EMAIL` = the demo inbox; then
+  `node n8n/tools/settings-sql.mjs --env <that file> > /tmp/bookleaf-settings.sql &&
+  scripts/ops/migrate-prod.sh /tmp/bookleaf-settings.sql` (backs up first) and delete the temp
+  files. Also compare `MAX_SENDS_PER_HOUR`, `REFERENCE_DATE_DEFAULT`, `AI_PRIMARY_MODEL`,
+  `AI_FALLBACK_MODEL`, `AI_EFFORT` and `BRAND_SUPPORT_EMAIL` in `n8n/app_env` with the seeded
+  defaults (60, 2025-12-31, claude-sonnet-5-5, gpt-4.1-mini, medium, empty) and UPDATE any that differ.

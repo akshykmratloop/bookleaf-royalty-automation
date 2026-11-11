@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Local n8n bootstrap: writes generated secrets into .secrets/, starts the compose stack,
- * creates the owner account and a public-API key, and saves them to .secrets/n8n-local.env.
+ * Local n8n bootstrap: writes generated secrets into .secrets/, starts the compose stack, writes the
+ * local settings into bookleaf_settings, creates the owner account and a public-API key, and saves
+ * them to .secrets/n8n-local.env.
  * Idempotent: an existing owner / API key file is reused. Secret values are never printed.
  *
  *   node docker/bootstrap.mjs [--no-up]
@@ -11,19 +12,22 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomSecret, readEnvFile, requireKeys, writeSecretEnvFile } from '../n8n/tools/env-file.mjs';
+import { perEnvironmentValues, settingsSql } from '../n8n/tools/settings-sql.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SECRETS = join(ROOT, '.secrets');
 const COMPOSE_ENV = join(SECRETS, 'n8n-local.compose.env');
 const API_ENV = join(SECRETS, 'n8n-local.env');
+const COMPOSE_FILE = join(ROOT, 'docker', 'docker-compose.local.yml');
 const BASE_URL = 'http://localhost:5678';
 const VERSION = readFileSync(join(ROOT, 'docker', 'N8N_VERSION'), 'utf8').trim();
 const OWNER_EMAIL = 'owner@bookleaf.local';
 /** Demo inbox for every test email (lead's decision); override with DEMO_INBOX=... */
 const DEMO_INBOX = process.env.DEMO_INBOX || 'akshykmr@loopmethods.com';
 
+const smtpAccount = () => requireKeys(readEnvFile(join(ROOT, '.env')), ['SMTP_USER_EMAIL'], 'bubble/.env').SMTP_USER_EMAIL;
+
 function ensureComposeEnv() {
-  const smtp = requireKeys(readEnvFile(join(ROOT, '.env')), ['SMTP_USER_EMAIL'], 'bubble/.env');
   const old = existsSync(COMPOSE_ENV) ? readEnvFile(COMPOSE_ENV) : {};
   const pgPassword = old.POSTGRES_PASSWORD || randomSecret(24);
   writeSecretEnvFile(COMPOSE_ENV, {
@@ -31,16 +35,25 @@ function ensureComposeEnv() {
     DB_POSTGRESDB_PASSWORD: pgPassword,
     N8N_ENCRYPTION_KEY: old.N8N_ENCRYPTION_KEY || randomSecret(32),
     DEFAULT_DEMO_INBOX: DEMO_INBOX,
-    EMAIL_FROM: smtp.SMTP_USER_EMAIL,
+    EMAIL_FROM: smtpAccount(),
   });
   console.log(`compose env ready: ${COMPOSE_ENV}`);
 }
 
 function composeUp() {
-  execFileSync('docker', ['compose', '-f', join(ROOT, 'docker', 'docker-compose.local.yml'), 'up', '-d'], {
+  execFileSync('docker', ['compose', '-f', COMPOSE_FILE, 'up', '-d'], {
     stdio: 'inherit',
     env: { ...process.env, N8N_VERSION: VERSION },
   });
+}
+
+/** This stack's own settings: the SMTP account sends, the demo inbox receives and gets the alerts, drills are on. */
+function applyLocalSettings() {
+  const values = perEnvironmentValues({ EMAIL_FROM: smtpAccount(), DEFAULT_DEMO_INBOX: DEMO_INBOX, ALLOW_DRILLS: 'true', ALERT_EMAIL: DEMO_INBOX });
+  execFileSync('docker', ['compose', '-f', COMPOSE_FILE, 'exec', '-T', 'postgres', 'psql', '-X', '-q', '-U', 'n8n', '-d', 'bookleaf', '-v', 'ON_ERROR_STOP=1'], {
+    input: settingsSql(values), stdio: ['pipe', 'ignore', 'inherit'], env: { ...process.env, N8N_VERSION: VERSION },
+  });
+  console.log('local settings written to bookleaf_settings');
 }
 
 async function waitHealthy(timeoutMs = 180_000) {
@@ -104,6 +117,7 @@ async function main() {
   ensureComposeEnv();
   if (!process.argv.includes('--no-up')) composeUp();
   await waitHealthy();
+  applyLocalSettings();
   const old = existsSync(API_ENV) ? readEnvFile(API_ENV) : {};
   const password = old.N8N_OWNER_PASSWORD || `Bl-${randomSecret(18)}`;
   await ensureOwner(password);
