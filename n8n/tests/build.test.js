@@ -56,6 +56,12 @@ describe('built workflows', () => {
       }
     }
   });
+  it('royalty-summary reads the author data from the request only: no Bubble Data API, no push callback', () => {
+    const names = built['royalty-summary'].nodes.map((n) => n.name);
+    expect(names.filter((n) => /Bubble|Callback|Data Source|After Update/.test(n))).toEqual([]);
+    expect(Object.keys(CREDENTIALS)).not.toContain('bubble');
+    expect(built['royalty-summary'].connections['Mark Processing'].main[0].map((c) => c.node)).toEqual(['Build Context']);
+  });
   it('royalty-summary and approve-draft name the error workflow', () => {
     expect(built['royalty-summary'].settings.errorWorkflow).toBe('__WORKFLOW_BookLeaf - Error Handler__');
     expect(built['approve-draft'].settings.errorWorkflow).toBe('__WORKFLOW_BookLeaf - Error Handler__');

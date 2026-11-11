@@ -8,7 +8,6 @@ export const CREDENTIALS = Object.freeze({
   openai: { type: 'httpBearerAuth', name: 'BookLeaf OpenAI API (bearer)' },
   smtp: { type: 'smtp', name: 'BookLeaf SMTP' },
   smtpDrill: { type: 'smtp', name: 'BookLeaf SMTP (drill: unreachable server)' },
-  bubble: { type: 'httpBearerAuth', name: 'BookLeaf Bubble API (bearer)' },
   n8nApi: { type: 'httpHeaderAuth', name: 'BookLeaf n8n API (X-N8N-API-KEY)' },
 });
 

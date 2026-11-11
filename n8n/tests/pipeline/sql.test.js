@@ -19,6 +19,11 @@ describe('job ledger SQL guards', () => {
     expect(MARK_PROCESSING).toContain("stage = 'reading_data'");
     expect(INSERT_JOB).toContain("'queued'");
   });
+  it('no push callback: new jobs are NOT_NEEDED and nothing updates callback_status afterwards', () => {
+    expect(INSERT_JOB).toContain("'NOT_NEEDED'");
+    expect(INSERT_JOB).not.toContain("v->>'callback_status'");
+    expect(UPDATE_JOB).not.toContain('callback_status');
+  });
   it('a draft is claimed atomically: only DRAFTED, only within 24 hours', () => {
     expect(CLAIM_DRAFT).toMatch(/SET status = 'PROCESSING', stage = 'sending'/);
     expect(CLAIM_DRAFT).toMatch(/AND status = 'DRAFTED' AND drafted_at > now\(\) - interval '24 hours'/);

@@ -72,3 +72,26 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   still describe `idem_key`: update them in step 6. After the production rollout 03 is frozen: new
   keys need a new migration (and the seed test must then cover every seeding file). A new EC2 box
   gets 01 inside its gzipped user data: now 9.8 KB of the 16 KB limit.
+
+## Step 3a — drop the Bubble Data API and push-callback paths
+
+- **Why now:** `DATA_SOURCE`, `CALLBACK_MODE` and `BUBBLE_APP_BASE` were read from `$env` and have no
+  row in the settings table (the lead dropped push), so once step 3 removes `$env` both paths are
+  unreachable. They are removed first, on their own, to keep the settings commit readable.
+- **Changed:** royalty-summary loses 11 nodes (Data Source, Bubble Queries, Bubble Author/Books/
+  Royalties, Bubble Data Failed, After Update, Push Callback?, Notify Bubble, Callback Result, Update
+  Callback): Mark Processing now feeds Build Context, and Update Job is the end of every branch.
+  Deleted `n8n/src/bubble-client.js`, `n8n/src/pipeline/callback.js`, `UPDATE_CALLBACK`, the `bubble`
+  credential and their tests. The request always carries `author` and `books`. New jobs are written
+  `callback_status = 'NOT_NEEDED'` by the insert itself and no update touches the column (it stays in
+  job-status for Bubble). `UPDATE_JOB` returns only `job_id, status, stage, error_code`, so saved
+  executions no longer carry the HTML twice. `n8n/PAYLOAD.md`: the push section is now the paid-plan
+  upgrade path.
+- **Sizes:** 80 → **69** working nodes (royalty-summary 45 → 34); Code 23 → 19 nodes,
+  233.9 → 213.2 KB; Switch 17 → 15.
+- **Deviation:** the design drops push without naming a step; it is done here because step 3 removes
+  its configuration.
+- **Next builder / release engineer:** the credential `BookLeaf Bubble API (bearer)` is no longer
+  deployed; delete it on each instance after the rollout (it is still on the local one). The narrative
+  docs (`README.md` diagram, `docs/integration.md`, `docs/error-handling.md`, `docs/decisions.md`,
+  `docs/learning-log.md`) still describe push mode: step 10.

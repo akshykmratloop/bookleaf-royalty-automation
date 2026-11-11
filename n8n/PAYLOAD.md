@@ -16,7 +16,7 @@ comparison of the hashes); the keys themselves never leave `.secrets/`. To rotat
 `BOOKLEAF_WEBHOOK_KEY_NEXT`, deploy, switch Bubble to the new key, move it to
 `BOOKLEAF_WEBHOOK_KEY`, remove `_NEXT`, deploy again.
 
-## POST body (pull mode, `DATA_SOURCE=payload`)
+## POST body
 
 Flat on purpose, so a Bubble API Connector call can build it with dynamic values. Amounts are whole
 rupees (numbers; quoted whole numbers such as `"3570"` are accepted). Dates are `YYYY-MM-DD`, a
@@ -53,7 +53,7 @@ Bubble date (ISO instant, read in India time), or empty.
 | Field | Rule |
 |---|---|
 | `author_id` | Required. Bubble unique id, 1-64 chars, letters/digits/`_`/`-`. |
-| `log_id` | Optional. The Bubble NotificationLog id; returned with the job and used for push callbacks. |
+| `log_id` | Optional. The Bubble NotificationLog id; returned with the job. |
 | `batch_id` | Optional. Groups a bulk send. |
 | `requested_by` | Required. Admin email or name, 1-254 chars. |
 | `mode` | Required. `single` or `bulk`. |
@@ -66,11 +66,8 @@ Bubble date (ISO instant, read in India time), or empty.
 | `length` | Optional. `short` (about 80-180 words of prose), `standard` (default, 150-300) or `detailed` (250-450). The prompt and the word-count warning follow it. |
 | `note` | Optional admin style guidance, 0-300 characters after trimming; control characters (line breaks included) become spaces. It goes into the AI's user message in a fenced block and may change wording and style only: it can never change or add figures, dates or policy, and the fact check still blocks any figure that is not in the data. |
 | `sign_off` | Optional signature name, 0-60 characters: letters, spaces and `. , ' & ( ) -` (no digits). Empty = `BookLeaf Author Relations`. The signature is rendered from data (escaped), never written by the AI: `Warm regards,` / `Kind regards,` (formal) / `Best regards,` (concise), then the name. |
-| `author` | Required in pull mode: `code`, `name` (first word = greeting name), `email`, `city`. |
-| `books[]` | Required in pull mode, up to 50. `status` is the status text; anything starting with "In Production" is treated as in production and its stage (e.g. "Cover Design") is used in the email. `platforms` may be a list or comma-separated text. |
-
-In push mode with `DATA_SOURCE=bubble` (paid Bubble plan), `author` and `books` are not needed:
-n8n reads the author, books and royalty records through the Bubble Data API.
+| `author` | Required: `code`, `name` (first word = greeting name), `email`, `city`. n8n never reads Bubble's data itself. |
+| `books[]` | Required, up to 50. `status` is the status text; anything starting with "In Production" is treated as in production and its stage (e.g. "Cover Design") is used in the email. `platforms` may be a list or comma-separated text. |
 
 ## Answers
 
@@ -110,6 +107,8 @@ plain poll.
   "missing": []
 }
 ```
+
+`callback_status` is always `NOT_NEEDED` (kept for the fields Bubble maps; see the upgrade path below).
 
 `status` moves QUEUED → PROCESSING → SENT or FAILED, or (with `delivery: "draft"`) → DRAFTED, and
 from there, through the approve endpoint, → PROCESSING → SENT/FAILED, or → DISCARDED. A job never
@@ -181,16 +180,19 @@ a bad key):
 | `NO_RECIPIENT` | No safe demo inbox (synchronous). | No |
 | `RATE_LIMITED` | Hourly limit reached (synchronous). | Later |
 | `INTEGRITY` | Figures do not add up (earned ≠ copies × royalty, paid + pending ≠ earned, payout in the future). No email is written. | No, fix the data |
-| `DATA_UNAVAILABLE` | Author data could not be loaded (Bubble Data API, or the `data_down` drill). | Yes |
+| `DATA_UNAVAILABLE` | The author data was withheld (the `data_down` drill). | Yes |
 | `AI_UNAVAILABLE` | Anthropic failed and the OpenAI fallback failed too (or the answer was unusable twice). | Yes |
 | `AI_FACT_CHECK_FAILED` | The draft quoted a figure not in the data, and the one regeneration with feedback did too. Nothing was sent. | Yes |
 | `EMAIL_FAILED` | The SMTP server refused or could not be reached. The draft is kept on the job. | Yes |
 | `TIMEOUT` | Not finished within 10 minutes (sweeper). | Yes |
 | `INTERNAL` | Unexpected workflow error; `error` names the node. | Yes |
 
-## Push mode (paid Bubble plan): result callback
+## Upgrade path (paid Bubble plan): push instead of poll
 
-With `CALLBACK_MODE=push`, n8n also POSTs the finished job to Bubble's Workflow API
-`/api/1.1/wf/notification_result` (Bubble API token credential, 3 retries) with
-`log_id, job_id, status, error, subject, html, figures_verified, model, cost_usd, completed_at`,
-and records `callback_status` DONE or FAILED. Pull-mode polling keeps working either way.
+Bubble's free plan has no Data API and no Workflow API, so Bubble sends the data with each request
+and polls `jobs`. The earlier push mode (n8n reading the Data API and POSTing each finished job to
+the Workflow API `notification_result`) was removed to keep one tested path. On a paid plan it comes
+back as one sub-workflow called after the result is recorded: POST `log_id, job_id, status, error,
+subject, html, figures_verified, model, cost_usd, completed_at` to `/api/1.1/wf/notification_result`
+with a Bubble API-token credential (allowed domain: the app's), retries with backoff, and record
+`callback_status` (`DONE`/`FAILED`). Polling keeps working alongside it.

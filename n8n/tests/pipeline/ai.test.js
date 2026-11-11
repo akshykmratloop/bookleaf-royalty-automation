@@ -49,18 +49,6 @@ describe('buildContext', () => {
     expect(r).toMatchObject({ ok: false, code: 'INTEGRITY' });
     expect(r.message).toContain('BK003');
   });
-  it('bubble mode maps Data API results', () => {
-    const job = { ...jobFor('AUTH008'), bundle: null };
-    const bubble = {
-      author: { response: { results: [{ _id: 'u1', code: 'AUTH008', name: 'Farhan Sheikh', email: 'f@x.co', city: 'Pune' }] } },
-      books: { response: { results: [{ _id: 'b1', code: 'BK014', title: 'T', status: 'Published & Live', publication_date: '2024-01-01', mrp: 300, royalty_per_copy: 30 }] } },
-      royalties: { response: { results: [{ book: 'b1', copies_sold: 10, earned: 300, paid: 300, pending: 0, last_payout_date: '2025-12-01T00:00:00Z' }] } },
-    };
-    const r = buildContext(job, bubble);
-    expect(r.ok).toBe(true);
-    expect(r.ctx.facts.allPaid).toBe(true);
-    expect(buildContext(job, { author: { response: { results: [] } } })).toMatchObject({ ok: false, code: 'DATA_UNAVAILABLE' });
-  });
 });
 
 describe('afterAi', () => {

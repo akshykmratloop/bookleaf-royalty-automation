@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { afterAi } from '../../src/pipeline/after-ai.js';
-import { callbackFor } from '../../src/pipeline/callback.js';
 import { classifyInsert, INSERT_ROUTES } from '../../src/pipeline/classify.js';
 import { buildContext } from '../../src/pipeline/context.js';
 import { errorBody, failure } from '../../src/pipeline/errors.js';
@@ -45,9 +44,10 @@ describe('renderForSend / updates', () => {
   });
   it('sentUpdate marks SENT; failedUpdate marks FAILED with a capped message', () => {
     const { update } = renderForSend({ ctx, job, ai });
-    expect(sentUpdate(job, update)).toMatchObject({ status: 'SENT', callback_status: 'NOT_NEEDED' });
+    expect(sentUpdate(update)).toMatchObject({ status: 'SENT' });
     const f = failedUpdate(job, failure('EMAIL_FAILED', 'x'.repeat(5000)));
     expect(f).toMatchObject({ job_id: job.job_id, status: 'FAILED', error_code: 'EMAIL_FAILED' });
+    for (const u of [sentUpdate(update), f]) expect(u).not.toHaveProperty('callback_status');
     expect(f.error.length).toBeLessThanOrEqual(1000);
   });
   it('errorBody carries code, message and field errors', () => {
@@ -92,16 +92,6 @@ describe('error workflow helpers', () => {
     const s = nodeErrorSummary({ error: { httpCode: '401', message: 'Bad key sk-ant-abcdefghijk', description: 'Bearer abcdefghijkl' } }, 'anthropic');
     expect(s).toBe('anthropic: 401 - Bad key [redacted] - [redacted]');
   });
-});
-
-describe('callbackFor (push mode)', () => {
-  const config = { bubbleAppBase: 'https://app.bubbleapps.io/version-test' };
-  it('posts the finished job to the notification_result workflow', () => {
-    const r = callbackFor({ job_id: ID, log_id: 'L1', status: 'FAILED', error_code: 'EMAIL_FAILED', error: 'down', cost_usd: '0.0130', completed_at: new Date(0) }, config);
-    expect(r.url).toBe('https://app.bubbleapps.io/version-test/api/1.1/wf/notification_result');
-    expect(r.body).toMatchObject({ log_id: 'L1', job_id: ID, status: 'FAILED', error: 'EMAIL_FAILED: down', cost_usd: 0.013, completed_at: '1970-01-01T00:00:00.000Z' });
-  });
-  it('skips jobs without a Bubble log', () => expect(callbackFor({ job_id: ID, status: 'SENT' }, config)).toBeNull());
 });
 
 describe('nodeErrorSummary for HTTP errors', () => {

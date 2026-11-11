@@ -10,6 +10,3 @@ export { renderEmail, escapeHtml } from './render-email.js';
 export { getProvider, PROVIDER_NAMES } from './providers/registry.js';
 export { sectionsSchema, strictSectionsSchema } from './providers/schema.js';
 export { costUsd, PRICES } from './providers/cost.js';
-export {
-  authorQuery, booksQuery, royaltiesQuery, bundleFromBubble, callbackRequest, BUBBLE_TOKEN_PLACEHOLDER,
-} from './bubble-client.js';

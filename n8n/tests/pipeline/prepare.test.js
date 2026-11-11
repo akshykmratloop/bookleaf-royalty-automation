@@ -60,11 +60,10 @@ describe('prepareJob', () => {
     expect(r.fields.map((f) => f.path)).toEqual(['author_id', 'mode', 'reference_date']);
   });
   it('rejects a non-object body', () => expect(prep('hello')).toMatchObject({ ok: false, code: 'VALIDATION' }));
-  it('requires author and books in payload mode, not in bubble mode', () => {
+  it('always requires the author and books in the request (n8n never reads Bubble data itself)', () => {
     const { author, books, ...bare } = payloadFor('AUTH001');
     expect(prep(bare).fields.map((f) => f.path)).toEqual(['author']);
-    const bubbleEnv = { ...ENV, DATA_SOURCE: 'bubble', BUBBLE_APP_BASE: 'https://x.bubbleapps.io/version-test' };
-    expect(prep(bare, bubbleEnv)).toMatchObject({ ok: true, job: { bundle: null, author_code: null } });
+    expect(prep({ ...bare, author }).fields.map((f) => f.path)).toEqual(['books']);
   });
   it('rejects drills when the server has them off', () => {
     const r = prep(payloadFor('AUTH001', { drills: { email_down: true } }), { ...ENV, ALLOW_DRILLS: 'false' });
@@ -89,9 +88,10 @@ describe('prepareJob', () => {
   it('fails INTERNAL on invalid server settings', () => {
     expect(prep(payloadFor('AUTH001'), { ...ENV, MAX_SENDS_PER_HOUR: 'lots' })).toMatchObject({ ok: false, code: 'INTERNAL' });
   });
-  it('insertParams is one JSON value with the rate limit and callback status', () => {
+  it('insertParams is one JSON value with the rate limit', () => {
     const p = JSON.parse(insertParams(prep(payloadFor('AUTH001')).job));
-    expect(p).toMatchObject({ author_id: 'bubble_auth001', max_sends: 60, callback_status: 'NOT_NEEDED', mode: 'single' });
+    expect(p).toMatchObject({ author_id: 'bubble_auth001', max_sends: 60, mode: 'single' });
+    expect(p).not.toHaveProperty('callback_status');
     expect(p).toMatchObject({ delivery: 'send', tone: 'warm', length: 'standard', note: '', sign_off: '', recipient: 'demo@inbox.test' });
     expect(p.drills).toEqual({ ai_down: false, email_down: false, data_down: false, primary_down: false });
   });
@@ -109,11 +109,9 @@ describe('recipientFor', () => {
 describe('readConfig', () => {
   it('applies defaults', () => {
     const r = readConfig({ EMAIL_FROM: 's@b.co' });
-    expect(r.config).toMatchObject({ dataSource: 'payload', callbackMode: 'pull', maxSendsPerHour: 60, allowDrills: false, effort: 'medium' });
-  });
-  it('requires an https Bubble URL for bubble data or push callbacks', () => {
-    expect(readConfig({ ...ENV, CALLBACK_MODE: 'push' })).toMatchObject({ ok: false, code: 'INTERNAL' });
-    expect(readConfig({ ...ENV, CALLBACK_MODE: 'push', BUBBLE_APP_BASE: 'https://a.bubbleapps.io' }).ok).toBe(true);
+    expect(r.config).toMatchObject({ maxSendsPerHour: 60, allowDrills: false, effort: 'medium' });
+    expect(r.config).not.toHaveProperty('dataSource');
+    expect(r.config).not.toHaveProperty('callbackMode');
   });
   it('resolves "today" in India time', () => {
     expect(resolveReferenceDate('today', Date.UTC(2026, 0, 31, 20, 0))).toBe('2026-02-01');

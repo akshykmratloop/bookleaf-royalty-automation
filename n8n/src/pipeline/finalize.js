@@ -56,14 +56,12 @@ export function draftUpdate({ ctx, job, ai }) {
     job_id: job.job_id, status: 'DRAFTED', stage: 'drafted', author_code: ctx.bundle.author.code,
     subject: r.subject, html: r.html, text_body: r.text, ...aiColumns(ai),
     sections: ai.sections, facts: ctx.facts, titles: ctx.titles, edit_text: toEditText(ai.sections, ctx.facts),
-    issues: formatIssues(ai.warnings) || null, callback_status: callbackStatus(job),
+    issues: formatIssues(ai.warnings) || null,
   };
 }
 
-const callbackStatus = (job) => (job.config.callbackMode === 'push' ? 'PENDING' : 'NOT_NEEDED');
-
-/** @param {import('./prepare.js').Job} job @param {JobUpdate} update from renderForSend @returns {JobUpdate} */
-export const sentUpdate = (job, update) => ({ ...update, status: 'SENT', callback_status: callbackStatus(job) });
+/** @param {JobUpdate} update from renderForSend @returns {JobUpdate} */
+export const sentUpdate = (update) => ({ ...update, status: 'SENT' });
 
 /**
  * @param {import('./prepare.js').Job} job @param {import('./errors.js').Failure} f
@@ -73,6 +71,6 @@ export const sentUpdate = (job, update) => ({ ...update, status: 'SENT', callbac
 export function failedUpdate(job, f, extra = {}) {
   return {
     ...extra, job_id: job.job_id, status: 'FAILED', error_code: f.code,
-    error: String(f.message).slice(0, MAX_ERROR_LENGTH), callback_status: callbackStatus(job),
+    error: String(f.message).slice(0, MAX_ERROR_LENGTH),
   };
 }

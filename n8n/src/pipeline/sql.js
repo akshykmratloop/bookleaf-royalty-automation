@@ -13,7 +13,7 @@ up AS (
   INSERT INTO royalty_jobs (job_id, idem_key, log_id, batch_id, author_id, author_code, mode, status, requested_by, callback_status,
     stage, stage_at, delivery, tone, length, note, sign_off, recipient, drills)
   SELECT (v->>'job_id')::uuid, v->>'idem_key', v->>'log_id', v->>'batch_id', v->>'author_id', v->>'author_code',
-         v->>'mode', 'QUEUED', v->>'requested_by', v->>'callback_status',
+         v->>'mode', 'QUEUED', v->>'requested_by', 'NOT_NEEDED',
          'queued', now(), v->>'delivery', v->>'tone', v->>'length', v->>'note', v->>'sign_off', v->>'recipient', v->'drills'
   FROM p
   WHERE (SELECT n FROM recent) < (v->>'max_sends')::int
@@ -56,7 +56,6 @@ export const UPDATE_JOB = `UPDATE royalty_jobs AS j SET
   input_tokens = COALESCE(p.input_tokens, j.input_tokens),
   output_tokens = COALESCE(p.output_tokens, j.output_tokens),
   cost_usd = COALESCE(p.cost_usd, j.cost_usd),
-  callback_status = COALESCE(p.callback_status, j.callback_status),
   sections = COALESCE(p.sections, j.sections),
   facts = COALESCE(p.facts, j.facts),
   titles = COALESCE(p.titles, j.titles),
@@ -68,14 +67,9 @@ export const UPDATE_JOB = `UPDATE royalty_jobs AS j SET
 FROM jsonb_to_record(${P}) AS p(
   job_id uuid, status text, stage text, error_code text, error text, author_code text, subject text, html text, text_body text,
   sent_to text, figures_verified int, ai_attempts int, provider text, model text, input_tokens int, output_tokens int,
-  cost_usd numeric, callback_status text, sections jsonb, facts jsonb, titles jsonb, edit_text text, issues text)
+  cost_usd numeric, sections jsonb, facts jsonb, titles jsonb, edit_text text, issues text)
 WHERE j.job_id = p.job_id AND j.status IN ('QUEUED', 'PROCESSING')
-RETURNING j.job_id::text AS job_id, j.log_id, j.batch_id, j.author_id, j.status, j.stage, j.error_code, j.error, j.subject, j.html,
-  j.figures_verified, j.model, j.cost_usd::float8 AS cost_usd, j.completed_at, j.callback_status`;
-
-export const UPDATE_CALLBACK = `UPDATE royalty_jobs SET callback_status = ${P}->>'callback_status', updated_at = now()
-WHERE job_id = (${P}->>'job_id')::uuid
-RETURNING job_id::text AS job_id, callback_status`;
+RETURNING j.job_id::text AS job_id, j.status, j.stage, j.error_code`;
 
 export const SELECT_JOBS = `SELECT job_id::text AS job_id, log_id, batch_id, author_id, author_code, mode, status, error_code, error,
   subject, sent_to, figures_verified, ai_attempts, provider, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd,
