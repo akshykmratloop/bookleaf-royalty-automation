@@ -1,11 +1,11 @@
 import { daysBetween, parseIso } from './dates.js';
-import { OVERDUE_AFTER_DAYS } from './kb.js';
+import { KB_TEXT, OVERDUE_AFTER_DAYS } from './kb.js';
 
 export const BADGE_LABELS = Object.freeze({ GREEN: 'Fully paid', YELLOW: 'Pending', RED: 'Overdue', NONE: 'In production' });
 
 /**
  * Brief rule: GREEN fully paid; RED pending with last payout (or, if never paid, publication)
- * more than 90 days before the reference date; otherwise YELLOW. In-production books get NONE.
+ * more than OVERDUE_AFTER_DAYS (kb.js) before the reference date; otherwise YELLOW. In-production books get NONE.
  * @param {import('./types.js').Book} book @param {string} referenceDate
  * @returns {'GREEN'|'YELLOW'|'RED'|'NONE'}
  */
@@ -24,10 +24,10 @@ export function statusTextFor(badge, book, belowThreshold) {
     GREEN: 'Fully paid — nothing pending on this book',
     YELLOW: 'Pending amount is due in the next payout cycle',
     RED: book.lastPayoutDate === null
-      ? 'Overdue — no payout has been made yet and the book has been published for over 90 days'
-      : 'Overdue — no payout for over 90 days',
+      ? `Overdue — no payout has been made yet and the book has been published for over ${KB_TEXT.overdueWindow}`
+      : `Overdue — no payout for over ${KB_TEXT.overdueWindow}`,
   }[badge];
   const note = belowThreshold && book.pending > 0
-    ? '. Below the ₹1,000 payout minimum — rolls over to the next quarter' : '';
+    ? `. Below the ${KB_TEXT.threshold} payout minimum — rolls over to the next quarter` : '';
   return base + note;
 }

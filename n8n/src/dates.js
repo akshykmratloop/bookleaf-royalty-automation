@@ -1,5 +1,6 @@
-/** Payout calendar (UTC): royalties are paid within 45 days of quarter end. */
-export const PAYOUT_WINDOW_DAYS = 45;
+import { PAYOUT_WINDOW_DAYS } from './kb.js';
+
+/** Payout calendar (UTC): royalties are paid within PAYOUT_WINDOW_DAYS (kb.js) of quarter end. */
 const DAY_MS = 86_400_000;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -9,7 +10,7 @@ export function quarterEnd(date) {
   return new Date(Date.UTC(date.getUTCFullYear(), lastMonth + 1, 0));
 }
 
-/** @param {Date} date @returns {Date} quarter end + 45 days */
+/** @param {Date} date @returns {Date} quarter end + PAYOUT_WINDOW_DAYS */
 export function payoutDeadlineFor(date) {
   return addDays(quarterEnd(date), PAYOUT_WINDOW_DAYS);
 }

@@ -125,3 +125,17 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   files. Also compare `MAX_SENDS_PER_HOUR`, `REFERENCE_DATE_DEFAULT`, `AI_PRIMARY_MODEL`,
   `AI_FALLBACK_MODEL`, `AI_EFFORT` and `BRAND_SUPPORT_EMAIL` in `n8n/app_env` with the seeded
   defaults (60, 2025-12-31, claude-sonnet-5-5, gpt-4.1-mini, medium, empty) and UPDATE any that differ.
+
+## Step 3c — the prompt reads the KB policy from kb.js
+
+- **Changed:** `n8n/src/kb.js` is the one place the policy figures are written (threshold ₹ amount,
+  payout window, overdue window, escalation time, 80/20 split) as numbers plus `KB_TEXT` (each figure
+  as emails write it). The system prompt, the situation texts (`prompt.js`), the status texts
+  (`badge.js`), the next-payout fact note (`facts.js`) and the payout calendar (`dates.js`, whose
+  `PAYOUT_WINDOW_DAYS` moved to `kb.js`) read them from there. KB policy stays versioned code, not a
+  setting (lead's decision): changing a figure changes the prompt, so it needs a new `PROMPT_VERSION`.
+- **Verified:** the system prompt, the KB facts and the prompts and facts of all 10 sample authors are
+  byte-identical before and after, so `PROMPT_VERSION` stays `royalty-summary.v2` (prompt caching
+  unaffected). New test: every KB display is in the system prompt and none of the five modules above
+  repeats one.
+- **Sizes:** unchanged node counts (69); Code 214.0 KB (+0.8 KB: `formatInr` now comes along).
