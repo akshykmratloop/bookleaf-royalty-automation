@@ -32,7 +32,9 @@ services:
     ports:
       - "127.0.0.1:5678:5678"
     env_file:
-      - ../.secrets/n8n-local.compose.env   # N8N_ENCRYPTION_KEY, DB_POSTGRESDB_PASSWORD, DEFAULT_DEMO_INBOX, EMAIL_FROM
+      - ../.secrets/n8n-local.compose.env   # N8N_ENCRYPTION_KEY, DB_POSTGRESDB_PASSWORD
+    # Workflow settings are not given here: the workflows read the bookleaf_settings table, and
+    # $env stays blocked (n8n's default). docker/bootstrap.mjs writes this stack's own settings.
     environment:
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
@@ -52,20 +54,5 @@ services:
       N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
       EXECUTIONS_DATA_PRUNE: "true"
       EXECUTIONS_DATA_MAX_AGE: "336"
-      # Code nodes read workflow settings from $env (same as production).
-      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
-      # Workflow settings (production uses the same names).
-      ALLOW_DRILLS: "true"
-      EMAIL_PROVIDER: smtp
-      CALLBACK_MODE: pull
-      DATA_SOURCE: payload
-      MAX_SENDS_PER_HOUR: "60"
-      REFERENCE_DATE_DEFAULT: "2025-12-31"
-      AI_PRIMARY_MODEL: claude-sonnet-5-5
-      AI_FALLBACK_MODEL: gpt-4.1-mini
-      AI_EFFORT: medium
-      BUBBLE_APP_BASE: ""
-      BRAND_SUPPORT_EMAIL: ""
-      N8N_INTERNAL_URL: http://127.0.0.1:5678
     volumes:
       - ./.data/n8n:/home/node/.n8n

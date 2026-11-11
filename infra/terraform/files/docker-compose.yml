@@ -29,7 +29,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Workflow config read via $env (ALLOW_DRILLS, EMAIL_PROVIDER, BOOKLEAF_DB, ...).
+    # The workflows read their settings from the bookleaf_settings table and $env stays blocked
+    # (n8n's default). app.env (SSM n8n/app_env) is only kept for rolling back to the older
+    # $env-reading workflows, which also needs $env access turned back on (docs/n8n-refactor-notes.md).
     env_file:
       - app.env
     environment:
@@ -56,7 +58,6 @@ services:
       N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
       EXECUTIONS_DATA_PRUNE: "true"
       EXECUTIONS_DATA_MAX_AGE: "336"
-      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
     volumes:
       - n8ndata:/home/node/.n8n
     healthcheck:

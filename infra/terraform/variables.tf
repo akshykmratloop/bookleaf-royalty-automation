@@ -86,7 +86,7 @@ variable "monthly_budget_usd" {
 }
 
 variable "app_env" {
-  description = "Initial app config the workflows read via $env. Edit later in SSM, not here."
+  description = "App config for the older $env-reading workflows, kept for a rollback; the current workflows read the bookleaf_settings table."
   type        = map(string)
   default = {
     ALLOW_DRILLS       = "true"

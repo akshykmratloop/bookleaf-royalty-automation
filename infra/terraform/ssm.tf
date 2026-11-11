@@ -25,9 +25,9 @@ resource "aws_ssm_parameter" "postgres_password" {
   value       = random_password.postgres.result
 }
 
-# App config the workflows read through $env, as dotenv lines (one parameter because SSM
-# cannot store an empty value, and several keys start empty). Terraform writes it once;
-# edit it with `aws ssm put-parameter --overwrite`, then restart n8n-stack on the box.
+# App config of the older workflows that read $env, as dotenv lines (one parameter because SSM
+# cannot store an empty value, and several keys start empty). The current workflows read the
+# bookleaf_settings table instead; this stays only for a rollback. Terraform writes it once.
 resource "aws_ssm_parameter" "app_env" {
   name        = "${var.ssm_prefix}/n8n/app_env"
   description = "Workflow config for n8n (dotenv lines), rendered to /opt/n8n/app.env"

@@ -34,8 +34,6 @@ function ensureComposeEnv() {
     POSTGRES_PASSWORD: pgPassword,
     DB_POSTGRESDB_PASSWORD: pgPassword,
     N8N_ENCRYPTION_KEY: old.N8N_ENCRYPTION_KEY || randomSecret(32),
-    DEFAULT_DEMO_INBOX: DEMO_INBOX,
-    EMAIL_FROM: smtpAccount(),
   });
   console.log(`compose env ready: ${COMPOSE_ENV}`);
 }

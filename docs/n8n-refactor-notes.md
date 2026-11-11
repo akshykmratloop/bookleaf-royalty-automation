@@ -179,3 +179,30 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   this, or every request answers 500 (`email_from must be an email address`). `alert_email` is read
   only from step 8. The previous tag reads `$env`: keep `n8n/app_env` and the env flag until the
   rollback window has passed.
+
+## Step 3e — $env blocked in both compose files
+
+- **Changed:** `N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"` is gone from `docker/docker-compose.local.yml`
+  and the repo copy of the production compose (`infra/terraform/files/docker-compose.yml`), so n8n's
+  default applies and a Code node that reads `$env` fails ("access to env vars denied"). The local
+  compose no longer sets the old workflow variables (`ALLOW_DRILLS`, `EMAIL_PROVIDER`, …,
+  `N8N_INTERNAL_URL`), and `docker/bootstrap.mjs` no longer writes `DEFAULT_DEMO_INBOX`/`EMAIL_FROM`
+  into the compose env (it writes those as settings instead). The production compose keeps
+  `env_file: app.env` (SSM `n8n/app_env`) only for a rollback; comments in `ssm.tf`, `variables.tf`
+  and `infra/README.md` now say so (no Terraform resource changed). New `tests/infra/compose.test.js`:
+  neither compose file names the flag; the local one passes no workflow variables.
+- **Local n8n restarted** (only that container, from this worktree's compose):
+  `N8N_VERSION=$(cat docker/N8N_VERSION) docker compose -f docker/docker-compose.local.yml
+  --project-directory <main checkout>/docker -p bookleaf-n8n-local up -d --no-deps n8n`. The project
+  directory must be the main checkout's `docker/`, where the data lives (`.data/n8n`, `.data/postgres`);
+  from the worktree, `./.data` would point at an empty folder. Same mount and image after the restart,
+  the flag is unset, all five workflows active. A throwaway workflow whose Code node reads `$env.TZ`
+  got "access to env vars denied" (then deleted). Contracts 35/35 on the blocked n8n.
+- **Note:** the local `.secrets/n8n-local.compose.env` still holds `DEFAULT_DEMO_INBOX` and
+  `EMAIL_FROM` from an older bootstrap; n8n cannot read them any more, and the next bootstrap run
+  rewrites the file without them (the file is shared with the main checkout, so it was left alone).
+- **Release engineer (production):** deploy the settings-reading workflows first, then remove the flag
+  on the box (the compose file in this commit) and restart `n8n-stack`. Rollback to the `$env`
+  workflows needs the line `N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"` back in the n8n `environment:`
+  block and `app.env` (still rendered from SSM).
+- **Sizes:** unchanged (71 working nodes; 19 Code nodes, 224.8 KB).
