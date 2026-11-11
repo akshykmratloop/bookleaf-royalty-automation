@@ -19,7 +19,9 @@ On the box (`/opt/n8n`, started by `n8n-stack.service` at every boot):
 - **Caddy** — the only container with published ports; gets the Let's Encrypt certificate itself.
 - **n8n** — pinned image (`var.n8n_image`), Postgres-backed, `$env` access enabled for workflow config.
 - **Postgres 16** — DB `n8n` for n8n itself; `db/init/01-bookleaf.sql` creates the `bookleaf`
-  DB and the `royalty_jobs` table on the first start.
+  DB with the `royalty_jobs` ledger and the `bookleaf_settings` table on the first start. An
+  existing database is upgraded with `db/migrations/*.sql` (additive, re-runnable;
+  `scripts/ops/migrate-prod.sh` backs production up before applying one).
 
 Secrets never travel in user data: `n8n-load-env` reads them from SSM before each start and
 writes `/opt/n8n/.env` and `/opt/n8n/app.env` (mode 600).

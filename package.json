@@ -7,9 +7,10 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "vitest run --exclude \"tests/contract/**\"",
+    "test": "vitest run --exclude \"tests/contract/**\" --exclude \"tests/db/**\"",
     "build:workflows": "node n8n/build.mjs",
-    "test:contract": "node tests/contract/run.mjs"
+    "test:contract": "node tests/contract/run.mjs",
+    "test:db": "vitest run --config tests/db/vitest.config.js"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

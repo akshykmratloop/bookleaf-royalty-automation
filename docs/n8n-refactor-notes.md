@@ -25,3 +25,50 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   `n8n/src` must stay free of import-time side effects (top-level code = imports, exports and
   declarations only): with this flag, anything a module does on import is silently dropped from
   the bundles. Only `n8n/build.mjs` bundles with esbuild, so the flag affects nothing else.
+
+## Step 2 — migration 03: settings table, execution id, fingerprint, race-free enqueue
+
+- **Changed:** `n8n/src/pipeline/settings.js` is the one settings schema (16 keys, each with
+  default, description and check; `settingProblem(key, value)`). `email_from`,
+  `default_demo_inbox`, `allow_drills`, `alert_email` are per-environment; `email_from` has no valid
+  default on purpose. `infra/db/migrations/03-settings-enqueue.sql`, mirrored in
+  `infra/db/init/01-bookleaf.sql`: table `bookleaf_settings` (key, jsonb value, description,
+  updated_at) seeded `ON CONFLICT DO NOTHING`; `bookleaf_setting(k)` (raises on a missing key);
+  `royalty_jobs.execution_id` and `fingerprint` with three indexes; `idem_key` nullable (still
+  unique); `enqueue_royalty_job(jsonb)`. `node n8n/tools/settings-seed.mjs` writes the seed into
+  both files from the schema. gpt-4.1-mini price verified on OpenAI's pricing page (values unchanged).
+- **`enqueue_royalty_job` contract (step 6 wires it):** `SELECT * FROM enqueue_royalty_job($1::jsonb)`.
+  Input: `job_id`, `execution_id` (required: `$execution.id`), `fingerprint` (required: 64
+  lowercase hex = SHA-256 of the canonical fingerprint JSON; today's idem_key keeps only 40 chars),
+  `author_id`, `author_code`, `log_id`, `batch_id`, `mode`, `requested_by`, `delivery`, `tone`,
+  `length`, `note`, `sign_off`, `recipient`, `drills`. Output, one row: `outcome`
+  (`queued` | `duplicate` | `rate_limited`), `job_id`, `status`, `error_code`, `recent_sends`.
+  Under one transaction-scoped advisory lock: duplicate (same author + fingerprint within
+  `duplicate_window_minutes`, any status) before the cap (`max_sends_per_hour` jobs in the last
+  hour, FAILED/DISCARDED not counted), else insert QUEUED/queued. Writes `callback_status`
+  NOT_NEEDED, never `idem_key`. Waits at most 5 s for the lock (`lock_timeout`).
+- **Tests:** unit pins in `n8n/tests/pipeline/settings.test.js` and `n8n/tests/ledger-schema.test.js`
+  (seed = schema, 01 mirrors 03, lock/window/cap/VOLATILE, additive only). New real-Postgres suite
+  `npm run test:db` (15 tests, ~20 s, throwaway databases in the local container, never `bookleaf`):
+  fresh install, 02/03 re-run with no schema change, seed values, `bookleaf_setting`, `idem_key`,
+  enqueue semantics, 6 simultaneous identical requests → 1 job, 6 simultaneous different requests
+  with one slot left → 1 job, lock never released → fails after 5 s. Removing the lock or using
+  `>` for the cap makes it fail.
+- **Applied locally:** backup, then 03 twice on the local `bookleaf` (73 jobs kept; the re-run
+  changed nothing). Its `pg_dump --schema-only` equals a fresh install from 01 (pg_dump 16.15 adds
+  random `\restrict` lines: strip them before diffing). Contracts 35/35 on it with the old workflows.
+- **Sizes:** unchanged (80 nodes, 23 Code nodes, 233.9 KB).
+- **Deviations:** settings.js holds literal defaults, and tests pin each to the constant it replaces
+  (brand, sign-off, AI models/effort/tokens, prices, 60/hour, reference date, 10-minute window,
+  45 s AI timeout, 24 h drafts, 10-minute sweeper): delete a pin when its reader moves to the table.
+  Additions: an index on `created_at` (the hourly count runs under the lock on every enqueue), the
+  5 s `lock_timeout`, required `execution_id`/`fingerprint`, and the `test:db` suite (not in the
+  gate list; run it whenever ledger SQL changes).
+- **Next builder / release engineer:** nothing reads the settings or calls the function yet; the
+  live workflows still insert with `idem_key` (compatible). The local per-environment settings still
+  hold the seed placeholders: write them (the settings SQL tool of step 3) before any workflow reads
+  them. Production: `scripts/ops/migrate-prod.sh infra/db/migrations/03-settings-enqueue.sql`.
+  `docs/integration.md` (Idempotency, The job ledger) and `docs/error-handling.md` (Duplicate row)
+  still describe `idem_key`: update them in step 6. After the production rollout 03 is frozen: new
+  keys need a new migration (and the seed test must then cover every seeding file). A new EC2 box
+  gets 01 inside its gzipped user data: now 9.8 KB of the 16 KB limit.
