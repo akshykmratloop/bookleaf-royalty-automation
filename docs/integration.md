@@ -47,7 +47,7 @@ sequenceDiagram
   Admin->>Bub: Generate & Send (button disabled)
   Bub->>Bub: Create NotificationLog (Queued)
   Bub->>N8: POST webhook {author_id, log_id}
-  N8->>PG: INSERT job ON CONFLICT (idem_key)
+  N8->>PG: enqueue_royalty_job (locked: duplicate, hourly cap, insert)
   N8-->>Bub: 202 {job_id}
   N8->>Bub: Data API: author, books, royalties
   N8->>N8: integrity check, build facts
@@ -132,20 +132,22 @@ only n8n users can open.
 ## Idempotency (a double click must not send two emails)
 
 1. **In the UI:** the button is disabled while a send is in flight.
-2. **In n8n:** each job gets `idem_key = author + data fingerprint + 10-minute window`. The
-   `royalty_jobs.idem_key` column has a **unique index**, and the insert is
-   `INSERT ... ON CONFLICT (idem_key)`. A second request in the same window returns the first
-   job's id. Bubble marks the extra log row `Duplicate`.
+2. **In n8n:** each request gets a fingerprint (a SHA-256 of everything that shapes the email).
+   The Postgres function `enqueue_royalty_job` holds one advisory lock while it decides, so
+   simultaneous requests are handled one at a time: the same author and fingerprint within the
+   last `duplicate_window_minutes` (10, sliding) returns the first job's id (HTTP 200,
+   `duplicate: true`); otherwise the hourly cap (`max_sends_per_hour`, exact) or a new job. Two
+   clicks at the same moment can never both create a job. Bubble marks the extra log row `Duplicate`.
 3. **On the callback:** applying a result is idempotent per job id, so a retried callback cannot
    change a finished log twice.
 
-The fingerprint is a hash of the author's figures. If the data changes (a payout is recorded),
-the key changes and a new email is allowed immediately.
+The fingerprint covers the author's figures and the writing options. If the data changes (a payout
+is recorded), the fingerprint changes and a new email is allowed immediately.
 
 ## The job ledger
 
-One Postgres table, `royalty_jobs` (see `infra/db/init/01-bookleaf.sql`): job id, idempotency
-key, Bubble log id, status, error code and message, the subject and HTML sent, recipient,
+One Postgres table, `royalty_jobs` (see `infra/db/init/01-bookleaf.sql`): job id, fingerprint
+and n8n execution id, Bubble log id, status, error code and message, the subject and HTML sent, recipient,
 figures verified, AI attempts, provider, model, tokens, cost, callback status, timestamps.
 
 It is the source of truth for a send. Bubble's log is a copy for the user. If a callback fails,

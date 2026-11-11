@@ -12,7 +12,7 @@ import { build } from 'esbuild';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { assertEdges, connectionsFrom, layout } from './workflows-src/lib/graph.mjs';
+import { assertEdges, connectionsFrom, layout, resolveEdges } from './workflows-src/lib/graph.mjs';
 import { stableUuid, workflowPlaceholder } from './workflows-src/lib/nodes.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -73,14 +73,15 @@ const nodeId = (wf, name) => stableUuid(`${wf}/${name}`);
 export async function buildWorkflow(srcName) {
   const src = (await import(pathToFileURL(join(HERE, 'workflows-src', `${srcName}.mjs`)).href)).default;
   assertEdges(src.nodes, src.edges);
+  const edges = resolveEdges(src.nodes, src.edges);
   const nodes = [];
-  for (const n of layout(src.nodes, src.edges)) {
+  for (const n of layout(src.nodes, edges, src.mainRow)) {
     const { entry, body, ...rest } = n;
     const parameters = entry ? { ...rest.parameters, jsCode: await jsCodeFor(n) } : rest.parameters;
     nodes.push({ id: nodeId(srcName, n.name), ...rest, parameters });
   }
   const settings = { ...SETTINGS, ...src.settings, ...(src.errorWorkflow ? { errorWorkflow: workflowPlaceholder(src.errorWorkflow) } : {}) };
-  return { name: src.name, nodes, connections: connectionsFrom(src.edges), settings };
+  return { name: src.name, nodes, connections: connectionsFrom(edges), settings };
 }
 
 async function main() {

@@ -324,3 +324,55 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   and publishes it before the callers (an unpublished sub-workflow fails every send with "Workflow is
   not active"). A rollback to the previous tag leaves it published but unused; archive it by hand if
   wanted. Its executions are saved separately; each caller's Deliver Email node links to its run.
+
+## Step 6 — royalty-summary: enqueue function, named outputs, one AI Failed, Record Result
+
+- **Changed:** royalty-summary is the design's 27 nodes. Intake: **Prepare Job** (now also passes
+  `$execution.id`, builds the enqueue parameter and precomputes the 429 body) → **Request Valid?** (IF 2.2)
+  → **Enqueue Job** (`SELECT outcome, job_id, status, error_code FROM enqueue_royalty_job($1::jsonb)`) →
+  **Outcome** (Switch 3.2 Rules mode, outputs *Queued* / *Duplicate* / *Rate limited*) → **Respond 202** /
+  **Respond Duplicate** / **Respond 429** (bodies as before: `{job_id, status, duplicate}`, `+error_code` on a
+  duplicate of a failed job, the `RATE_LIMITED` error body). AI: **Call Anthropic** -error→ **Call OpenAI
+  (fallback)** -error→ **AI Failed**; **Check Draft** → **Draft OK?** (*Pass* / *Rewrite* / *Fail*) →
+  **Stage: Rewriting** → **Rewrite (Anthropic)** -error→ **Rewrite (OpenAI fallback)** -error→ **AI Failed**
+  → **Check Rewrite** → **Rewrite OK?** → **Render Email** → **Send Now?** → **Deliver Email**. **Record
+  Result** (`UPDATE_JOB`) is the one sink for drafts and every failure. Removed: Insert Job, Classify,
+  Respond Accepted, Queued?, Stage: Writing, Stage: Checking, Rewrite With?, Regenerate ×2, Regeneration
+  Failed, Retry OK?, Update Job; `INSERT_JOB`, `classify.js`, `idempotencyKey`, `insertParams`, `AI_ROUTES`.
+- **Pipeline:** the job carries `fingerprint` (SHA-256 hex of the canonical fingerprint JSON) instead of
+  `idem_key`; `enqueueParams(job, executionId)` is the function's parameter (refuses an empty execution id);
+  `rateLimitedResponse(settings)`. `afterAi` returns `outcome` (`AI_OUTCOMES` PASS / REWRITE / FAIL) and, for
+  a rewrite, `rewrite: {anthropic, openai}` (both bodies from `providerRequests`, so drills still apply).
+  `aiUnavailable({rewriting, anthropicError, openaiError})` names both providers' errors and says when it
+  was the rewrite. Code entries return booleans for the IFs (`ok`, `send`). `MARK_PROCESSING` sets stage
+  `writing`. The error handler takes the job id from Prepare Job (or Claim Draft), never from Enqueue Job:
+  for a duplicate that is the earlier request's job, which must not be failed.
+- **Builders:** `switchRules(name, left, [{output, equals}])` (Rules mode, `renameOutput`/`outputKey`, filter
+  options version 2), `IS_TRUE`; `ifTrue` and `switchRules` share one `filter()` (deliver-email's JSON is
+  unchanged). Edges may name outputs (`'true'`/`'false'`, `'error'`, a Switch output name); `resolveEdges`
+  turns them into indexes and fails the build on an unknown name. A workflow may list its happy path as
+  `mainRow`: those nodes share row 0, every other node stacks below (rows 1, 2, … per column).
+- **Tests (written first):** `n8n/tests/royalty-summary.test.js` (node and type counts, Rules-mode Switches
+  with named outputs, IF 2.2 questions, wiring of both AI fallbacks, the Respond bodies evaluated like
+  n8n, Prepare Job / Check Draft / Check Rewrite / AI Failed run as built, Record Result's five feeds, the
+  happy path on row 0), unit tests for fingerprint, `enqueueParams`, `rateLimitedResponse`, outcomes,
+  rewrite bodies (drills kept) and `aiUnavailable`; `tests/db/enqueue.test.js` runs `ENQUEUE_JOB` with
+  Prepare Job's real parameter (queued, then duplicate). New contract `05-concurrent-enqueue`: 3 identical
+  requests at once → exactly one 202, two 200 duplicates of that job (data_down drill: no AI, no email).
+- **Live checks (local):** contracts 37/37; new jobs carry their execution id and a 64-hex fingerprint and
+  no `idem_key`; with `max_sends_per_hour` set to 1 for one request the webhook answered 429 with "The
+  limit is 1 per hour" (then set back to 60); a repeat of a failed request answered 200 `duplicate: true,
+  error_code: DATA_UNAVAILABLE`.
+- **Sizes:** royalty-summary 30 → **27** working nodes (Code 8 → 6, IF 0 → 4, Switch 7 → 2, Postgres 7 → 5); all workflows
+  69 → **66**, Switch 13 → 8. Code 15 → **13** nodes, 204.6 → **201.6 KB** (budget 215 → 205 KB). Largest: Check Rewrite
+  34.0, Check Draft 33.9, Prepare Job 28.9, Build Context 26.3 KB.
+- **Deviations:** the design's "Save as Draft?" is asked as **Send Now?** (true = send), so the IF's top
+  output is the happy path, as in Deliver Email. Stage `reading_data` and `checking` are no longer written
+  (each takes milliseconds; the lead allowed skipping short stages): a new job goes queued → writing →
+  (rewriting) → sending/drafted. The rewrite now always tries Anthropic first, then OpenAI (it used to
+  stay with the provider of the first draft); with `primary_down` the Anthropic body still names the
+  drill model, so OpenAI rewrites. The rewrite branch and the rewrite-phase AI Failed are covered by unit
+  tests on the built nodes only: no drill forces a fact-check failure, and none happened live.
+- **Release engineer:** needs migration 03 (the function) on the target before this deploy; no new
+  credential, no new setting. Bubble sees the same paths, bodies and status codes; the duplicate window
+  now slides (10 minutes back from each click instead of fixed 10-minute buckets).

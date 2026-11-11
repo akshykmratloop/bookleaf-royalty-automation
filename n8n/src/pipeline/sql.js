@@ -14,32 +14,20 @@ const RUNNING_JOB = `WHERE job_id = (${P}->>'job_id')::uuid AND status IN ('QUEU
 /** The "Load Settings" nodes: every bookleaf_settings row as one JSON object (checked by settings.readSettings). */
 export const LOAD_SETTINGS = 'SELECT jsonb_object_agg(key, value) AS settings FROM bookleaf_settings';
 
-export const INSERT_JOB = `WITH p AS (SELECT ${P} AS v),
-recent AS (
-  SELECT count(*)::int AS n FROM royalty_jobs
-  WHERE created_at > now() - interval '1 hour' AND status NOT IN ('FAILED', 'DISCARDED')
-),
-up AS (
-  INSERT INTO royalty_jobs (job_id, idem_key, log_id, batch_id, author_id, author_code, mode, status, requested_by, callback_status,
-    stage, stage_at, delivery, tone, length, note, sign_off, recipient, drills)
-  SELECT (v->>'job_id')::uuid, v->>'idem_key', v->>'log_id', v->>'batch_id', v->>'author_id', v->>'author_code',
-         v->>'mode', 'QUEUED', v->>'requested_by', 'NOT_NEEDED',
-         'queued', now(), v->>'delivery', v->>'tone', v->>'length', v->>'note', v->>'sign_off', v->>'recipient', v->'drills'
-  FROM p
-  WHERE (SELECT n FROM recent) < (v->>'max_sends')::int
-     OR EXISTS (SELECT 1 FROM royalty_jobs r WHERE r.idem_key = v->>'idem_key')
-  ON CONFLICT (idem_key) DO UPDATE SET idem_key = EXCLUDED.idem_key
-  RETURNING job_id, status, error_code, (xmax = 0) AS inserted
-)
-SELECT job_id::text AS job_id, status, error_code, inserted, (SELECT n FROM recent) AS recent_sends FROM up
-UNION ALL
-SELECT NULL, NULL, NULL, false, (SELECT n FROM recent) WHERE NOT EXISTS (SELECT 1 FROM up)`;
+/**
+ * Enqueue Job: one call of enqueue_royalty_job (migration 03). Under one advisory lock it answers, in
+ * order, `duplicate` (the same author and fingerprint within duplicate_window_minutes: the earlier job),
+ * `rate_limited` (max_sends_per_hour reached) or `queued` (the new job, QUEUED at stage queued, with
+ * this execution's id). Two simultaneous clicks can never both insert.
+ */
+export const ENQUEUE_JOB = `SELECT outcome, job_id, status, error_code FROM enqueue_royalty_job(${P})`;
 
-export const MARK_PROCESSING = `UPDATE royalty_jobs SET status = 'PROCESSING', stage = 'reading_data', stage_at = now(), updated_at = now()
+/** Right after the 202: the job runs. Reading the data takes milliseconds, so the first stage shown is writing. */
+export const MARK_PROCESSING = `UPDATE royalty_jobs SET status = 'PROCESSING', stage = 'writing', stage_at = now(), updated_at = now()
 WHERE job_id = (${P}->>'job_id')::uuid AND status = 'QUEUED'
 RETURNING job_id::text AS job_id, status`;
 
-/** Live progress (writing, checking, rewriting, sending). Never moves a finished job. */
+/** Live progress (Stage: Rewriting). Never moves a finished job. */
 export const SET_STAGE = `UPDATE royalty_jobs SET stage = ${P}->>'stage', stage_at = now(), updated_at = now()
 WHERE job_id = (${P}->>'job_id')::uuid AND status IN ('QUEUED', 'PROCESSING')
 RETURNING job_id::text AS job_id, stage`;

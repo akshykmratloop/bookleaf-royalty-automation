@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { insertParams, prepareJob } from '../../src/pipeline/prepare.js';
+import { enqueueParams, prepareJob, rateLimitedResponse } from '../../src/pipeline/prepare.js';
 import { resolveReferenceDate } from '../../src/dates.js';
 import { recipientFor } from '../../src/pipeline/recipient.js';
 import { UUID } from '../../src/pipeline/ids.js';
@@ -7,7 +7,9 @@ import { fixedRandom, NOW, SETTINGS } from './settings-fixture.js';
 import { payloadFor } from './fixtures.js';
 
 const prep = (body, settings = SETTINGS, now = NOW) => prepareJob(body, settings, now, fixedRandom);
-const WINDOW_MS = SETTINGS.duplicate_window_minutes * 60_000;
+/** The fields enqueue_royalty_job reads (infra/db/migrations/03-settings-enqueue.sql). */
+const ENQUEUE_FIELDS = ['author_code', 'author_id', 'batch_id', 'delivery', 'drills', 'execution_id', 'fingerprint', 'job_id', 'length',
+  'log_id', 'mode', 'note', 'recipient', 'requested_by', 'sign_off', 'tone'];
 
 describe('prepareJob', () => {
   it('accepts a valid payload and builds the job', () => {
@@ -23,32 +25,28 @@ describe('prepareJob', () => {
     expect(r.job.bundle.books).toHaveLength(2);
     expect(r.job.settings).toEqual(SETTINGS);
   });
-  it('a double click (same data, same duplicate window) gives the same idempotency key', () => {
+  it('a double click (same data) gives the same fingerprint: 64 hex characters, whatever the time or log id', () => {
     const a = prep(payloadFor('AUTH002'));
-    const b = prep(payloadFor('AUTH002', { log_id: 'another_log' }), SETTINGS, NOW + 60_000);
-    expect(b.job.idem_key).toBe(a.job.idem_key);
+    const b = prep(payloadFor('AUTH002', { log_id: 'another_log' }), SETTINGS, NOW + 3_600_000);
+    expect(a.job.fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    expect(b.job.fingerprint).toBe(a.job.fingerprint);
+    expect(a.job).not.toHaveProperty('idem_key');
   });
-  it('changed data, a new attempt, a drill or the next window give a new key', () => {
-    const base = prep(payloadFor('AUTH002')).job.idem_key;
+  it('changed data, a new attempt or a drill give a new fingerprint', () => {
+    const base = prep(payloadFor('AUTH002')).job.fingerprint;
     const changed = payloadFor('AUTH002');
     changed.books[0].paid += 1;
-    expect(prep(changed).job.idem_key).not.toBe(base);
-    expect(prep(payloadFor('AUTH002', { attempt: 2 })).job.idem_key).not.toBe(base);
-    expect(prep(payloadFor('AUTH002', { drills: { ai_down: true } })).job.idem_key).not.toBe(base);
-    expect(prep(payloadFor('AUTH002'), SETTINGS, NOW + WINDOW_MS).job.idem_key).not.toBe(base);
+    expect(prep(changed).job.fingerprint).not.toBe(base);
+    expect(prep(payloadFor('AUTH002', { attempt: 2 })).job.fingerprint).not.toBe(base);
+    expect(prep(payloadFor('AUTH002', { drills: { ai_down: true } })).job.fingerprint).not.toBe(base);
+    expect(prep(payloadFor('AUTH003')).job.fingerprint).not.toBe(base);
   });
-  it('the window is the duplicate_window_minutes setting', () => {
-    const oneMinute = { ...SETTINGS, duplicate_window_minutes: 1 };
-    const at = (ms) => prep(payloadFor('AUTH002'), oneMinute, ms).job.idem_key;
-    expect(at(NOW + 59_000)).toBe(at(NOW));
-    expect(at(NOW + 60_000)).not.toBe(at(NOW));
-  });
-  it('delivery, tone, length, note and sign-off each change the idempotency key', () => {
-    const base = prep(payloadFor('AUTH002')).job.idem_key;
+  it('delivery, tone, length, note and sign-off each change the fingerprint', () => {
+    const base = prep(payloadFor('AUTH002')).job.fingerprint;
     for (const over of [{ delivery: 'draft' }, { tone: 'formal' }, { length: 'short' }, { note: 'Be brief.' }, { sign_off: 'Priya' }]) {
-      expect(prep(payloadFor('AUTH002', over)).job.idem_key, JSON.stringify(over)).not.toBe(base);
+      expect(prep(payloadFor('AUTH002', over)).job.fingerprint, JSON.stringify(over)).not.toBe(base);
     }
-    expect(prep(payloadFor('AUTH002', { tone: 'warm', length: 'standard', delivery: 'send' })).job.idem_key).toBe(base);
+    expect(prep(payloadFor('AUTH002', { tone: 'warm', length: 'standard', delivery: 'send' })).job.fingerprint).toBe(base);
   });
   it('carries the writing options on the job and rejects unknown values with 400', () => {
     const r = prep(payloadFor('AUTH002', { delivery: 'draft', tone: 'concise', length: 'detailed', note: ' Thank them. ', sign_off: 'Anita Rao' }));
@@ -104,12 +102,23 @@ describe('prepareJob', () => {
   it('uses the reference_date_default setting when the request gives no date', () => {
     expect(prep(payloadFor('AUTH001', { reference_date: '' }), { ...SETTINGS, reference_date_default: '2025-09-30' }).job.reference_date).toBe('2025-09-30');
   });
-  it('insertParams is one JSON value with the rate limit from max_sends_per_hour', () => {
-    const p = JSON.parse(insertParams(prep(payloadFor('AUTH001'), { ...SETTINGS, max_sends_per_hour: 5 }).job));
-    expect(p).toMatchObject({ author_id: 'bubble_auth001', max_sends: 5, mode: 'single' });
-    expect(p).not.toHaveProperty('callback_status');
-    expect(p).toMatchObject({ delivery: 'send', tone: 'warm', length: 'standard', note: '', sign_off: '', recipient: 'demo@inbox.test' });
+  it('enqueueParams is the one JSON value enqueue_royalty_job takes, with this execution\'s id', () => {
+    const job = prep(payloadFor('AUTH001')).job;
+    const p = JSON.parse(enqueueParams(job, '4711'));
+    expect(Object.keys(p).sort()).toEqual(ENQUEUE_FIELDS);
+    expect(p).toMatchObject({
+      job_id: job.job_id, execution_id: '4711', fingerprint: job.fingerprint, author_id: 'bubble_auth001', author_code: 'AUTH001',
+      mode: 'single', delivery: 'send', tone: 'warm', length: 'standard', note: '', sign_off: '', recipient: 'demo@inbox.test',
+    });
     expect(p.drills).toEqual({ ai_down: false, email_down: false, data_down: false, primary_down: false });
+  });
+  it('enqueueParams refuses a missing execution id (the function would raise)', () => {
+    expect(() => enqueueParams(prep(payloadFor('AUTH001')).job, '')).toThrow(TypeError);
+  });
+  it('the 429 answer names the max_sends_per_hour limit', () => {
+    expect(rateLimitedResponse({ ...SETTINGS, max_sends_per_hour: 7 })).toEqual({
+      error: { code: 'RATE_LIMITED', message: 'Too many emails were sent in the last hour. The limit is 7 per hour; try again later.', retryable: true },
+    });
   });
 });
 

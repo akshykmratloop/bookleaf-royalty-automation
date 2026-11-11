@@ -32,20 +32,38 @@ export const route = (name, outputs, expression) =>
 
 /** Filter options as the n8n 2.45 editor writes them for IF 2.2; without `version`, n8n would run the filter as version 1. */
 const FILTER_OPTIONS = Object.freeze({ caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 });
+/** True only for the boolean true. */
+export const IS_TRUE = Object.freeze({ type: 'boolean', operation: 'true', singleValue: true });
 /** n8n tests `!value`: true for false and for a missing value (null, undefined). */
 export const IS_FALSE = Object.freeze({ type: 'boolean', operation: 'false', singleValue: true });
 /** False for '', null and undefined too (an empty item from alwaysOutputData). */
 export const NOT_EMPTY = Object.freeze({ type: 'string', operation: 'notEmpty', singleValue: true });
 
+/** One filter condition, as the n8n 2.45 editor writes it for IF 2.2 and Switch 3.2. */
+const filter = (id, left, operator, right = '') => ({
+  options: { ...FILTER_OPTIONS },
+  conditions: [{ id: stableUuid(id), leftValue: `={{ ${left} }}`, rightValue: right, operator: { ...operator } }],
+  combinator: 'and',
+});
+
 /**
  * IF 2.2 with one condition: output 0 = true (drawn on top: make it the happy path), 1 = false.
- * @param {string} name @param {string} left expression tested @param {Object} operator IS_FALSE or NOT_EMPTY
+ * @param {string} name @param {string} left expression tested @param {Object} operator IS_TRUE, IS_FALSE or NOT_EMPTY
  */
-export const ifTrue = (name, left, operator) => node(name, 'if', 2.2, {
-  conditions: {
-    options: { ...FILTER_OPTIONS },
-    conditions: [{ id: stableUuid(`${name}/condition`), leftValue: `={{ ${left} }}`, rightValue: '', operator: { ...operator } }],
-    combinator: 'and',
+export const ifTrue = (name, left, operator) => node(name, 'if', 2.2, { conditions: filter(`${name}/condition`, left, operator), options: {} });
+
+/**
+ * Switch 3.2 in Rules mode: one named output per case, in order, taken when `left` equals the case's
+ * value (no fallback output: nothing else can come).
+ * @param {string} name @param {string} left expression tested @param {{output:string, equals:string}[]} cases
+ */
+export const switchRules = (name, left, cases) => node(name, 'switch', 3.2, {
+  mode: 'rules',
+  rules: {
+    values: cases.map((c) => ({
+      conditions: filter(`${name}/${c.output}`, left, { type: 'string', operation: 'equals' }, c.equals),
+      renameOutput: true, outputKey: c.output,
+    })),
   },
   options: {},
 });

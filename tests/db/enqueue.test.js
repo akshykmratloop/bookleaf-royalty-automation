@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { enqueueParams, prepareJob } from '../../n8n/src/pipeline/prepare.js';
+import { ENQUEUE_JOB } from '../../n8n/src/pipeline/sql.js';
 import { seedSql } from '../../n8n/tools/settings-seed.mjs';
+import { fixedRandom, NOW, SETTINGS } from '../../n8n/tests/pipeline/settings-fixture.js';
+import { payloadFor } from '../fixtures/payloads.js';
 import { dropDatabase, psql, psqlAsync, scratchDatabase, until } from './psql.js';
 
 const LOCK = "hashtextextended('bookleaf.enqueue_royalty_job', 0)";
@@ -73,6 +77,15 @@ describe('enqueue_royalty_job', () => {
     expect(answers[3]).toMatchObject({ job_id: null, status: null, error_code: null });
     expect(enqueue(request({ fingerprint: hex(1) }))).toMatchObject({ outcome: 'duplicate', job_id: answers[0].job_id });
     expect(count("created_at > now() - interval '1 hour' AND status NOT IN ('FAILED', 'DISCARDED')")).toBe(3);
+  });
+  it('takes Enqueue Job\'s query with the parameter Prepare Job builds, and answers what the Outcome switch reads', () => {
+    const job = prepareJob(payloadFor('AUTH002'), SETTINGS, NOW, fixedRandom).job;
+    const call = (param) => JSON.parse(psql(db, `SELECT row_to_json(e) FROM (${ENQUEUE_JOB.replace('$1', `$j$${param}$j$`)}) AS e;`));
+    expect(call(enqueueParams(job, '9001'))).toEqual({ outcome: 'queued', job_id: job.job_id, status: 'QUEUED', error_code: null });
+    const again = prepareJob(payloadFor('AUTH002'), SETTINGS, NOW, () => fixedRandom().reverse()).job;
+    expect(call(enqueueParams(again, '9002'))).toEqual({ outcome: 'duplicate', job_id: job.job_id, status: 'QUEUED', error_code: null });
+    const row = JSON.parse(psql(db, 'SELECT row_to_json(j) FROM (SELECT execution_id, fingerprint, author_code, delivery FROM royalty_jobs) AS j;'));
+    expect(row).toEqual({ execution_id: '9001', fingerprint: job.fingerprint, author_code: 'AUTH002', delivery: 'send' });
   });
   it('refuses a request without a SHA-256 fingerprint or an execution id, and inserts nothing', () => {
     expect(() => enqueue(request({ fingerprint: 'abc' }))).toThrow(/fingerprint must be 64 lowercase hex characters/);

@@ -68,17 +68,17 @@ describe('callers of Deliver Email', () => {
 });
 
 describe('royalty-summary → Deliver Email', () => {
-  it('only a send job reaches it; a draft is recorded by Update Job', () => {
-    expect(targets('royalty-summary', 'Render Email')).toEqual(['Draft?']);
-    expect(targets('royalty-summary', 'Draft?', 0)).toEqual(['Deliver Email']);
-    expect(targets('royalty-summary', 'Draft?', 1)).toEqual(['Update Job']);
+  it('only a send job reaches it; a draft is recorded by Record Result', () => {
+    expect(targets('royalty-summary', 'Render Email')).toEqual(['Send Now?']);
+    expect(targets('royalty-summary', 'Send Now?', 0)).toEqual(['Deliver Email']);
+    expect(targets('royalty-summary', 'Send Now?', 1)).toEqual(['Record Result']);
     expect(targets('royalty-summary', 'Deliver Email')).toEqual([]);
-    expect(rendered(job({ delivery: 'draft' }))).toMatchObject({ route: 1, update: { status: 'DRAFTED' } });
+    expect(rendered(job({ delivery: 'draft' }))).toMatchObject({ send: false, update: { status: 'DRAFTED' } });
   });
   it('hands over the rendered email, the drill and the AI bookkeeping; sent_to waits for the send', () => {
     const j = job();
     const item = rendered(j);
-    expect(item.route).toBe(0);
+    expect(item.send).toBe(true);
     const inputs = inputsOf('royalty-summary', { $json: item });
     expectDeclaredTypes(inputs);
     expect(inputs).toMatchObject({ job_id: j.job_id, drill: false, email: { to: 'demo@inbox.test', subject: 'Your BookLeaf royalty summary' } });

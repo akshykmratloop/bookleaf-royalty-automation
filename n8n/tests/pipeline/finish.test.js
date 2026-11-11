@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { afterAi } from '../../src/pipeline/after-ai.js';
-import { classifyInsert, INSERT_ROUTES } from '../../src/pipeline/classify.js';
 import { buildContext } from '../../src/pipeline/context.js';
 import { errorBody, failure } from '../../src/pipeline/errors.js';
 import { internalFailureUpdate, jobIdFromExecution } from '../../src/pipeline/error-handler.js';
@@ -16,23 +15,6 @@ const job = prepareJob(payloadFor('AUTH002'), SETTINGS, NOW, fixedRandom).job;
 const ctx = buildContext(job).ctx;
 const ai = afterAi({ response: anthropicOk(), ctx, job, attempt: 1 }).ai;
 const ID = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
-
-describe('classifyInsert', () => {
-  const settings = { max_sends_per_hour: 60 };
-  it('new row → 202 QUEUED', () => {
-    expect(classifyInsert({ job_id: ID, status: 'QUEUED', inserted: true }, settings))
-      .toMatchObject({ route: INSERT_ROUTES.QUEUED, http_status: 202, response: { job_id: ID, status: 'QUEUED', duplicate: false } });
-  });
-  it('existing row → 200 duplicate with its current status', () => {
-    expect(classifyInsert({ job_id: ID, status: 'SENT', inserted: false }, settings))
-      .toMatchObject({ route: INSERT_ROUTES.DUPLICATE, http_status: 200, response: { job_id: ID, status: 'SENT', duplicate: true } });
-  });
-  it('no row → 429 RATE_LIMITED', () => {
-    const r = classifyInsert({ job_id: null, inserted: false, recent_sends: 60 }, settings);
-    expect(r).toMatchObject({ route: INSERT_ROUTES.RATE_LIMITED, http_status: 429, response: { error: { code: 'RATE_LIMITED' } } });
-    expect(classifyInsert({ job_id: null }, { max_sends_per_hour: 7 }).response.error.message).toContain('The limit is 7 per hour');
-  });
-});
 
 describe('deliveryFor / updates', () => {
   it('renders an email to the demo inbox with figures from data: the Deliver Email inputs', () => {
@@ -84,16 +66,20 @@ describe('job status query', () => {
 });
 
 describe('error workflow helpers', () => {
-  const execution = { data: { resultData: { runData: { 'Insert Job': [{ data: { main: [[{ json: { job_id: ID } }]] } }] } } } };
-  it('finds the job id in the failed execution', () => {
-    expect(jobIdFromExecution(execution)).toBe(ID);
-    expect(jobIdFromExecution({ data: { resultData: { runData: { 'Prepare Job': [{ data: { main: [[{ json: { job: { job_id: ID } } }]] } }] } } } })).toBe(ID);
+  const runOf = (node, json) => ({ data: { resultData: { runData: { [node]: [{ data: { main: [[{ json }]] } }] } } } });
+  it('finds the job id in the failed execution: the job Prepare Job made, or the draft Claim Draft took', () => {
+    expect(jobIdFromExecution(runOf('Prepare Job', { job: { job_id: ID } }))).toBe(ID);
+    expect(jobIdFromExecution(runOf('Claim Draft', { job_id: ID }))).toBe(ID);
     expect(jobIdFromExecution({})).toBeNull();
   });
+  it('never takes the job id from Enqueue Job: for a duplicate it is the earlier request\'s job, which must not be failed', () => {
+    expect(jobIdFromExecution(runOf('Enqueue Job', { outcome: 'duplicate', job_id: ID }))).toBeNull();
+    expect(jobIdFromExecution(runOf('Insert Job', { job_id: ID }))).toBeNull();
+  });
   it('builds an INTERNAL failure naming the node', () => {
-    const u = internalFailureUpdate(ID, { execution: { lastNodeExecuted: 'Update Job', error: { message: 'connection refused' } } });
+    const u = internalFailureUpdate(ID, { execution: { lastNodeExecuted: 'Record Result', error: { message: 'connection refused' } } });
     expect(u).toMatchObject({ job_id: ID, status: 'FAILED', error_code: 'INTERNAL' });
-    expect(u.error).toContain('Node "Update Job": connection refused');
+    expect(u.error).toContain('Node "Record Result": connection refused');
   });
   it('nodeErrorSummary is one line and redacts secrets', () => {
     const s = nodeErrorSummary({ error: { httpCode: '401', message: 'Bad key sk-ant-abcdefghijk', description: 'Bearer abcdefghijkl' } }, 'anthropic');

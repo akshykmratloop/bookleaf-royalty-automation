@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { afterAi, AI_ROUTES, detectProvider } from '../../src/pipeline/after-ai.js';
+import { afterAi, AI_OUTCOMES, aiUnavailable, detectProvider } from '../../src/pipeline/after-ai.js';
 import { buildContext, DRILL_MODEL } from '../../src/pipeline/context.js';
 import { prepareJob } from '../../src/pipeline/prepare.js';
 import { fixedRandom, NOW, SETTINGS } from './settings-fixture.js';
@@ -67,25 +67,37 @@ describe('afterAi', () => {
   });
   it('passes a grounded draft with usage, cost and verified figures', () => {
     const r = afterAi({ response: anthropicOk(), ctx, job, attempt: 1 });
-    expect(r.route).toBe(AI_ROUTES.PASS);
+    expect(r.outcome).toBe(AI_OUTCOMES.PASS);
     expect(r.ai).toMatchObject({ provider: 'anthropic', model: 'claude-sonnet-5-5', attempts: 1, input_tokens: 3000, output_tokens: 700, cost_usd: 0.013 });
     expect(r.ai.verified_figures).toBeGreaterThan(8);
     expect(r.ai.sections).toEqual(goodSections);
   });
-  it('a wrong figure triggers one regeneration with feedback, on the same provider', () => {
+  it('a wrong figure asks for one rewrite with feedback, with a request body for each provider', () => {
     const r = afterAi({ response: anthropicOk(wrongSections), ctx, job, attempt: 1 });
-    expect(r.route).toBe(AI_ROUTES.REGENERATE_ANTHROPIC);
-    const msgs = r.regenerate.body.messages;
+    expect(r.outcome).toBe(AI_OUTCOMES.REWRITE);
+    expect(Object.keys(r.rewrite)).toEqual(['anthropic', 'openai']);
+    const msgs = r.rewrite.anthropic.messages;
     expect(msgs.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
     expect(msgs[2].content).toContain('₹84,500');
+    expect(r.rewrite.anthropic).toMatchObject({ model: 'claude-sonnet-5-5', system: expect.anything() });
+    expect(r.rewrite.openai.input.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
+    expect(r.rewrite.openai.input[2].content).toContain('₹84,500');
+    expect(r.rewrite.openai.model).toBe('gpt-4.1-mini');
     const viaOpenai = afterAi({ response: openaiOk(wrongSections), ctx, job, attempt: 1 });
-    expect(viaOpenai.route).toBe(AI_ROUTES.REGENERATE_OPENAI);
-    expect(viaOpenai.regenerate.body.input).toHaveLength(3);
+    expect(viaOpenai.outcome).toBe(AI_OUTCOMES.REWRITE);
+    expect(viaOpenai.rewrite.anthropic.messages).toHaveLength(3);
+    expect(viaOpenai.rewrite.openai.input).toHaveLength(3);
+  });
+  it('the rewrite bodies keep the drills: primary_down still fails Anthropic, so OpenAI rewrites', () => {
+    const drilled = jobFor('AUTH002', { drills: { primary_down: true } });
+    const r = afterAi({ response: openaiOk(wrongSections), ctx: ctxFor(drilled), job: drilled, attempt: 1 });
+    expect(r.rewrite.anthropic.model).toBe(DRILL_MODEL);
+    expect(r.rewrite.openai.model).toBe('gpt-4.1-mini');
   });
   it('a second wrong draft fails AI_FACT_CHECK_FAILED and sums usage over both attempts', () => {
     const first = afterAi({ response: anthropicOk(wrongSections), ctx, job, attempt: 1 });
     const r = afterAi({ response: anthropicOk(wrongSections), ctx, job, attempt: 2, previous: first.ai });
-    expect(r.route).toBe(AI_ROUTES.FAIL);
+    expect(r.outcome).toBe(AI_OUTCOMES.FAIL);
     expect(r.failure).toMatchObject({ code: 'AI_FACT_CHECK_FAILED' });
     expect(r.failure.message).toContain('₹84,500');
     expect(r.ai).toMatchObject({ attempts: 2, input_tokens: 6000, output_tokens: 1400, cost_usd: 0.026 });
@@ -100,23 +112,24 @@ describe('afterAi', () => {
   it('a fixed second draft passes', () => {
     const first = afterAi({ response: anthropicOk(wrongSections), ctx, job, attempt: 1 });
     const r = afterAi({ response: openaiOk(), ctx, job, attempt: 2, previous: first.ai });
-    expect(r.route).toBe(AI_ROUTES.PASS);
+    expect(r.outcome).toBe(AI_OUTCOMES.PASS);
     expect(r.ai.provider).toBe('openai');
     expect(r.ai.cost_usd).toBeCloseTo(0.013 + (2800 * 0.4 + 600 * 1.6) / 1e6, 6);
   });
   it('an unusable answer is retried once, then fails AI_UNAVAILABLE', () => {
     const truncated = anthropicOk(goodSections, { stop_reason: 'max_tokens' });
     const first = afterAi({ response: truncated, ctx, job, attempt: 1 });
-    expect(first.route).toBe(AI_ROUTES.REGENERATE_ANTHROPIC);
-    expect(first.regenerate.body.messages).toHaveLength(1);
+    expect(first.outcome).toBe(AI_OUTCOMES.REWRITE);
+    expect(first.rewrite.anthropic.messages).toHaveLength(1);
+    expect(first.rewrite.openai.input).toHaveLength(1);
     const second = afterAi({ response: truncated, ctx, job, attempt: 2, previous: first.ai });
-    expect(second.failure).toMatchObject({ code: 'AI_UNAVAILABLE' });
+    expect(second).toMatchObject({ outcome: AI_OUTCOMES.FAIL, failure: { code: 'AI_UNAVAILABLE' } });
     expect(second.ai.input_tokens).toBe(6000);
   });
   it('flags layout problems as warnings without blocking', () => {
     const s = { ...goodSections, bookParagraphs: [goodSections.bookParagraphs[0], { code: 'BK999', text: 'Hello.' }], closing: 'Bye.' };
     const r = afterAi({ response: anthropicOk(s), ctx, job, attempt: 1 });
-    expect(r.route).toBe(AI_ROUTES.PASS);
+    expect(r.outcome).toBe(AI_OUTCOMES.PASS);
     expect(r.ai.warnings.map((w) => w.code)).toEqual(expect.arrayContaining(['UNKNOWN_BOOK', 'MISSING_BOOK']));
   });
   it('the word-count warning follows the chosen length', () => {
@@ -125,5 +138,23 @@ describe('afterAi', () => {
     const lengthWarn = (j) => afterAi({ response: anthropicOk(), ctx: ctxFor(j), job: j, attempt: 1 }).ai.warnings.find((w) => w.code === 'LENGTH');
     expect(lengthWarn(short)).toBeUndefined();
     expect(lengthWarn(detailed).message).toMatch(/target 250-450/);
+  });
+});
+
+describe('aiUnavailable', () => {
+  const anthropicError = { error: { httpCode: '529', message: 'Overloaded' } };
+  const openaiError = { error: { message: 'connect ETIMEDOUT' } };
+  it('the first draft: neither provider answered; both errors are named', () => {
+    const f = aiUnavailable({ rewriting: false, anthropicError, openaiError });
+    expect(f).toMatchObject({ ok: false, code: 'AI_UNAVAILABLE' });
+    expect(f.message).toBe('Neither AI provider returned a usable draft. anthropic: 529 - Overloaded | openai: connect ETIMEDOUT');
+  });
+  it('the rewrite: says it was the rewrite that failed', () => {
+    const f = aiUnavailable({ rewriting: true, anthropicError, openaiError });
+    expect(f.message).toBe('Neither AI provider returned a usable draft. The rewrite failed. anthropic: 529 - Overloaded | openai: connect ETIMEDOUT');
+  });
+  it('a missing error item still reads as an error', () => {
+    expect(aiUnavailable({ rewriting: false, anthropicError: undefined, openaiError: {} }).message)
+      .toContain('anthropic: unknown error | openai: unknown error');
   });
 });

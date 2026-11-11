@@ -2,11 +2,12 @@ import { failure, MAX_ERROR_LENGTH } from './errors.js';
 import { UUID } from './ids.js';
 
 /**
- * Nodes whose output carries the job id, most reliable first: royalty-summary's insert, and
- * approve-draft's claim (only a claimed draft belongs to that run; before the claim a failure
- * must not touch the job).
+ * Nodes whose output carries the job id: royalty-summary's Prepare Job (the job this run made; it is in
+ * the ledger only once enqueued, so an earlier failure updates nothing), and approve-draft's Claim
+ * Draft (only a claimed draft belongs to that run; before the claim a failure must not touch the job).
+ * Never Enqueue Job: for a duplicate it returns the earlier request's job, which this run must not fail.
  */
-export const JOB_ID_NODES = Object.freeze(['Insert Job', 'Prepare Job', 'Claim Draft']);
+export const JOB_ID_NODES = Object.freeze(['Prepare Job', 'Claim Draft']);
 
 function jobIdIn(runs) {
   for (const run of runs ?? []) {

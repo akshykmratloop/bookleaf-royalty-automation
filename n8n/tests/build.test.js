@@ -60,7 +60,7 @@ describe('built workflows', () => {
   });
   it('the four AI calls time out after ai_timeout_ms and retry as tuned at build time', () => {
     const ai = ofType('royalty-summary', 'httpRequest');
-    expect(ai.map((n) => n.name)).toEqual(['Call Anthropic', 'Call OpenAI (fallback)', 'Regenerate (Anthropic)', 'Regenerate (OpenAI)']);
+    expect(ai.map((n) => n.name)).toEqual(['Call Anthropic', 'Call OpenAI (fallback)', 'Rewrite (Anthropic)', 'Rewrite (OpenAI fallback)']);
     for (const n of ai) {
       expect(n.parameters.options.timeout, n.name).toBe("={{ $('Prepare Job').first().json.job.settings.ai_timeout_ms }}");
       expect(n, n.name).toMatchObject({ retryOnFail: true, maxTries: TUNING.aiRetries + 1, waitBetweenTries: TUNING.aiRetryWaitMs });
@@ -104,14 +104,16 @@ describe('built workflows', () => {
 
 describe('bundled Code nodes run standalone', () => {
   // The webhook has already checked the key (Header Auth): the Code nodes get no headers at all.
-  it('Prepare Job takes the request from the webhook and the settings from Load Settings', () => {
+  it('Prepare Job takes the request from the webhook, the settings from Load Settings and the execution id from n8n', () => {
     const node = nodeOf('royalty-summary', 'Prepare Job');
     const run = (body, settings = SETTINGS) => runCode(node, {
-      $json: { settings }, $: outputsOf({ 'Royalty Summary Webhook': { body } }),
+      $json: { settings }, $: outputsOf({ 'Royalty Summary Webhook': { body } }), $execution: { id: '81' },
     })[0].json;
-    expect(run(payloadFor('AUTH002', { delivery: 'draft' }))).toMatchObject({ route: 1, job: { author_code: 'AUTH002', delivery: 'draft', settings: SETTINGS } });
-    expect(run({ mode: 'x' })).toMatchObject({ route: 0, http_status: 400, response: { error: { code: 'VALIDATION' } } });
-    expect(run(payloadFor('AUTH002'), { ...SETTINGS, email_from: '' })).toMatchObject({ route: 0, http_status: 500, response: { error: { code: 'INTERNAL' } } });
+    const ok = run(payloadFor('AUTH002', { delivery: 'draft' }));
+    expect(ok).toMatchObject({ ok: true, job: { author_code: 'AUTH002', delivery: 'draft', settings: SETTINGS } });
+    expect(JSON.parse(ok.enqueue).execution_id).toBe('81');
+    expect(run({ mode: 'x' })).toMatchObject({ ok: false, http_status: 400, response: { error: { code: 'VALIDATION' } } });
+    expect(run(payloadFor('AUTH002'), { ...SETTINGS, email_from: '' })).toMatchObject({ ok: false, http_status: 500, response: { error: { code: 'INTERNAL' } } });
   });
   it('Parse Query validates the job ids', () => {
     const run = (query) => runCode(nodeOf('job-status', 'Parse Query'), { $json: { query } })[0].json;

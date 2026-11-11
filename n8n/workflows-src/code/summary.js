@@ -1,68 +1,57 @@
 /**
  * Entry points for the royalty-summary workflow's Code nodes. Each takes plain data (the node body
  * passes $json and earlier nodes' output) and returns n8n items. All logic lives in n8n/src.
+ * The IF nodes after them read a boolean (`ok`, `send`); "Draft OK?" reads `outcome`.
  */
-import { afterAi, AI_ROUTES } from '../../src/pipeline/after-ai.js';
-import { classifyInsert } from '../../src/pipeline/classify.js';
+import { afterAi, AI_OUTCOMES, aiUnavailable } from '../../src/pipeline/after-ai.js';
 import { buildContext } from '../../src/pipeline/context.js';
-import { errorBody, failure } from '../../src/pipeline/errors.js';
+import { errorBody } from '../../src/pipeline/errors.js';
 import { aiColumns, deliveryFor, draftUpdate, failedUpdate } from '../../src/pipeline/finalize.js';
-import { nodeErrorSummary } from '../../src/pipeline/node-errors.js';
-import { insertParams, prepareJob } from '../../src/pipeline/prepare.js';
+import { enqueueParams, prepareJob, rateLimitedResponse } from '../../src/pipeline/prepare.js';
 
 const item = (json) => [{ json }];
-const failItem = (job, f, extra) => item({ route: 0, update: failedUpdate(job, f, extra) });
-
-const rejected = (f) => item({ route: 0, http_status: f.http_status, response: errorBody(f) });
 
 /**
  * Check the settings (Load Settings) and the webhook body (the webhook already checked the key).
- * route 0 = reject (respond 4xx/500), 1 = insert the job.
+ * ok: `enqueue` is Enqueue Job's parameter and `rate_limited` the 429 body; not ok: the 4xx/500 answer.
  */
-export function prepare({ body, settings, now }) {
+export function prepare({ body, settings, now, executionId }) {
   const r = prepareJob(body, settings, now);
-  if (!r.ok) return rejected(r);
-  return item({ route: 1, job: r.job, insert_params: insertParams(r.job) });
+  if (!r.ok) return item({ ok: false, http_status: r.http_status, response: errorBody(r) });
+  return item({ ok: true, job: r.job, enqueue: enqueueParams(r.job, executionId), rate_limited: rateLimitedResponse(r.job.settings) });
 }
 
-/** Insert result → webhook answer. route 0 = queued (continue), 1 = duplicate, 2 = rate limited. */
-export const classify = ({ row, job }) => item(classifyInsert(row, job.settings));
-
-/** Data + integrity + facts + prompt. route 0 = fail the job, 1 = call the AI. */
+/** Data + integrity + facts + prompt. ok: call the AI; not ok: `update` fails the job. */
 export function context({ job }) {
   const r = buildContext(job);
-  return r.ok ? item({ route: 1, ctx: r.ctx }) : failItem(job, r);
-}
-
-export function aiFailed({ job, anthropicError, openaiError }) {
-  const detail = `${nodeErrorSummary(anthropicError, 'anthropic')} | ${nodeErrorSummary(openaiError, 'openai')}`;
-  return failItem(job, failure('AI_UNAVAILABLE', detail));
+  return r.ok ? item({ ok: true, ctx: r.ctx }) : item({ ok: false, update: failedUpdate(job, r) });
 }
 
 /**
- * Fact-check a draft. Attempt 1 routes: 0 send, 1 regenerate (Anthropic), 2 regenerate (OpenAI), 3 fail.
- * Attempt 2 routes: 0 send, 1 fail.
+ * Neither provider answered, for the first draft or for the rewrite (`previous`: the first draft's AI
+ * usage, recorded with the failure).
+ */
+export function aiFailed({ job, rewriting, anthropicError, openaiError, previous }) {
+  return item({ update: failedUpdate(job, aiUnavailable({ rewriting, anthropicError, openaiError }), aiColumns(previous)) });
+}
+
+/**
+ * Fact-check a draft (attempt 1: Check Draft) or its rewrite (attempt 2: Check Rewrite). outcome PASS
+ * (ok), REWRITE (`rewrite` holds both providers' bodies) or FAIL (`update` fails the job).
  */
 export function checkDraft({ response, ctx, job, attempt, previous }) {
   const r = afterAi({ response, ctx, job, attempt, previous });
-  const out = { outcome: r.outcome, ai: r.ai, issues: r.issues };
-  if (r.route === AI_ROUTES.FAIL) {
-    const update = failedUpdate(job, r.failure, aiColumns(r.ai));
-    return item({ ...out, route: attempt === 1 ? AI_ROUTES.FAIL : 1, update });
-  }
-  if (r.route === AI_ROUTES.PASS) return item({ ...out, route: 0 });
-  return item({ ...out, route: r.route, regenerate: r.regenerate });
-}
-
-export function regenerationFailed({ job, error, previous }) {
-  return failItem(job, failure('AI_UNAVAILABLE', `Regeneration failed. ${nodeErrorSummary(error, previous?.provider ?? 'ai')}`), aiColumns(previous));
+  const out = { outcome: r.outcome, ok: r.outcome === AI_OUTCOMES.PASS, ai: r.ai, issues: r.issues };
+  if (r.outcome === AI_OUTCOMES.FAIL) return item({ ...out, update: failedUpdate(job, r.failure, aiColumns(r.ai)) });
+  if (r.outcome === AI_OUTCOMES.REWRITE) return item({ ...out, rewrite: r.rewrite });
+  return item(out);
 }
 
 /**
- * route 0 = send: `deliver` holds the Deliver Email sub-workflow's inputs (it saves, sends and records);
- * 1 = delivery=draft: save the checked, rendered draft for an admin to approve; nothing is sent.
+ * send: `deliver` holds the Deliver Email sub-workflow's inputs (it saves, sends and records);
+ * not send (delivery=draft): `update` saves the checked, rendered draft for an admin to approve.
  */
 export function render({ ctx, job, ai }) {
-  if (job.delivery === 'draft') return item({ route: 1, update: draftUpdate({ ctx, job, ai }) });
-  return item({ route: 0, deliver: deliveryFor({ ctx, job, ai }) });
+  if (job.delivery === 'draft') return item({ send: false, update: draftUpdate({ ctx, job, ai }) });
+  return item({ send: true, deliver: deliveryFor({ ctx, job, ai }) });
 }

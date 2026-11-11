@@ -3,7 +3,7 @@ import { ERROR_CODES, MAX_ERROR_LENGTH } from '../../src/pipeline/errors.js';
 import { MAX_SUMMARY_LENGTH } from '../../src/pipeline/node-errors.js';
 import { CLAIM_DRAFT, DISCARD_DRAFT, SELECT_DRAFT } from '../../src/pipeline/sql-approve.js';
 import {
-  INSERT_JOB, LOAD_SETTINGS, MARK_EMAIL_FAILED, MARK_PROCESSING, MARK_SENT, SELECT_JOBS, SET_STAGE, SWEEP_STUCK, UPDATE_JOB,
+  ENQUEUE_JOB, LOAD_SETTINGS, MARK_EMAIL_FAILED, MARK_PROCESSING, MARK_SENT, SELECT_JOBS, SET_STAGE, SWEEP_STUCK, UPDATE_JOB,
 } from '../../src/pipeline/sql.js';
 import { shapeJobs } from '../../src/pipeline/status.js';
 
@@ -29,12 +29,13 @@ describe('job ledger SQL guards', () => {
   });
   it('stage updates never move a finished job', () => {
     expect(SET_STAGE).toMatch(/status IN \('QUEUED', 'PROCESSING'\)/);
-    expect(MARK_PROCESSING).toContain("stage = 'reading_data'");
-    expect(INSERT_JOB).toContain("'queued'");
+    expect(MARK_PROCESSING).toContain("stage = 'writing'");
+    expect(MARK_PROCESSING).toContain("AND status = 'QUEUED'");
   });
-  it('no push callback: new jobs are NOT_NEEDED and nothing updates callback_status afterwards', () => {
-    expect(INSERT_JOB).toContain("'NOT_NEEDED'");
-    expect(INSERT_JOB).not.toContain("v->>'callback_status'");
+  it('a request is enqueued by enqueue_royalty_job (one advisory lock: duplicate, hourly cap, insert) with one JSON parameter', () => {
+    expect(ENQUEUE_JOB).toBe('SELECT outcome, job_id, status, error_code FROM enqueue_royalty_job($1::jsonb)');
+  });
+  it('no push callback: nothing updates callback_status (the enqueue function writes NOT_NEEDED)', () => {
     expect(UPDATE_JOB).not.toContain('callback_status');
   });
   it('a draft is claimed atomically: only DRAFTED, only within draft_ttl_hours', () => {

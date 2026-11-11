@@ -27,7 +27,7 @@ Bubble log) to Failed with a reason, and it is written to the job ledger with an
 | Crash in the workflow (unhandled) | n8n error workflow | Job becomes Failed, reason "Unexpected error" | Job FAILED, execution id kept |
 | Job stuck (worker died, n8n restarted) | Sweeper runs every 5 minutes; looks for QUEUED/PROCESSING older than a limit | Log moves to Failed: "Timed out" | Job FAILED, code `STUCK` |
 | Rate limit (too many requests) | Webhook limiter and provider 429 | 429 on the webhook: Bubble shows "Too many requests, try again". Provider 429: retried, then failover. | Code `RATE_LIMITED` {{VERIFY}} |
-| Duplicate request | Unique `idem_key` | The second click is marked Duplicate and points to the first job | `ON CONFLICT` returns existing job |
+| Duplicate request | `enqueue_royalty_job` (one advisory lock; same author + fingerprint within `duplicate_window_minutes`) | The second click is marked Duplicate and points to the first job | The function returns the existing job |
 
 Exact retry counts, limits and on-screen wording: {{VERIFY}} against the final workflow and app.
 

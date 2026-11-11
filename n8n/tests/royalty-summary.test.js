@@ -1,0 +1,161 @@
+import { describe, expect, it } from 'vitest';
+import { AI_OUTCOMES } from '../src/pipeline/after-ai.js';
+import { buildContext } from '../src/pipeline/context.js';
+import { prepareJob, rateLimitedResponse } from '../src/pipeline/prepare.js';
+import { ENQUEUE_JOB, UPDATE_JOB } from '../src/pipeline/sql.js';
+import { anthropicOk, openaiOk, wrongSections } from './pipeline/ai-fixtures.js';
+import { payloadFor } from './pipeline/fixtures.js';
+import { fixedRandom, NOW, SETTINGS } from './pipeline/settings-fixture.js';
+import { built, evaluate, nodeOf, runCode, targets } from './built.js';
+
+/** "BookLeaf - Royalty Summary": intake, ledger, data, AI writer, fact check, render and deliver, record. */
+const WF = 'royalty-summary';
+const ID = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
+const working = built[WF].nodes.filter((n) => n.type !== 'n8n-nodes-base.stickyNote');
+const typeCounts = () => working.reduce((acc, n) => ({ ...acc, [n.type.replace('n8n-nodes-base.', '')]: (acc[n.type.replace('n8n-nodes-base.', '')] ?? 0) + 1 }), {});
+const job = prepareJob(payloadFor('AUTH002'), SETTINGS, NOW, fixedRandom).job;
+const ctx = buildContext(job).ctx;
+/**
+ * `$` as n8n gives it to a Code node: `first()` of a node's output, `all(1)` of its error output and
+ * `isExecuted`. @param {Record<string, Object>} outputs @param {Record<string, Object>} [errors]
+ */
+const nodes = (outputs, errors = {}) => (name) => ({
+  isExecuted: name in outputs || name in errors,
+  first: () => ({ json: outputs[name] }),
+  all: (branch = 0) => (branch === 1 ? (name in errors ? [{ json: errors[name] }] : []) : [{ json: outputs[name] }]),
+});
+const run = (name, $json, outputs, errors) => runCode(nodeOf(WF, name), { $json, $: nodes(outputs, errors), $execution: { id: '4711' } })[0].json;
+const ruleOutputs = (name) => nodeOf(WF, name).parameters.rules.values.map((r) => [r.outputKey, r.conditions.conditions[0].rightValue]);
+
+describe('royalty-summary shape', () => {
+  it('has 27 working nodes: 6 Code, 4 IF, 2 Switch, 5 Postgres, 4 HTTP, 4 Respond, Deliver Email and the webhook', () => {
+    expect(working).toHaveLength(27);
+    expect(typeCounts()).toEqual({
+      webhook: 1, postgres: 5, code: 6, if: 4, switch: 2, respondToWebhook: 4, httpRequest: 4, executeWorkflow: 1,
+    });
+  });
+  it('every Switch is in Rules mode with named outputs (filter version 2); none picks an output by number', () => {
+    for (const n of working.filter((x) => x.type === 'n8n-nodes-base.switch')) {
+      expect(n, n.name).toMatchObject({ typeVersion: 3.2, parameters: { mode: 'rules' } });
+      for (const rule of n.parameters.rules.values) {
+        expect(rule, n.name).toMatchObject({ renameOutput: true, outputKey: expect.stringMatching(/^[A-Z][a-z ]+$/) });
+        expect(rule.conditions.options, n.name).toEqual({ caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 });
+        expect(rule.conditions.conditions[0].operator, n.name).toEqual({ type: 'string', operation: 'equals' });
+      }
+    }
+  });
+  it('every IF is 2.2 and asks the happy-path question, so true is the main row', () => {
+    const ifs = working.filter((x) => x.type === 'n8n-nodes-base.if');
+    expect(ifs.map((n) => [n.name, n.parameters.conditions.conditions[0].leftValue])).toEqual([
+      ['Request Valid?', '={{ $json.ok }}'], ['Context OK?', '={{ $json.ok }}'], ['Rewrite OK?', '={{ $json.ok }}'], ['Send Now?', '={{ $json.send }}'],
+    ]);
+    for (const n of ifs) expect(n.parameters.conditions.conditions[0].operator, n.name).toEqual({ type: 'boolean', operation: 'true', singleValue: true });
+  });
+});
+
+describe('intake and ledger', () => {
+  it('Prepare Job checks the request and builds the enqueue parameter with this execution\'s id and the 429 answer', () => {
+    const out = run('Prepare Job', { settings: SETTINGS }, { 'Royalty Summary Webhook': { body: payloadFor('AUTH002') } });
+    expect(out).toMatchObject({ ok: true, job: { author_code: 'AUTH002' }, rate_limited: rateLimitedResponse(SETTINGS) });
+    expect(JSON.parse(out.enqueue)).toMatchObject({ job_id: out.job.job_id, execution_id: '4711', fingerprint: out.job.fingerprint });
+    expect(run('Prepare Job', { settings: SETTINGS }, { 'Royalty Summary Webhook': { body: { mode: 'x' } } }))
+      .toMatchObject({ ok: false, http_status: 400, response: { error: { code: 'VALIDATION' } } });
+  });
+  it('a valid request goes to Enqueue Job (enqueue_royalty_job); a bad one is answered by Respond Rejected', () => {
+    expect(targets(WF, 'Prepare Job')).toEqual(['Request Valid?']);
+    expect(targets(WF, 'Request Valid?', 0)).toEqual(['Enqueue Job']);
+    expect(targets(WF, 'Request Valid?', 1)).toEqual(['Respond Rejected']);
+    expect(nodeOf(WF, 'Enqueue Job').parameters).toMatchObject({ query: ENQUEUE_JOB, options: { queryReplacement: '={{ $json.enqueue }}' } });
+  });
+  it('Outcome names its outputs after the enqueue outcome: Queued, Duplicate, Rate limited', () => {
+    expect(nodeOf(WF, 'Outcome').parameters.rules.values[0].conditions.conditions[0].leftValue).toBe('={{ $json.outcome }}');
+    expect(ruleOutputs('Outcome')).toEqual([['Queued', 'queued'], ['Duplicate', 'duplicate'], ['Rate limited', 'rate_limited']]);
+    expect([0, 1, 2].map((i) => targets(WF, 'Outcome', i))).toEqual([['Respond 202'], ['Respond Duplicate'], ['Respond 429']]);
+    expect(targets(WF, 'Respond 202')).toEqual(['Mark Processing']);
+    for (const r of ['Respond Duplicate', 'Respond 429', 'Respond Rejected']) expect(targets(WF, r), r).toEqual([]);
+  });
+  it('answers Bubble exactly as before: 202 {job_id, status, duplicate}, 200 duplicate (+error_code), 429 RATE_LIMITED', () => {
+    const answer = (name, $json) => {
+      const p = nodeOf(WF, name).parameters;
+      const g = { $json, $: nodes({ 'Prepare Job': { rate_limited: rateLimitedResponse(SETTINGS) } }) };
+      return { status: evaluate(p.options.responseCode, g), body: evaluate(p.responseBody, g) };
+    };
+    const queued = { outcome: 'queued', job_id: ID, status: 'QUEUED', error_code: null };
+    expect(answer('Respond 202', queued)).toEqual({ status: 202, body: { job_id: ID, status: 'QUEUED', duplicate: false } });
+    expect(answer('Respond Duplicate', { ...queued, outcome: 'duplicate', status: 'SENT' }))
+      .toEqual({ status: 200, body: { job_id: ID, status: 'SENT', duplicate: true } });
+    expect(answer('Respond Duplicate', { ...queued, outcome: 'duplicate', status: 'FAILED', error_code: 'AI_UNAVAILABLE' }))
+      .toEqual({ status: 200, body: { job_id: ID, status: 'FAILED', duplicate: true, error_code: 'AI_UNAVAILABLE' } });
+    expect(answer('Respond 429', { outcome: 'rate_limited', job_id: null }))
+      .toEqual({ status: 429, body: rateLimitedResponse(SETTINGS) });
+  });
+});
+
+describe('AI writer, fact check and rewrite', () => {
+  it('the first draft: Anthropic, then OpenAI on its error output, then AI Failed', () => {
+    expect(targets(WF, 'Mark Processing')).toEqual(['Build Context']);
+    expect(targets(WF, 'Context OK?', 0)).toEqual(['Call Anthropic']);
+    expect([targets(WF, 'Call Anthropic', 0), targets(WF, 'Call Anthropic', 1)]).toEqual([['Check Draft'], ['Call OpenAI (fallback)']]);
+    expect([targets(WF, 'Call OpenAI (fallback)', 0), targets(WF, 'Call OpenAI (fallback)', 1)]).toEqual([['Check Draft'], ['AI Failed']]);
+  });
+  it('Draft OK? names its outputs Pass, Rewrite and Fail after the fact check\'s outcome', () => {
+    expect(ruleOutputs('Draft OK?')).toEqual([['Pass', AI_OUTCOMES.PASS], ['Rewrite', AI_OUTCOMES.REWRITE], ['Fail', AI_OUTCOMES.FAIL]]);
+    expect([0, 1, 2].map((i) => targets(WF, 'Draft OK?', i))).toEqual([['Render Email'], ['Stage: Rewriting'], ['Record Result']]);
+  });
+  it('the rewrite has the same fallback as the first draft: Anthropic, then OpenAI, then AI Failed', () => {
+    expect(targets(WF, 'Stage: Rewriting')).toEqual(['Rewrite (Anthropic)']);
+    expect([targets(WF, 'Rewrite (Anthropic)', 0), targets(WF, 'Rewrite (Anthropic)', 1)]).toEqual([['Check Rewrite'], ['Rewrite (OpenAI fallback)']]);
+    expect([targets(WF, 'Rewrite (OpenAI fallback)', 0), targets(WF, 'Rewrite (OpenAI fallback)', 1)]).toEqual([['Check Rewrite'], ['AI Failed']]);
+    expect(nodeOf(WF, 'Rewrite (Anthropic)').parameters.jsonBody).toBe("={{ JSON.stringify($('Check Draft').first().json.rewrite.anthropic) }}");
+    expect(nodeOf(WF, 'Rewrite (OpenAI fallback)').parameters.jsonBody).toBe("={{ JSON.stringify($('Check Draft').first().json.rewrite.openai) }}");
+    expect([targets(WF, 'Rewrite OK?', 0), targets(WF, 'Rewrite OK?', 1)]).toEqual([['Render Email'], ['Record Result']]);
+  });
+  it('Check Draft and Check Rewrite run the same fact check on whichever provider answered', () => {
+    const outputs = { 'Prepare Job': { job }, 'Build Context': { ctx } };
+    const first = run('Check Draft', anthropicOk(wrongSections), outputs);
+    expect(first).toMatchObject({ outcome: AI_OUTCOMES.REWRITE, ok: false, rewrite: { anthropic: { messages: expect.any(Array) }, openai: { input: expect.any(Array) } } });
+    const second = run('Check Rewrite', openaiOk(), { ...outputs, 'Check Draft': first });
+    expect(second).toMatchObject({ outcome: AI_OUTCOMES.PASS, ok: true, ai: { provider: 'openai', attempts: 2 } });
+    const failed = run('Check Rewrite', anthropicOk(wrongSections), { ...outputs, 'Check Draft': first });
+    expect(failed).toMatchObject({ ok: false, update: { status: 'FAILED', error_code: 'AI_FACT_CHECK_FAILED', ai_attempts: 2 } });
+  });
+  it('one AI Failed node serves both phases and names both providers\' errors', () => {
+    const base = { 'Prepare Job': { job } };
+    const anthropicError = { error: { httpCode: '529', message: 'Overloaded' } };
+    const write = run('AI Failed', { error: { message: 'connect ETIMEDOUT' } }, base, { 'Call Anthropic': anthropicError });
+    expect(write.update).toMatchObject({ job_id: job.job_id, status: 'FAILED', error_code: 'AI_UNAVAILABLE' });
+    expect(write.update.error).toMatch(/draft\. anthropic: 529 - Overloaded \| openai: connect ETIMEDOUT$/);
+    const checked = { ai: { provider: 'anthropic', attempts: 1, input_tokens: 10, output_tokens: 5, cost_usd: 0.1 } };
+    const outputs = { ...base, 'Stage: Rewriting': {}, 'Check Draft': checked };
+    const rewrite = run('AI Failed', { error: { message: 'down' } }, outputs, { 'Rewrite (Anthropic)': anthropicError });
+    expect(rewrite.update.error).toContain('The rewrite failed. anthropic: 529 - Overloaded | openai: down');
+    expect(rewrite.update).toMatchObject({ ai_attempts: 1, provider: 'anthropic', cost_usd: 0.1 });
+  });
+});
+
+describe('render, deliver and record', () => {
+  it('Send Now? sends through Deliver Email; drafts and every failure end in Record Result', () => {
+    expect([targets(WF, 'Send Now?', 0), targets(WF, 'Send Now?', 1)]).toEqual([['Deliver Email'], ['Record Result']]);
+    const feeds = Object.entries(built[WF].connections)
+      .flatMap(([from, c]) => c.main.flatMap((t, i) => t.filter((x) => x.node === 'Record Result').map(() => `${from}#${i}`)));
+    expect(feeds.sort()).toEqual(['AI Failed#0', 'Context OK?#1', 'Draft OK?#2', 'Rewrite OK?#1', 'Send Now?#1']);
+    expect(nodeOf(WF, 'Record Result').parameters).toMatchObject({ query: UPDATE_JOB, options: { queryReplacement: '={{ JSON.stringify($json.update) }}' } });
+    expect(targets(WF, 'Record Result')).toEqual([]);
+  });
+  it('reads left to right: the happy path on one row, every other branch below it', () => {
+    const y = (name) => nodeOf(WF, name).position[1];
+    const happy = ['Royalty Summary Webhook', 'Load Settings', 'Prepare Job', 'Request Valid?', 'Enqueue Job', 'Outcome', 'Respond 202',
+      'Mark Processing', 'Build Context', 'Context OK?', 'Call Anthropic', 'Check Draft', 'Draft OK?', 'Render Email', 'Send Now?', 'Deliver Email'];
+    expect(happy.map(y)).toEqual(happy.map(() => 0));
+    const x = happy.map((name) => nodeOf(WF, name).position[0]);
+    expect(x).toEqual([...x].sort((a, b) => a - b));
+    for (const n of working.filter((w) => !happy.includes(w.name))) expect(y(n.name), n.name).toBeGreaterThan(0);
+    const about = nodeOf(WF, 'About');
+    expect(about.position[1] + about.parameters.height, 'the About note ends above the nodes').toBeLessThan(0);
+  });
+  it('explains the non-obvious nodes with a note on the canvas', () => {
+    for (const name of ['Enqueue Job', 'Call OpenAI (fallback)', 'AI Failed', 'Rewrite (OpenAI fallback)', 'Send Now?', 'Record Result', 'Deliver Email']) {
+      expect(nodeOf(WF, name), name).toMatchObject({ notesInFlow: true, notes: expect.stringMatching(/\w/) });
+    }
+  });
+});

@@ -79,7 +79,7 @@ Bubble date (ISO instant, read in India time), or empty.
 | Status | When | Body |
 |---|---|---|
 | 202 | New job queued | `{ "job_id": "…", "status": "QUEUED", "duplicate": false }` |
-| 200 | Same request within the idempotency window (double click) | `{ "job_id": "<the existing job>", "status": "<its current status>", "duplicate": true }` |
+| 200 | Same request within `duplicate_window_minutes` (double click) | `{ "job_id": "<the existing job>", "status": "<its current status>", "duplicate": true }` |
 | 400 | Validation | `{ "error": { "code": "VALIDATION", "message": "…", "retryable": false, "fields": [{ "path": "books[0].copies_sold", "code": "TYPE", "message": "must be an integer" }] } }` |
 | 403 | Missing / wrong `X-BookLeaf-Key` (n8n answers; the workflow never starts) | plain text `Authorization data is wrong!` |
 | 422 | `NO_RECIPIENT` | error object as above |
@@ -87,10 +87,14 @@ Bubble date (ISO instant, read in India time), or empty.
 | 500 | The server settings are missing or invalid (each one named, no value shown) | `{ "error": { "code": "INTERNAL", "message": "… Server settings are invalid: email_from must be an email address." } }` |
 | 500 | n8n itself failed before answering | `{ "message": "Error in workflow" }` |
 
-**Idempotency:** the key is author id + a SHA-256 fingerprint of everything that shapes the email
-(books, figures, reference date, recipient, drills, attempt, delivery, tone, length, note, sign_off)
-+ the `duplicate_window_minutes` window (10 minutes). The same click twice returns the same job;
-changed data, a new `attempt` or the next window makes a new job.
+**Idempotency:** each request has a fingerprint, a SHA-256 of everything that shapes the email
+(books, figures, reference date, recipient, drills, attempt, delivery, tone, length, note, sign_off).
+The database function `enqueue_royalty_job` decides under one lock, so simultaneous clicks are
+answered one at a time: the same author and fingerprint within the last `duplicate_window_minutes`
+(10, a sliding window) returns that job (200, `duplicate: true`, with its `error_code` if it failed);
+otherwise more than `max_sends_per_hour` jobs in the last hour is a 429; otherwise a new job (202).
+Changed data or a new `attempt` makes a new job at once. However many identical clicks arrive at the
+same moment, exactly one gets 202.
 
 ## GET /webhook/royalty-summary/jobs
 
@@ -128,10 +132,10 @@ job finishes in about 10-20 seconds.
 | Stage | Meaning |
 |---|---|
 | `queued` | Accepted, not started. |
-| `reading_data` | Loading and checking the author's data. |
+| `reading_data` | Loading and checking the author's data (older jobs only: it takes milliseconds, so new jobs go from `queued` straight to `writing`). |
 | `writing` | The AI is writing (Anthropic, or the OpenAI fallback). |
-| `checking` | The draft is being fact-checked. |
-| `rewriting` | The draft failed the check; the AI is rewriting it once with feedback. |
+| `checking` | The draft is being fact-checked (older jobs only: the check takes milliseconds and is no longer shown). |
+| `rewriting` | The draft failed the check; the AI is rewriting it once with the checker's notes (Anthropic, or the OpenAI fallback). |
 | `sending` | The finished email is saved on the job and handed to SMTP, once (also right after an approved draft is claimed). |
 | `sent` / `failed` | Final. |
 | `drafted` | Final until approved: a checked draft is waiting (status `DRAFTED`). |
@@ -186,8 +190,8 @@ a bad key):
 | `RATE_LIMITED` | Hourly limit reached (synchronous). | Later |
 | `INTEGRITY` | Figures do not add up (earned ≠ copies × royalty, paid + pending ≠ earned, payout in the future). No email is written. | No, fix the data |
 | `DATA_UNAVAILABLE` | The author data was withheld (the `data_down` drill). | Yes |
-| `AI_UNAVAILABLE` | Anthropic failed and the OpenAI fallback failed too (or the answer was unusable twice). | Yes |
-| `AI_FACT_CHECK_FAILED` | The draft quoted a figure not in the data, and the one regeneration with feedback did too. Nothing was sent. | Yes |
+| `AI_UNAVAILABLE` | Anthropic failed and the OpenAI fallback failed too, for the first draft or for the rewrite (`error` names both providers' errors and says when it was the rewrite), or the answer was unusable twice. | Yes |
+| `AI_FACT_CHECK_FAILED` | The draft quoted a figure not in the data, and the one rewrite with the checker's notes did too. Nothing was sent. | Yes |
 | `EMAIL_FAILED` | The SMTP server refused the email or could not be reached. Sending is tried once (a second try after a lost answer could email the author twice); `error` ends with the server's own message (`… smtp: connect ECONNREFUSED …`). The email is kept on the job. | Yes |
 | `TIMEOUT` | Not finished within `stuck_job_minutes` (sweeper). | Yes |
 | `INTERNAL` | Unexpected workflow error; `error` names the node. | Yes |
@@ -214,7 +218,7 @@ written with `n8n/tools/settings-sql.mjs` and never committed. Job status reads 
 | `ai_timeout_ms` | 45000 | Time limit of each AI request |
 | `model_prices` | USD per million tokens per model | `cost_usd` (a model with no price records none) |
 | `max_sends_per_hour` | 60 | The 429 limit |
-| `duplicate_window_minutes` | 10 | The idempotency window |
+| `duplicate_window_minutes` | 10 | The duplicate window (sliding) |
 | `draft_ttl_hours` | 24 | `DRAFT_EXPIRED` |
 | `stuck_job_minutes` | 10 | The sweeper's `TIMEOUT` |
 | `alert_email` | *(per environment)* | Who is told about unexpected errors, once the error handler sends alerts (empty = nobody) |
