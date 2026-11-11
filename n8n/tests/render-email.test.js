@@ -29,6 +29,11 @@ describe('escapeHtml', () => {
 });
 
 describe('renderEmail', () => {
+  it('escapes a book title exactly once in the figures table ("Code & Karma", not "&amp;amp;")', () => {
+    const r = render('AUTH002');
+    expect(r.html).toContain('>Code &amp; Karma</td>');
+    expect(r.html).not.toContain('&amp;amp;');
+  });
   it('renders brand, layout constraints and the subject', () => {
     const r = render('AUTH001');
     expect(r.subject).toBe('Your royalty summary');

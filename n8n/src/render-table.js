@@ -18,7 +18,7 @@ function pill(book) {
 }
 
 function row(b) {
-  const cells = [escapeHtml(b.title), b.copiesSold, formatInr(b.earned), formatInr(b.paid), formatInr(b.pending), lastPayout(b)];
+  const cells = [b.title, b.copiesSold, formatInr(b.earned), formatInr(b.paid), formatInr(b.pending), lastPayout(b)];
   return `<tr>${cells.map((c) => `<td style="${TD}">${typeof c === 'number' ? c : escapeHtml(c)}</td>`).join('')}<td style="${TD}">${pill(b)}</td></tr>`;
 }
 
