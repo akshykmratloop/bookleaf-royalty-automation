@@ -995,7 +995,7 @@ a deploy to another instance should use `deploy.mjs`, an import there keeps thos
   any other address in a draft now fails it. The system prompt is unchanged (`PROMPT_VERSION` stays), so a model that
   adds contact details is corrected by the rewrite, at the cost of one extra AI call.
 
-## Summary of the security review fixes (commits 3650d35, 5bfee44 and the fix 3 commit)
+## Summary of the security review fixes (commits 3650d35, 5bfee44 and 002e41e)
 
 - **HIGH:** emails go only to `default_demo_inbox` or `allowed_demo_inboxes`; any other `demo_inbox` is 422
   `RECIPIENT_NOT_ALLOWED` with no job.
