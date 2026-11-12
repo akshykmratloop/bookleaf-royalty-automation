@@ -165,6 +165,7 @@ describe('admin page', () => {
     const css = elements.find((e) => e.id === 'ad_css').properties.html;
     expect(css).toContain('bl-login-theme');
     expect(css).toContain(POPUP_CSS);
+    expect(css).toContain('html[data-theme="dark"] .bl-mail'); // the email preview follows dark mode
     for (const id of SCROLL_IDS) expect(ids.has(id), id).toBe(true);
     expect(elements.some((e) => e.id === 'ad_theme_toggle')).toBe(true);
   });

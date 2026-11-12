@@ -44,4 +44,4 @@ html.vt-fade::view-transition-new(root) { animation: bl-vt-in .35s ease both; }
 @keyframes bl-vt-in { from { opacity: 0; } }
 
 /* Pop-up backdrop: Bubble's .greyout carries an inline colour from the editor. */
-.greyout { background-color: var(--bl-backdrop) !important; }
+.greyout { background-color: var(--bl-backdrop) !important; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }

@@ -9,6 +9,26 @@ import { POPUP_CSS } from './popupStyle.mjs';
 
 export { CHART_JS } from './chartScript.mjs';
 
+/**
+ * The email preview in dark mode. The email itself (n8n/src/render-table.js) is written for mail clients
+ * with fixed inline colours; only this preview is re-coloured, by matching those inline colours. The green
+ * header band keeps its colours; the status pills use the theme's success / warning / danger tones.
+ */
+const D = 'html[data-theme="dark"] .bl-mail';
+export const MAIL_DARK_CSS = `
+<style>
+${D}{background:#211a20!important;color:var(--bl-text-1)!important;color-scheme:dark;border-color:var(--bl-border-strong)!important}
+${D} table[style*="background:#faf7f2"]{background:#1a1419!important}
+${D} table[style*="background:#ffffff"]{background:#241c23!important}
+${D} p,${D} td{color:var(--bl-text-1)!important}
+${D} th{color:var(--bl-text-2)!important;border-bottom-color:#4f9a78!important}
+${D} td[style*="border-bottom:1px solid #e6e0d6"]{border-bottom-color:var(--bl-border-strong)!important}
+${D} td[style*="color:#7a7a7a"]{color:var(--bl-text-3)!important;border-top-color:var(--bl-border-strong)!important}
+${D} span[style*="background:#e1f1e7"]{color:var(--bl-success)!important;background:var(--bl-success-bg)!important}
+${D} span[style*="background:#fff1cc"]{color:var(--bl-warning)!important;background:var(--bl-warning-bg)!important}
+${D} span[style*="background:#fde7e5"]{color:var(--bl-danger)!important;background:var(--bl-danger-bg)!important}
+</style>`;
+
 export const CSS = `
 <style>
 html,body{height:100%;overflow:hidden!important;overscroll-behavior:none;background-color:var(--bl-bg,#fbf3f1)}
@@ -62,4 +82,4 @@ const SCRIPT = `
 </script>`;
 
 /** Everything the sidebar's style element carries after the theme layer (pop-up layout included). */
-export const SHELL_HTML = CSS + POPUP_CSS + SCRIPT + CHART_HTML;
+export const SHELL_HTML = CSS + MAIL_DARK_CSS + POPUP_CSS + SCRIPT + CHART_HTML;

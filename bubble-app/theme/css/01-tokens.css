@@ -55,7 +55,7 @@ html[data-theme="dark"] {
   --bl-info: #95b8ff; --bl-info-bg: rgba(149, 184, 255, .13);
   --bl-shadow-soft: rgba(0, 0, 0, .35); --bl-shadow-card: rgba(0, 0, 0, .55);
   --bl-shadow-lift: rgba(200, 71, 90, .32); --bl-shadow-float: rgba(0, 0, 0, .7);
-  --bl-focus-ring: rgba(238, 122, 142, .28); --bl-backdrop: rgba(8, 4, 10, .62);
+  --bl-focus-ring: rgba(238, 122, 142, .28); --bl-backdrop: rgba(8, 6, 10, .72);
   --bl-mail-frame: #2a1b2d;
 
   --bl-chart-text: #c0aab4; --bl-chart-grid: rgba(255, 228, 236, .08); --bl-chart-axis: rgba(255, 228, 236, .16);
