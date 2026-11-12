@@ -63,7 +63,7 @@ sequenceDiagram
   N8->>PG: Deliver Email: save the email, stage sending
   N8->>SMTP: send HTML + text, once
   N8->>PG: job SENT (or FAILED, EMAIL_FAILED)
-  loop every few seconds
+  loop every 3 s
     Bub->>N8: GET /jobs?ids=job_id
     N8-->>Bub: status, stage, error, subject, cost
   end
@@ -83,11 +83,15 @@ sequenceDiagram
     Bub->>N8: POST webhook (mode=bulk, batch_id)
     N8-->>Bub: 202 {job_id}
   end
-  Bub->>N8: GET /jobs?ids=<up to 50 job ids> (one call per poll)
+  loop every 3 s while a log is unsettled
+    Bub->>N8: GET /jobs?ids=<oldest job still Processing>
+    N8-->>Bub: status, stage, error, subject, cost
+  end
   Bub-->>Admin: progress x / N, Retry failed
 ```
 
-Each author is a separate job. One failure never stops the others.
+Each author is a separate job. One failure never stops the others. Bubble's poller asks about one
+job per tick (the oldest still Processing); the endpoint itself accepts up to 50 ids.
 
 ## Why Bubble polls
 
@@ -96,6 +100,10 @@ Each author is a separate job. One failure never stops the others.
 - Bubble's API Connector call times out at about 50 seconds. An AI email takes 10 to 30 seconds
   and can run longer with a rewrite. So the webhook answers **202 at once** and keeps the job in
   Postgres.
+- The poller is a workflow on the admin page (`bubble-app/admin/workflows/poll.mjs`). It runs every
+  3 seconds while any log is Queued or Processing. The ledger in n8n is the source of truth, so a
+  log that was left unsettled catches up the next time the admin page is open. A request n8n never
+  answered is failed by Bubble after 12 minutes, with a reason.
 - On a paid Bubble plan, n8n could push each result back instead; that upgrade path is described
   in `n8n/PAYLOAD.md`. It was removed from the workflows to keep one tested path.
 

@@ -85,5 +85,9 @@ or with a wrong key, no execution started; job-status keeps no successful run) a
 the `ai_down`, `email_down` and `data_down` drills and an integrity failure; `03` sends; `04` drafts
 and approval (check, `EDIT_BLOCKED`, send once, `ALREADY_SENT`, discard, `NOT_FOUND`, `primary_down`);
 `05` three identical requests at once give one job; `06` the `crash` drill ends `INTERNAL` and the
-Error Handler sends its alert. `npm run test:db` runs the ledger SQL (enqueue, Deliver Email, approval,
+Error Handler sends its alert; `07` a database outage before the answer gives 503 `DB_UNAVAILABLE`
+(local stack only); `08` the sweeper ends a job stuck while sending as `EMAIL_UNCERTAIN` and one
+stuck while writing as `TIMEOUT` (local stack only); `09` a recipient outside the allow-list gets
+422 `RECIPIENT_NOT_ALLOWED` and no job. 45 tests on the local stack; 43 on production, where `07`
+and `08` are skipped. `npm run test:db` runs the ledger SQL (enqueue, Deliver Email, approval,
 Fail Job, the sweeper) on real Postgres; `npm test` runs the unit and build tests.

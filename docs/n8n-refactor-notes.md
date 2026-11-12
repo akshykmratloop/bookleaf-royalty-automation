@@ -543,7 +543,7 @@ to the main checkout. `.env` was added in step 1: `n8n/deploy.mjs` reads the SMT
   lifecycle with drafts; enqueue function; Deliver Email; the six workflows; the export and how to import it;
   push left as the paid-plan upgrade path in PAYLOAD.md). `docs/error-handling.md` rewritten: every failure with
   its real code and behaviour (retries 2 × 2 s, one rewrite, one SMTP try, error workflow by execution id,
-  `EMAIL_UNCERTAIN`, sweeper every minute), the five drills, the test suites. No `{{TODO}}`/`{{VERIFY}}` left in
+  `EMAIL_UNCERTAIN`, sweeper every minute), the five drills, the test suites. No TODO or VERIFY placeholders left in
   either. README's doc index line updated. PAYLOAD.md was brought up to date in steps 8 and 9a.
 - **Size budget:** `code-size.test.js` total 200 → **198 KB** (measured 196.3 KB), per node 40 → **36 KB** (largest
   34.2 KB, Check Rewrite).
