@@ -7,7 +7,8 @@ import { COLOR_MAP, HTML_IDS, LAYOUT, STYLE_LOOK, isColorKey } from './looks.mjs
 
 const ROOT = new URL('../../', import.meta.url);
 const page = buildAuthorPage(BEFORE, ''); // the restyle alone
-const themed = buildAuthorPage(); // what the writer sends: restyle + theme layer + toggle
+const themed = buildAuthorPage(BEFORE, THEME_HTML, { showcase: false }); // restyle + theme layer + toggle
+const full = buildAuthorPage(); // what the writer sends: the above + the showcase (showcase.test.js)
 
 /** Every element under a node, as a flat list (the node itself first). */
 function flatten(node, out = [], inList = false) {
@@ -75,7 +76,8 @@ describe('author dashboard: behaviour unchanged', () => {
 
   it('is the same when built again from the written page', () => {
     expect(buildAuthorPage(page, '')).toEqual(page);
-    expect(buildAuthorPage(themed)).toEqual(themed);
+    expect(buildAuthorPage(themed, THEME_HTML, { showcase: false })).toEqual(themed);
+    expect(buildAuthorPage(full)).toEqual(full);
   });
 });
 

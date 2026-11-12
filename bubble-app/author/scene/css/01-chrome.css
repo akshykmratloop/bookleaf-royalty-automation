@@ -1,0 +1,54 @@
+/* ───────────── 01 chrome: top bar, page heading, pop-up — readable in both themes ─────────────
+   Bubble writes colours inline, so the overrides here need !important. Colours are theme tokens only. */
+
+/* Top bar: the login's rose "/" square before the wordmark; name and Log out on full-strength text. */
+#bl-author-brand {
+  display: flex !important; align-items: center; gap: 10px;
+  color: var(--bl-text-1) !important; font-family: var(--bl-font-display) !important;
+  font-size: 21px !important; font-weight: 600 !important; letter-spacing: -.01em;
+}
+#bl-author-brand::before {
+  content: "/"; flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px;
+  background: linear-gradient(140deg, var(--bl-btn-a), var(--bl-btn-b)); color: #fff;
+  font: 300 17px/1 var(--bl-font-ui); box-shadow: 0 8px 18px -8px rgba(168, 52, 74, .8);
+}
+#bl-author-name { color: var(--bl-text-1) !important; font-weight: 600 !important; }
+#bl-author-logout, #bl-author-popup .db_pop_close {
+  color: var(--bl-text-1) !important; background-color: var(--bl-card) !important;
+  border: 1px solid var(--bl-border-strong) !important; border-radius: 999px !important;
+}
+#bl-author-logout:hover, #bl-author-popup .db_pop_close:hover {
+  border-color: rgba(var(--bl-brand-rgb), .6) !important; color: var(--bl-brand-ink) !important;
+}
+
+/* Heading: an eyebrow like the login's "— AUTHOR ROYALTY PORTAL", a larger serif welcome. */
+#bl-author-header::before {
+  content: "Author royalty portal"; display: block; padding-left: 40px;
+  background: linear-gradient(var(--bl-brand-ink), var(--bl-brand-ink)) left center / 28px 1.5px no-repeat;
+  color: var(--bl-brand-ink); font: 700 11.5px/1.6 var(--bl-font-ui); letter-spacing: .16em; text-transform: uppercase;
+}
+#bl-author-welcome {
+  font-family: var(--bl-font-display) !important; font-size: 38px !important; line-height: 1.12 !important;
+  font-weight: 500 !important; letter-spacing: -.02em !important; color: var(--bl-text-1) !important;
+}
+#bl-author-asof { color: var(--bl-text-2) !important; }
+#bl-author-main .bubble-element.Text[class*="db_sec_"] { color: var(--bl-text-1) !important; }
+
+/* Table headings: full secondary text, never the faint tertiary. */
+#bl-author-table-head .bubble-element.Text { color: var(--bl-text-2) !important; }
+
+/* Statement pop-up: the dark frame is the panel colour; the email inside stays white on a soft mat. */
+#bl-author-popup {
+  background-color: var(--bl-panel) !important; border: 1px solid var(--bl-card-edge) !important;
+  box-shadow: 0 30px 80px -24px var(--bl-shadow-float) !important;
+}
+#bl-author-popup .db_pop_title { color: var(--bl-text-1) !important; }
+#bl-author-popup .db_pop_date { color: var(--bl-text-2) !important; }
+#bl-author-popup-body > div {
+  padding: 14px; border-radius: 14px; background: var(--bl-mail-frame);
+  box-shadow: inset 0 0 0 1px var(--bl-border); scrollbar-color: rgba(var(--bl-text-2-rgb), .35) transparent;
+}
+
+/* Keyboard focus on anything we add, and on a book card we scrolled to. */
+[data-bl-au]:focus-visible, .bl-spine:focus-visible { outline: 3px solid rgba(var(--bl-brand-rgb), .6); outline-offset: 3px; }
+.db_bk_card:focus { outline: none; }

@@ -6,7 +6,7 @@ html, body {
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
 }
 /* The paper: two soft glows and a 22px dot grid, behind the Bubble page and the scrolling main column. */
-body, body > .bubble-element.Page, #ad_main, #bl-author-main {
+body, body > .bubble-element.Page, #ad_main {
   background-image:
     radial-gradient(var(--bl-dot) 1.1px, transparent 1.4px),
     radial-gradient(1100px 650px at 8% -12%, var(--bl-bg-2), transparent 70%),

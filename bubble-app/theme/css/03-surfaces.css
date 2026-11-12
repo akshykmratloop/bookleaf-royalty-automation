@@ -59,3 +59,8 @@ html[data-theme="dark"] .bl-theme-toggle .tg-bite { transform: translate(0, 0); 
 html[data-theme="dark"] .bl-theme-toggle .tg-rays { transform: rotate(90deg) scale(.4); opacity: 0; }
 .bl-theme-toggle.is-floating { position: fixed; top: 20px; right: 24px; z-index: 30; }
 .bl-toggle-slot { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; }
+
+/* reset_pw: its card and inputs use editor styles with fixed light-grey borders (bTGyf0, bTGyj0, bTGyp0,
+   rendered by Bubble as the classes below); in dark they become the theme's hairlines. */
+html[data-theme="dark"] .bubble-element.baTaGyf0 { border-color: var(--bl-card-edge) !important; }
+html[data-theme="dark"] .bubble-element.baTaGyj0, html[data-theme="dark"] .bubble-element.baTaGyp0 { border-color: var(--bl-border-strong) !important; }

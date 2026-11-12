@@ -5,13 +5,16 @@
 //   2. token colours from admin/theme.mjs laid over the design-system styles, so dark mode works,
 //   3. HTML ids on the one-off elements, for the shared theme CSS,
 //   4. the shared theme layer as one HTML element at the end of the page (see THEME SLOT below),
-//      and its sun/moon toggle at the right end of the top bar row.
+//      and its sun/moon toggle at the right end of the top bar row,
+//   5. the showcase (showcase.mjs): the "Your shelf" HTML element under the welcome line and one
+//      scene element (CSS + script) at the end; it reads every number from what Bubble renders.
 // Workflows, custom states, page properties, data sources, texts and conditions are copied through.
 // It builds from the live page, so running it again on an already-written page changes nothing.
 import { readFileSync } from 'node:fs';
 import { html, withHtmlId } from '../admin/ui.mjs';
 import { STYLE_LOOK, LAYOUT, HTML_IDS, retoken } from './looks.mjs';
 import { themeLayer, themeToggleElement } from '../theme/layer.mjs';
+import { withShowcase } from './showcase.mjs';
 
 // ---- THEME SLOT: the shared theme layer (fonts, light/dark tokens, ink-splash switch) -------------
 export const THEME_HTML = themeLayer();
@@ -72,8 +75,9 @@ export function withToggle(bar) {
   return { ...bar, elements: { ...bar.elements, [pane[0]]: paneNext } };
 }
 
-/** The whole page after the redesign. The writer sends only TOP_KEYS (and THEME_KEY) to Bubble. */
-export function buildAuthorPage(live = BEFORE, themeHtml = THEME_HTML) {
+/** The whole page after the redesign. The writer sends only TOP_KEYS (and THEME_KEY, SCENE_KEY) to
+ *  Bubble. The showcase comes with the theme layer (it needs its tokens); `showcase: false` leaves it out. */
+export function buildAuthorPage(live = BEFORE, themeHtml = THEME_HTML, { showcase = true } = {}) {
   const elements = { ...live.elements };
   for (const [key, id] of Object.entries(TOP_KEYS)) {
     if (elements[key]?.id !== id) throw new Error(`Page ${PAGE_ID} has no ${id} at ${key}; nothing built`);
@@ -82,6 +86,7 @@ export function buildAuthorPage(live = BEFORE, themeHtml = THEME_HTML) {
   if (themeHtml) {
     elements.bTGMo = withToggle(elements.bTGMo);
     elements[THEME_KEY] = themeElement(themeHtml);
+    if (showcase) return withShowcase({ ...live, elements });
   }
   return { ...live, elements };
 }

@@ -1,0 +1,24 @@
+/* ───────────── 04 royalty overview: row hover, paid-vs-pending bars, a ledger total, centred badges ───────────── */
+#bl-author-royalty-card .db_rt_tbl_w_row { position: relative !important; border-radius: 10px; transition: background-color .2s ease; }
+#bl-author-royalty-card .db_rt_tbl_w_row:hover { background-color: var(--bl-hover) !important; }
+
+/* The bar: the track is what is still pending (amber), the fill is what is paid (ink). */
+.bl-rowbar {
+  position: absolute; bottom: 5px; height: 3px; border-radius: 3px; overflow: hidden;
+  background: rgba(var(--bl-accent-rgb), .55); opacity: .8; transition: opacity .2s ease, height .2s ease;
+}
+.bl-rowbar i { position: absolute; left: 0; top: 0; bottom: 0; width: var(--paid, 0%); border-radius: inherit; background: var(--bl-navy); }
+#bl-author-royalty-card .db_rt_tbl_w_row:hover .bl-rowbar { opacity: 1; height: 4px; }
+
+/* Total: a ledger total — a thin rule above, a double rule below, no fill. */
+#bl-author-table-total {
+  background-color: transparent !important; background-image: none !important; border-radius: 0 !important;
+  border-top: 1px solid rgba(var(--bl-text-1-rgb), .45) !important; border-bottom: 3px double rgba(var(--bl-text-1-rgb), .55) !important;
+  margin-top: 6px !important;
+}
+#bl-author-table-total .bubble-element.Text { color: var(--bl-text-1) !important; }
+#bl-author-table-total .db_tot_l { font-family: var(--bl-font-display) !important; font-size: 16px !important; }
+
+/* Badges in the middle of the Status column. */
+#bl-author-royalty-card .db_rt_tbl_w_status_cell { justify-content: center !important; }
+#bl-author-royalty-card .db_rt_tbl_w_h_status { text-align: center !important; }

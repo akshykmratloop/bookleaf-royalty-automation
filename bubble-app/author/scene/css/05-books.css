@@ -1,0 +1,32 @@
+/* ───────────── 05 My books: cover thumbnail at the left, readable chips, a highlight when the shelf sends you here ───────────── */
+/* The room for the cover is kept from the start, so the card does not move when the cover is drawn. */
+#bl-author-book-list .db_bk_card { position: relative !important; padding-left: 150px !important; min-height: 214px; scroll-margin-top: 96px; }
+.bl-thumb {
+  position: absolute; left: 24px; top: 24px; width: 104px; height: 156px; overflow: hidden;
+  border-radius: 2px 7px 7px 2px; transform: rotate(-1.2deg);
+  box-shadow: -2px 0 0 rgba(0, 0, 0, .18) inset, 0 14px 24px -12px rgba(40, 10, 20, .55), 0 2px 4px rgba(40, 10, 20, .12);
+}
+.bl-thumb .cover { position: relative; width: 100%; height: 100%; }
+
+/* Genre chip: rose ink on rose paper. Platform chips: neutral paper with a hairline edge. */
+#bl-author-book-list .db_bk_genre {
+  background-color: var(--bl-brand-soft) !important; box-shadow: inset 0 0 0 1px rgba(var(--bl-brand-rgb), .28) !important;
+}
+#bl-author-book-list .db_bk_genre_t { color: var(--bl-brand-ink) !important; font-weight: 600 !important; }
+#bl-author-book-list .db_bk_plat_chip {
+  background-color: var(--bl-panel-2) !important; box-shadow: inset 0 0 0 1px var(--bl-border-strong) !important;
+}
+#bl-author-book-list .db_bk_plat_chip_t { color: var(--bl-text-1) !important; font-weight: 500 !important; }
+#bl-author-book-list .db_bk_status { color: var(--bl-text-2) !important; }
+#bl-author-book-list .db_bk_title { font-family: var(--bl-font-display) !important; color: var(--bl-text-1) !important; }
+
+/* Arrived from the shelf: a rose ring that breathes once and fades. */
+#bl-author-book-list .db_bk_card.bl-au-flash { animation: bl-au-flash 1.8s var(--bl-ease) both; }
+@keyframes bl-au-flash {
+  0% { box-shadow: 0 0 0 0 rgba(var(--bl-brand-rgb), 0), 0 14px 34px -18px var(--bl-shadow-card); }
+  25% { box-shadow: 0 0 0 4px rgba(var(--bl-brand-rgb), .45), 0 18px 40px -16px rgba(var(--bl-brand-rgb), .45); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--bl-brand-rgb), 0), 0 14px 34px -18px var(--bl-shadow-card); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #bl-author-book-list .db_bk_card.bl-au-flash { animation: none; box-shadow: 0 0 0 3px rgba(var(--bl-brand-rgb), .5) !important; }
+}

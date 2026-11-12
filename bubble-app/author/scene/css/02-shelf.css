@@ -1,0 +1,107 @@
+/* ───────────── 02 "Your shelf": a short wooden shelf of the author's books + a status note ─────────────
+   The HTML element is a fixed 212 px tall, so nothing below moves when the books arrive. */
+#bl-author-shelf { overflow: visible !important; }
+.bl-shelf {
+  --shelf-h: 148px; --wood-top: #ecd2b0; --wood-mid: #d4a676; --wood-front: #c08b55; --wood-dark: #8a5a30;
+  --spine-shadow: rgba(110, 40, 40, .30);
+  position: relative; box-sizing: border-box; height: calc(100% - 14px); margin-top: 14px;
+  display: grid; grid-template-columns: auto minmax(0, 1fr); border-radius: 20px;
+  border: 1px solid var(--bl-border); background: linear-gradient(180deg, rgba(var(--bl-brand-rgb), .045), transparent 65%), var(--bl-card);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15); backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 14px 34px -18px var(--bl-shadow-card); font-family: var(--bl-font-ui); color: var(--bl-text-1);
+}
+html[data-theme="dark"] .bl-shelf {
+  --wood-top: #6e4a33; --wood-mid: #563622; --wood-front: #4a2d1b; --wood-dark: #24140c; --spine-shadow: rgba(0, 0, 0, .55);
+  border-color: var(--bl-card-edge); background: linear-gradient(180deg, rgba(10, 4, 12, .35), rgba(10, 4, 12, .1)), var(--bl-card);
+}
+
+/* The stage: light, dust, books and the plank. Its width follows the number of books. */
+.bl-shelf-stage {
+  position: relative; overflow: hidden; border-radius: 19px 0 0 19px;
+  width: clamp(560px, calc(var(--books, 2) * 122px + 330px), 780px); /* room beside the books for the tooltip */
+}
+.bl-shelf-light, .bl-shelf-dust { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.bl-shelf-light {
+  background:
+    radial-gradient(circle 150px at var(--lx, 45%) var(--ly, 55%), rgba(255, 255, 255, .55), transparent 70%),
+    repeating-linear-gradient(112deg, transparent 0 46px, rgba(255, 255, 255, .22) 46px 92px, transparent 92px 150px),
+    radial-gradient(420px 220px at 0% 0%, rgba(255, 214, 170, .35), transparent 70%);
+}
+html[data-theme="dark"] .bl-shelf-light {
+  background:
+    radial-gradient(circle 190px at var(--lx, 45%) var(--ly, 55%), rgba(255, 190, 120, .26), rgba(255, 170, 90, .07) 48%, transparent 72%),
+    radial-gradient(circle 420px at var(--lx, 45%) var(--ly, 55%), transparent 30%, rgba(8, 3, 10, .35));
+}
+.bl-shelf-row {
+  position: absolute; left: 30px; right: 20px; bottom: 34px; z-index: 2;
+  display: flex; align-items: flex-end; gap: 4px;
+}
+.bl-spine-slot { position: relative; flex: none; display: flex; justify-content: center; min-width: 118px; }
+.bl-shelf-plant { flex: none; width: 50px; height: 72px; margin: 0 6px 0 auto; }
+.bl-shelf-plant .plant { width: 100%; height: 100%; }
+.bl-shelf-plank { position: absolute; left: 18px; right: 18px; bottom: 16px; height: 18px; z-index: 1; border-radius: 3px;
+  background: linear-gradient(180deg, var(--wood-top) 0 5px, var(--wood-mid) 5px 7px, var(--wood-front) 7px, var(--wood-dark));
+  box-shadow: 0 14px 18px -10px var(--spine-shadow), inset 0 1px 0 rgba(255, 255, 255, .3); }
+
+/* A face-out book: the login's cover art in front, its spine on the left side, page edges at the right.
+   Turned a little so the spine shows; it faces you and lifts on hover or keyboard focus. */
+.bl-spine {
+  position: relative; width: calc(var(--bh) * .667); height: var(--bh); padding: 0; border: 0; margin: 0;
+  background: none; cursor: pointer; perspective: 900px; border-radius: 3px;
+}
+.bl-spine::after { content: ""; position: absolute; left: -4%; right: -10%; bottom: -5px; height: 10px; border-radius: 50%;
+  background: radial-gradient(closest-side, var(--spine-shadow), transparent); pointer-events: none; transition: opacity .4s; }
+.bl-book-3d { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateY(var(--turn, 20deg)); transition: transform .5s var(--bl-ease); }
+.bl-spine:hover .bl-book-3d, .bl-spine:focus-visible .bl-book-3d { transform: translateY(-9px) rotateY(6deg); }
+.bl-spine:hover::after, .bl-spine:focus-visible::after { opacity: .55; }
+.bl-book-cover { position: absolute; inset: 0; overflow: hidden; border-radius: 2px 5px 5px 2px; transform: translateZ(calc(var(--depth) / 2));
+  box-shadow: inset 4px 0 6px -2px rgba(0, 0, 0, .35), 0 10px 18px -10px rgba(30, 6, 12, .55); }
+.bl-book-cover .cover { width: 100%; height: 100%; }
+.bl-book-side { --sh: var(--bh); position: absolute; top: 0; bottom: 0; left: calc(var(--depth) / -2); width: var(--depth); overflow: hidden;
+  transform: rotateY(-90deg); border-radius: 2px; }
+.bl-book-side .sp-art { filter: brightness(.82); }
+.bl-book-pages { position: absolute; top: 3px; bottom: 3px; left: calc(100% - var(--depth) / 2 - 2px); width: calc(var(--depth) - 4px);
+  transform: rotateY(90deg); background: repeating-linear-gradient(90deg, #f4ecdf 0 1px, #e3d6c2 1px 2px); }
+.bl-book-mark { position: absolute; top: -9px; right: 18%; width: 7px; height: 24px; transform: translateZ(calc(var(--depth) / 2 - 3px));
+  background: var(--tone); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%); }
+
+/* Status label pinned to the shelf's front edge under each book, in the badge colours. */
+.bl-ribbon {
+  position: absolute; left: 50%; top: calc(100% + 6px); z-index: 3; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 7px; border-radius: 4px; white-space: nowrap;
+  font: 700 10.5px/1.35 var(--bl-font-ui); letter-spacing: .02em; border: 1px solid; box-shadow: 0 3px 8px -5px rgba(0, 0, 0, .5);
+}
+.bl-ribbon::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.tone-paid { --tone: var(--bl-success); --tone-rgb: var(--bl-success-rgb); }
+.tone-pending { --tone: var(--bl-warning); --tone-rgb: var(--bl-warning-rgb); }
+.tone-overdue { --tone: var(--bl-danger); --tone-rgb: var(--bl-danger-rgb); }
+.tone-production { --tone: var(--bl-info); --tone-rgb: 47, 109, 181; }
+html[data-theme="dark"] .tone-production { --tone-rgb: 149, 184, 255; }
+.bl-ribbon { color: color-mix(in srgb, var(--tone) 80%, var(--bl-text-1)); background: color-mix(in srgb, var(--tone) 10%, var(--bl-panel)); border-color: rgba(var(--tone-rgb), .45); }
+
+/* The note beside the shelf. */
+.bl-shelf-note { display: flex; flex-direction: column; justify-content: center; gap: 8px; min-width: 0;
+  padding: 24px 32px; border-left: 1px solid var(--bl-border); }
+.bl-shelf-eyebrow { margin: 0; color: var(--bl-brand-ink); font: 700 11.5px/1.4 var(--bl-font-ui); letter-spacing: .16em; text-transform: uppercase; }
+.bl-shelf-title { margin: 0; color: var(--bl-text-1); font: 500 24px/1.2 var(--bl-font-display); letter-spacing: -.01em; }
+.bl-shelf-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 0; padding: 0; list-style: none; }
+.bl-shelf-legend li { display: inline-flex; align-items: center; gap: 7px; color: var(--bl-text-1); font: 600 13.5px/1.4 var(--bl-font-ui); }
+.bl-shelf-legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--tone); }
+.bl-shelf-hint { margin: 2px 0 0; color: var(--bl-text-2); font: 400 13px/1.45 var(--bl-font-ui); }
+.bl-shelf.is-loading .bl-shelf-hint { visibility: hidden; }
+
+/* Tooltip above a spine. */
+.bl-shelf-tip {
+  position: absolute; z-index: 6; left: 0; top: 0; min-width: 170px; max-width: 260px; padding: 10px 13px; border-radius: 12px;
+  background: var(--bl-panel); border: 1px solid var(--bl-border-strong); box-shadow: 0 16px 34px -14px rgba(40, 10, 20, .45);
+  pointer-events: none; opacity: 0; transform: translate(-6px, -50%); transition: opacity .18s, transform .22s var(--bl-ease);
+}
+.bl-shelf-tip.on { opacity: 1; transform: translate(0, -50%); }
+.bl-shelf-tip b { display: block; color: var(--bl-text-1); font: 500 15px/1.25 var(--bl-font-display); }
+.bl-shelf-tip span { display: block; margin-top: 3px; color: var(--bl-text-2); font: 500 12.5px/1.4 var(--bl-font-ui); font-variant-numeric: tabular-nums; }
+.bl-shelf-tip em { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--tone); font: 700 12px/1.2 var(--bl-font-ui); font-style: normal; }
+.bl-shelf-tip em::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bl-book-3d, .bl-spine::after, .bl-shelf-tip { transition: none; }
+}

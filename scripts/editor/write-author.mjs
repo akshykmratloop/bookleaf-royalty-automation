@@ -3,12 +3,14 @@
 //   (TaskSpace "author dashboard", p1 = the editor on https://bubble.io/page?id=bookleaf-royalties-81850&tab=Design&name=dashboard)
 // 1. Backs up the live page JSON (to .secrets/, git-ignored, and to the bookleaf-work scratch folder).
 // 2. Writes ONLY the three top-level elements it restyles (bar, main, statement popup) and, when the
-//    theme layer is wired in, adds the theme element. Page properties, workflows and custom states are
+//    theme layer is wired in, adds the theme element and the showcase scene element (the shelf goes
+//    inside main). Page properties, workflows and custom states are
 //    never sent; afterwards it checks that they are byte-for-byte what they were.
 // Undo: ego-browser nodejs < scripts/editor/restore-author.mjs
 const ROOT = '/Users/aksykmr_mac/Loop Methods/experiments/bookleaf/bubble';
 const SCRATCH = '/Users/aksykmr_mac/Loop Methods/experiments/bookleaf-work/dashboard/author';
 const { buildAuthorPage, PAGE_ID, TOP_KEYS, THEME_KEY } = await import(`${ROOT}/bubble-app/author/page.mjs`);
+const { SCENE_KEY } = await import(`${ROOT}/bubble-app/author/showcase.mjs`);
 const { writeFileSync, mkdirSync } = await import('node:fs');
 
 /** JSON with sorted keys, so two objects compare equal regardless of key order. */
@@ -34,7 +36,7 @@ for (const dir of [`${ROOT}/.secrets`, SCRATCH]) {
 }
 
 const built = buildAuthorPage(live);
-const keys = [...Object.keys(TOP_KEYS), ...(built.elements[THEME_KEY] ? [THEME_KEY] : [])];
+const keys = [...Object.keys(TOP_KEYS), ...[THEME_KEY, SCENE_KEY].filter((k) => built.elements[k])];
 const parts = Object.fromEntries(keys.map((k) => [k, built.elements[k]]));
 await editor.evaluate(({ id, parts }) => {
   const elements = window.appquery.page(id).json.child('elements');

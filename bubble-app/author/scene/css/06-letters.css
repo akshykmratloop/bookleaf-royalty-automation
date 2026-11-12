@@ -1,0 +1,39 @@
+/* ───────────── 06 My statements: each row is a letter — an envelope, a postmark date stamp, "New" on the newest ───────────── */
+#bl-author-statement-card .db_st_row {
+  position: relative !important; padding-left: 78px !important; border-radius: 12px; transition: background-color .2s ease;
+}
+#bl-author-statement-card .db_st_row:hover { background-color: var(--bl-hover) !important; }
+
+/* The envelope: paper, a hairline edge and the flap's two folds. */
+#bl-author-statement-card .db_st_row::before {
+  content: ""; position: absolute; left: 16px; top: 50%; width: 44px; height: 30px; transform: translateY(-50%) rotate(-3deg);
+  box-sizing: border-box; border: 1.5px solid rgba(var(--bl-text-2-rgb), .55); border-radius: 4px;
+  background:
+    linear-gradient(to bottom right, transparent calc(50% - .9px), rgba(var(--bl-text-2-rgb), .55) 50%, transparent calc(50% + .9px)) left top / 50% 62% no-repeat,
+    linear-gradient(to bottom left, transparent calc(50% - .9px), rgba(var(--bl-text-2-rgb), .55) 50%, transparent calc(50% + .9px)) right top / 50% 62% no-repeat,
+    var(--bl-panel-2);
+  transition: transform .25s var(--bl-ease);
+}
+#bl-author-statement-card .db_st_row:hover::before { transform: translateY(-55%) rotate(-5deg); }
+#bl-author-statement-card .db_st_row.bl-newest::before { border-color: rgba(var(--bl-brand-rgb), .7); background-color: var(--bl-brand-soft); }
+
+#bl-author-statement-card .db_st_subj { color: var(--bl-text-1) !important; font-weight: 600 !important; }
+
+/* Postmark: the date in a dashed, slightly tilted oval. */
+#bl-author-statement-card .db_st_date {
+  width: max-content !important; margin-top: 4px !important; padding: 1px 10px !important;
+  border: 1.5px dashed rgba(var(--bl-text-2-rgb), .7); border-radius: 999px; transform: rotate(-1.5deg); transform-origin: left center;
+  color: var(--bl-text-2) !important; font-size: 11px !important; font-weight: 700 !important; letter-spacing: .1em; text-transform: uppercase;
+}
+
+/* "New" on the newest letter, pinned to the envelope's corner (absolutely placed: nothing moves). */
+.bl-new {
+  position: absolute; left: 8px; top: calc(50% - 26px); z-index: 1; padding: 1px 6px; border-radius: 999px;
+  background: var(--bl-btn); color: #fff; font: 800 9.5px/1.45 var(--bl-font-ui); letter-spacing: .08em; text-transform: uppercase;
+  box-shadow: 0 4px 10px -5px rgba(var(--bl-brand-rgb), .9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #bl-author-statement-card .db_st_row::before { transition: none; }
+  #bl-author-statement-card .db_st_row:hover::before { transform: translateY(-50%) rotate(-3deg); }
+}
