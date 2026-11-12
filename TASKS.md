@@ -58,6 +58,7 @@ Legend: ⬜ TODO · 🔄 In progress · ✅ Done (commit SHA) · ⛔ Blocked
 - ✅ README + docs rewritten for the pull-only design, no placeholders left except the video link (c252989, 779424f)
 - ✅ 12 screenshots in `docs/media/` (73e513d); test logins checked through the sign-in form
 - ✅ n8n export: 7 workflows in `n8n/export/`
+- ✅ Sign-in page redesigned as "The Living Bookshelf" (concept 1): native Bubble sign-in, 8 workflows and 2 custom states unchanged; bookshelf scene is one HTML element; live checks passed (4e13027)
 - ✅ Bubble collaborator tried for musavir@bookleafpub.in: the free plan needs Growth to invite; fallback (URL + logins + video) noted in README (353ae27)
 - 🔄 Video (~4 min, real footage + AI voice) being produced
 - ⬜ Share links: GitHub access for the reviewer (private repo) and the video link

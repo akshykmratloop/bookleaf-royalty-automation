@@ -26,7 +26,7 @@ date the sample data ends; admins can switch to today's date in Settings
 
 | | |
 |---|---|
-| ![Sign-in with demo buttons](docs/media/login.png) Sign-in, with one-click demo logins | ![Author dashboard](docs/media/author-dashboard.png) Author: KPI tiles and royalty overview badges |
+| ![Sign-in: the Living Bookshelf](docs/media/login.png) Sign-in: the Living Bookshelf, with one-click demo logins | ![Author dashboard](docs/media/author-dashboard.png) Author: KPI tiles and royalty overview badges |
 | ![Author books](docs/media/author-books.png) Author: My books and statements | ![Admin overview](docs/media/admin-overview.png) Admin: KPIs, charts, bulk send |
 | ![Admin authors](docs/media/admin-authors.png) Admin: authors table with filters | ![Author detail](docs/media/admin-author-detail.png) Admin: author drawer with Generate & Send |
 | ![Live progress](docs/media/admin-progress.png) Admin: live progress stepper | ![Notification log](docs/media/notification-log.png) Notification log: status, cost, preview |
