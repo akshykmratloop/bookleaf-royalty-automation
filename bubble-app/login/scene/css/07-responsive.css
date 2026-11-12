@@ -1,0 +1,79 @@
+/* ───────────── responsive (breakpoints as in the concept: 1180 / 860 wide, 760 tall) ───────────── */
+@media (max-width: 1180px) {
+  /* header 18 + 44, main padding 6 / 22, a 400px column with the card filling it */
+  :root { --bl-col-w: 400px; --bl-card-w: 400px; --bl-gutter: 32px; --bl-top: 68px; --bl-bottom: 22px; }
+  #bl-scene .main { gap: 28px; padding: 6px var(--bl-gutter) var(--bl-bottom); }
+  #bl-scene .top { padding: 18px 32px 0; }
+}
+
+@media (max-height: 760px) and (min-width: 861px) {
+  #bl-card { padding: 26px 30px 20px !important; }
+  #bl-title { font-size: 30px !important; }
+  #bl-sub { margin-bottom: 10px !important; }
+  #bl-card :is(#bl-email, #bl-pw) { height: 54px !important; min-height: 54px !important; }
+  #bl-card :is(#bl-email-l, #bl-pw-l) { top: 17px !important; }
+  #bl-card .bl-ico { top: 17px; }
+  #bl-card #pw-toggle { top: 7px; }
+  #bl-demo-t { margin: 14px 0 6px !important; }
+  #bl-demo-s { margin-bottom: 10px !important; }
+  #bl-scene .lede { margin-top: 10px; }
+}
+
+/* mobile: one scrolling column. Header on top, then the native card, then headline + shelf. */
+@media (max-width: 860px) {
+  #bl-split {
+    position: relative !important; flex-direction: column !important; flex-wrap: nowrap !important;
+    align-items: stretch !important; justify-content: flex-start !important;
+    height: auto !important; min-height: 100vh !important; padding: 0 !important; gap: 0 !important;
+  }
+  #bl-right {
+    order: -1 !important; flex: none !important; width: 100% !important; min-width: 0 !important; max-width: none !important;
+    height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 76px 16px 0 !important;
+    align-items: center !important; justify-content: flex-start !important;
+  }
+  /* the HTML element (and any wrapper Bubble puts inside it) becomes plain flow, so the header
+     can anchor to #bl-split and the scene's height counts */
+  #bl-scene-host, #bl-scene-host :has(#bl-scene) {
+    position: static !important; flex: none !important; width: 100% !important; min-width: 0 !important; max-width: none !important;
+    height: auto !important; min-height: 0 !important; max-height: none !important;
+    margin: 0 !important; padding: 0 !important; overflow: visible !important;
+  }
+  #bl-scene { position: static; inset: auto; z-index: auto; }
+  #bl-scene .shell { position: static; height: auto; overflow: visible; }
+  #bl-scene .wall { position: fixed; z-index: 0; }
+  #bl-scene .top { position: absolute; top: 0; left: 0; right: 0; padding: 16px 16px 0; }
+  #bl-scene .pill { height: 38px; padding: 0 12px; font-size: 13px; }
+  #bl-scene .main { display: flex; flex-direction: column; gap: 26px; padding: 26px 16px 32px; }
+  #bl-scene .form-col { display: none; }
+  #bl-scene .head { padding-top: 0; }
+  #bl-scene h1 { font-size: 40px; }
+  #bl-scene .shelf { margin: 18px -16px 0; flex: none; }
+  #bl-scene .shelf-meta { padding-left: 16px; font-size: 12.5px; }
+  #bl-scene .shelf-vp { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent); }
+  #bl-scene .float-book { display: none; }
+  #stage .bk-close { top: 12px; right: 12px; }
+
+  #bl-card {
+    position: relative !important; top: auto !important; right: auto !important; left: auto !important; bottom: auto !important;
+    translate: none; width: 100% !important; max-width: 520px !important; max-height: none !important;
+    margin: 0 auto !important; padding: 26px 20px 20px !important; border-radius: 24px !important;
+    overflow: hidden !important;
+  }
+  #bl-title { font-size: 30px !important; }
+}
+
+@media (max-width: 380px) {
+  #bl-demo-btns { flex-direction: column !important; }
+  #bl-demo-author, #bl-demo-admin { flex: none !important; width: 100% !important; }
+}
+
+/* reduced motion: animations and transitions cut to almost nothing (the JS also skips drift,
+   dust, parallax, flight and typewriter) */
+@media (prefers-reduced-motion: reduce) {
+  :is(#bl-scene, #stage, #bl-card), :is(#bl-scene, #stage, #bl-card) *,
+  :is(#bl-scene, #stage, #bl-card)::before, :is(#bl-scene, #stage, #bl-card)::after,
+  :is(#bl-scene, #stage, #bl-card) *::before, :is(#bl-scene, #stage, #bl-card) *::after {
+    animation-duration: .001ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}

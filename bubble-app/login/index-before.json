@@ -1,0 +1,1341 @@
+{
+ "elements": {
+  "bTGMz": {
+   "properties": {
+    "order": 1,
+    "fit_height": true,
+    "min_height_css": "860px",
+    "container_layout": "row"
+   },
+   "states": {
+    "0": {
+     "condition": {
+      "next": {
+       "args": 720,
+       "type": "Message",
+       "name": "less_than",
+       "is_slidable": false
+      },
+      "properties": {
+       "name": "Current Page Width"
+      },
+      "type": "PageData",
+      "is_slidable": false
+     },
+     "properties": {
+      "min_height_css": "0px"
+     },
+     "type": "State"
+    }
+   },
+   "type": "Group",
+   "id": "ix_split",
+   "default_name": "Group ix_split",
+   "elements": {
+    "ix_left": {
+     "properties": {
+      "order": 1,
+      "row_gap": 32,
+      "use_gap": true,
+      "padding_top": 64,
+      "padding_left": 48,
+      "min_width_css": "340px",
+      "padding_right": 48,
+      "padding_bottom": 64,
+      "vert_alignment": "stretch",
+      "container_layout": "column",
+      "container_vert_alignment": "center"
+     },
+     "type": "Group",
+     "id": "ix_left",
+     "default_name": "Group ix_left",
+     "elements": {
+      "ix_head": {
+       "properties": {
+        "text": {
+         "entries": {
+          "0": "Your books. Your royalties. Always clear."
+         },
+         "type": "TextExpression"
+        },
+        "order": 2,
+        "fit_height": true,
+        "max_width_css": "480px"
+       },
+       "type": "Text",
+       "id": "ix_head",
+       "default_name": "Text ix_head",
+       "name": "Head Text",
+       "style": "Text_hero_light_"
+      },
+      "ix_mark": {
+       "properties": {
+        "text": {
+         "entries": {
+          "0": "BookLeaf"
+         },
+         "type": "TextExpression"
+        },
+        "order": 1,
+        "fit_height": true
+       },
+       "type": "Text",
+       "id": "ix_mark",
+       "default_name": "Text ix_mark",
+       "name": "Mark Text",
+       "style": "Text_wordmark_light_"
+      },
+      "ix_bullets": {
+       "properties": {
+        "order": 3,
+        "row_gap": 16,
+        "use_gap": true,
+        "fit_height": true,
+        "container_layout": "column"
+       },
+       "type": "Group",
+       "id": "ix_bullets",
+       "default_name": "Group ix_bullets",
+       "elements": {
+        "ix_b1": {
+         "properties": {
+          "order": 1,
+          "row_gap": 12,
+          "use_gap": true,
+          "column_gap": 12,
+          "fit_height": true,
+          "container_layout": "row"
+         },
+         "type": "Group",
+         "id": "ix_b1",
+         "default_name": "Group ix_b1",
+         "elements": {
+          "ix_b1_i": {
+           "properties": {
+            "height": 22,
+            "width": 22,
+            "icon": "phosphor bold check-circle",
+            "icon_color": "var(--color_blaccent_default)",
+            "order": 1,
+            "single_width": true,
+            "min_width_css": "22px",
+            "single_height": true,
+            "min_height_css": "22px",
+            "vert_alignment": "center"
+           },
+           "type": "Icon",
+           "id": "ix_b1_i",
+           "default_name": "Icon ix_b1_i",
+           "name": "B 1 Icon",
+           "style": "Icon_default_"
+          },
+          "ix_b1_t": {
+           "properties": {
+            "text": {
+             "entries": {
+              "0": "Real-time royalty overview"
+             },
+             "type": "TextExpression"
+            },
+            "order": 2,
+            "fit_height": true,
+            "vert_alignment": "center"
+           },
+           "type": "Text",
+           "id": "ix_b1_t",
+           "default_name": "Text ix_b1_t",
+           "name": "B 1 Text",
+           "style": "Text_on_dark_"
+          }
+         },
+         "name": "B 1 Group",
+         "style": "Group_default_"
+        },
+        "ix_b2": {
+         "properties": {
+          "order": 2,
+          "row_gap": 12,
+          "use_gap": true,
+          "column_gap": 12,
+          "fit_height": true,
+          "container_layout": "row"
+         },
+         "type": "Group",
+         "id": "ix_b2",
+         "default_name": "Group ix_b2",
+         "elements": {
+          "ix_b2_i": {
+           "properties": {
+            "height": 22,
+            "width": 22,
+            "icon": "phosphor bold check-circle",
+            "icon_color": "var(--color_blaccent_default)",
+            "order": 1,
+            "single_width": true,
+            "min_width_css": "22px",
+            "single_height": true,
+            "min_height_css": "22px",
+            "vert_alignment": "center"
+           },
+           "type": "Icon",
+           "id": "ix_b2_i",
+           "default_name": "Icon ix_b2_i",
+           "name": "B 2 Icon",
+           "style": "Icon_default_"
+          },
+          "ix_b2_t": {
+           "properties": {
+            "text": {
+             "entries": {
+              "0": "Quarterly payout tracking"
+             },
+             "type": "TextExpression"
+            },
+            "order": 2,
+            "fit_height": true,
+            "vert_alignment": "center"
+           },
+           "type": "Text",
+           "id": "ix_b2_t",
+           "default_name": "Text ix_b2_t",
+           "name": "B 2 Text",
+           "style": "Text_on_dark_"
+          }
+         },
+         "name": "B 2 Group",
+         "style": "Group_default_"
+        },
+        "ix_b3": {
+         "properties": {
+          "order": 3,
+          "row_gap": 12,
+          "use_gap": true,
+          "column_gap": 12,
+          "fit_height": true,
+          "container_layout": "row"
+         },
+         "type": "Group",
+         "id": "ix_b3",
+         "default_name": "Group ix_b3",
+         "elements": {
+          "ix_b3_i": {
+           "properties": {
+            "height": 22,
+            "width": 22,
+            "icon": "phosphor bold check-circle",
+            "icon_color": "var(--color_blaccent_default)",
+            "order": 1,
+            "single_width": true,
+            "min_width_css": "22px",
+            "single_height": true,
+            "min_height_css": "22px",
+            "vert_alignment": "center"
+           },
+           "type": "Icon",
+           "id": "ix_b3_i",
+           "default_name": "Icon ix_b3_i",
+           "name": "B 3 Icon",
+           "style": "Icon_default_"
+          },
+          "ix_b3_t": {
+           "properties": {
+            "text": {
+             "entries": {
+              "0": "Statements in your inbox"
+             },
+             "type": "TextExpression"
+            },
+            "order": 2,
+            "fit_height": true,
+            "vert_alignment": "center"
+           },
+           "type": "Text",
+           "id": "ix_b3_t",
+           "default_name": "Text ix_b3_t",
+           "name": "B 3 Text",
+           "style": "Text_on_dark_"
+          }
+         },
+         "name": "B 3 Group",
+         "style": "Group_default_"
+        }
+       },
+       "name": "Bullets Group",
+       "style": "Group_default_"
+      }
+     },
+     "name": "Left Group",
+     "style": "Group_panel_green_"
+    },
+    "ix_right": {
+     "properties": {
+      "order": 2,
+      "padding_top": 48,
+      "padding_left": 24,
+      "min_width_css": "360px",
+      "padding_right": 24,
+      "padding_bottom": 48,
+      "vert_alignment": "stretch",
+      "container_layout": "column",
+      "container_vert_alignment": "center"
+     },
+     "type": "Group",
+     "id": "ix_right",
+     "default_name": "Group ix_right",
+     "elements": {
+      "ix_form": {
+       "properties": {
+        "order": 1,
+        "row_gap": 16,
+        "use_gap": true,
+        "fit_height": true,
+        "max_width_css": "420px",
+        "horiz_alignment": "center",
+        "container_layout": "column"
+       },
+       "type": "Group",
+       "id": "ix_form",
+       "default_name": "Group ix_form",
+       "elements": {
+        "ix_card": {
+         "properties": {
+          "order": 1,
+          "row_gap": 16,
+          "use_gap": true,
+          "fit_height": true,
+          "container_layout": "column"
+         },
+         "type": "Group",
+         "id": "ix_card",
+         "default_name": "Group ix_card",
+         "elements": {
+          "ix_err": {
+           "properties": {
+            "text": {
+             "entries": {
+              "0": {
+               "next": {
+                "type": "Message",
+                "name": "custom.err",
+                "is_slidable": false
+               },
+               "properties": {
+                "element_id": "bTGYf"
+               },
+               "type": "GetElement",
+               "is_slidable": false
+              }
+             },
+             "type": "TextExpression"
+            },
+            "is_visible": false,
+            "order": 6,
+            "fit_height": true,
+            "editor_preview_text": "Err",
+            "collapse_when_hidden": true
+           },
+           "states": {
+            "0": {
+             "condition": {
+              "next": {
+               "next": {
+                "type": "Message",
+                "name": "is_not_empty",
+                "is_slidable": false
+               },
+               "type": "Message",
+               "name": "custom.err",
+               "is_slidable": false
+              },
+              "properties": {
+               "element_id": "bTGYf"
+              },
+              "type": "GetElement",
+              "is_slidable": false
+             },
+             "properties": {
+              "is_visible": true
+             },
+             "type": "State"
+            }
+           },
+           "type": "Text",
+           "id": "ix_err",
+           "default_name": "Text ix_err",
+           "name": "Error",
+           "style": "Text_error_"
+          },
+          "ix_sub": {
+           "properties": {
+            "text": {
+             "entries": {
+              "0": "Access your royalty overview and statements."
+             },
+             "type": "TextExpression"
+            },
+            "order": 2,
+            "fit_height": true
+           },
+           "type": "Text",
+           "id": "ix_sub",
+           "default_name": "Text ix_sub",
+           "name": "Subtitle Text",
+           "style": "Text_muted_"
+          },
+          "ix_pw_f": {
+           "properties": {
+            "order": 4,
+            "row_gap": 6,
+            "use_gap": true,
+            "fit_height": true,
+            "container_layout": "column"
+           },
+           "type": "Group",
+           "id": "ix_pw_f",
+           "default_name": "Group ix_pw_f",
+           "elements": {
+            "ix_pw": {
+             "properties": {
+              "height": 44,
+              "content_format": "password",
+              "placeholder": {
+               "entries": {
+                "0": "Your password"
+               },
+               "type": "TextExpression"
+              },
+              "order": 2,
+              "fit_height": false,
+              "min_width_css": "0px",
+              "single_height": true,
+              "min_height_css": "44px",
+              "horiz_alignment": "stretch"
+             },
+             "type": "Input",
+             "id": "ix_pw",
+             "default_name": "Input ix_pw",
+             "name": "Password Input",
+             "style": "Input_default_"
+            },
+            "ix_pw_l": {
+             "properties": {
+              "text": {
+               "entries": {
+                "0": "Password"
+               },
+               "type": "TextExpression"
+              },
+              "order": 1,
+              "fit_height": true
+             },
+             "type": "Text",
+             "id": "ix_pw_l",
+             "default_name": "Text ix_pw_l",
+             "name": "Password Label",
+             "style": "Text_label_"
+            }
+           },
+           "name": "Password Group",
+           "style": "Group_default_"
+          },
+          "ix_title": {
+           "properties": {
+            "text": {
+             "entries": {
+              "0": "Sign in"
+             },
+             "type": "TextExpression"
+            },
+            "order": 1,
+            "fit_height": true
+           },
+           "type": "Text",
+           "id": "ix_title",
+           "default_name": "Text ix_title",
+           "name": "Title",
+           "style": "Text_h2_"
+          },
+          "ix_signin": {
+           "properties": {
+            "text": {
+             "entries": {
+              "0": "Sign in"
+             },
+             "type": "TextExpression"
+            },
+            "order": 5,
+            "fit_width": false,
+            "fit_height": true
+           },
+           "states": {
+            "0": {
+             "condition": {
+              "next": {
+               "next": {
+                "type": "Message",
+                "name": "is_true",
+                "is_slidable": false
+               },
+               "type": "Message",
+               "name": "custom.busy",
+               "is_slidable": false
+              },
+              "properties": {
+               "element_id": "bTGYf"
+              },
+              "type": "GetElement",
+              "is_slidable": false
+             },
+             "properties": {
+              "font_color": "rgba(var(--color_text_default_rgb), 0.75)",
+              "background_style": "bgcolor",
+              "bgcolor": "rgba(var(--color_text_default_rgb), 0.08)",
+              "button_disabled": true
+             },
+             "type": "State"
+            }
+           },
+           "type": "Button",
+           "id": "ix_signin",
+           "default_name": "Button ix_signin",
+           "name": "Sign in Button",
+           "style": "Button_primary_"
+          },
+          "ix_email_f": {
+           "properties": {
+            "order": 3,
+            "row_gap": 6,
+            "use_gap": true,
+            "fit_height": true,
+            "container_layout": "column"
+           },
+           "type": "Group",
+           "id": "ix_email_f",
+           "default_name": "Group ix_email_f",
+           "elements": {
+            "ix_email": {
+             "properties": {
+              "height": 44,
+              "content_format": "email",
+              "placeholder": {
+               "entries": {
+                "0": "you@example.com"
+               },
+               "type": "TextExpression"
+              },
+              "order": 2,
+              "fit_height": false,
+              "min_width_css": "0px",
+              "single_height": true,
+              "min_height_css": "44px",
+              "horiz_alignment": "stretch"
+             },
+             "type": "Input",
+             "id": "ix_email",
+             "default_name": "Input ix_email",
+             "name": "Email Input",
+             "style": "Input_default_"
+            },
+            "ix_email_l": {
+             "properties": {
+              "text": {
+               "entries": {
+                "0": "Email"
+               },
+               "type": "TextExpression"
+              },
+              "order": 1,
+              "fit_height": true
+             },
+             "type": "Text",
+             "id": "ix_email_l",
+             "default_name": "Text ix_email_l",
+             "name": "Email Label",
+             "style": "Text_label_"
+            }
+           },
+           "name": "Email Group",
+           "style": "Group_default_"
+          }
+         },
+         "name": "Card",
+         "style": "Group_card_"
+        },
+        "ix_demo": {
+         "properties": {
+          "order": 2,
+          "row_gap": 8,
+          "use_gap": true,
+          "fit_height": true,
+          "container_layout": "column"
+         },
+         "type": "Group",
+         "id": "ix_demo",
+         "default_name": "Group ix_demo",
+         "elements": {
+          "ix_demo_s": {
+           "properties": {
+            "text": {
+             "entries": {
+              "0": "Explore BookLeaf with a sample account."
+             },
+             "type": "TextExpression"
+            },
+            "order": 2,
+            "fit_height": true
+           },
+           "type": "Text",
+           "id": "ix_demo_s",
+           "default_name": "Text ix_demo_s",
+           "name": "Demo Text 2",
+           "style": "Text_muted_"
+          },
+          "ix_demo_t": {
+           "properties": {
+            "text": {
+             "entries": {
+              "0": "Demo access"
+             },
+             "type": "TextExpression"
+            },
+            "order": 1,
+            "fit_height": true
+           },
+           "type": "Text",
+           "id": "ix_demo_t",
+           "default_name": "Text ix_demo_t",
+           "name": "Demo Text",
+           "style": "Text_label_"
+          },
+          "ix_demo_btns": {
+           "properties": {
+            "order": 3,
+            "row_gap": 8,
+            "use_gap": true,
+            "column_gap": 8,
+            "fit_height": true,
+            "container_layout": "row"
+           },
+           "type": "Group",
+           "id": "ix_demo_btns",
+           "default_name": "Group ix_demo_btns",
+           "elements": {
+            "ix_demo_admin": {
+             "properties": {
+              "text": {
+               "entries": {
+                "0": "Demo admin"
+               },
+               "type": "TextExpression"
+              },
+              "order": 2,
+              "fit_width": true,
+              "fit_height": true,
+              "vert_alignment": "center"
+             },
+             "states": {
+              "0": {
+               "condition": {
+                "next": {
+                 "next": {
+                  "type": "Message",
+                  "name": "is_true",
+                  "is_slidable": false
+                 },
+                 "type": "Message",
+                 "name": "custom.busy",
+                 "is_slidable": false
+                },
+                "properties": {
+                 "element_id": "bTGYf"
+                },
+                "type": "GetElement",
+                "is_slidable": false
+               },
+               "properties": {
+                "font_color": "rgba(var(--color_text_default_rgb), 0.75)",
+                "background_style": "bgcolor",
+                "bgcolor": "rgba(var(--color_text_default_rgb), 0.08)",
+                "button_disabled": true
+               },
+               "type": "State"
+              }
+             },
+             "type": "Button",
+             "id": "ix_demo_admin",
+             "default_name": "Button ix_demo_admin",
+             "name": "Demo Admin Button",
+             "style": "Button_demo_"
+            },
+            "ix_demo_author": {
+             "properties": {
+              "text": {
+               "entries": {
+                "0": "Demo author (Priya Sharma)"
+               },
+               "type": "TextExpression"
+              },
+              "order": 1,
+              "fit_width": true,
+              "fit_height": true,
+              "vert_alignment": "center"
+             },
+             "states": {
+              "0": {
+               "condition": {
+                "next": {
+                 "next": {
+                  "type": "Message",
+                  "name": "is_true",
+                  "is_slidable": false
+                 },
+                 "type": "Message",
+                 "name": "custom.busy",
+                 "is_slidable": false
+                },
+                "properties": {
+                 "element_id": "bTGYf"
+                },
+                "type": "GetElement",
+                "is_slidable": false
+               },
+               "properties": {
+                "font_color": "rgba(var(--color_text_default_rgb), 0.75)",
+                "background_style": "bgcolor",
+                "bgcolor": "rgba(var(--color_text_default_rgb), 0.08)",
+                "button_disabled": true
+               },
+               "type": "State"
+              }
+             },
+             "type": "Button",
+             "id": "ix_demo_author",
+             "default_name": "Button ix_demo_author",
+             "name": "Demo author (Priya Sharma) Button",
+             "style": "Button_demo_"
+            }
+           },
+           "name": "Demo Buttons",
+           "style": "Group_default_"
+          }
+         },
+         "name": "Demo Group",
+         "style": "Group_demo_"
+        }
+       },
+       "name": "Form",
+       "style": "Group_default_"
+      }
+     },
+     "name": "Right Group",
+     "style": "Group_default_"
+    }
+   },
+   "name": "Split Group",
+   "style": "Group_default_"
+  },
+  "length": 2
+ },
+ "workflows": {
+  "bTGNA": {
+   "properties": {
+    "element_id": "ix_signin"
+   },
+   "type": "ButtonClicked",
+   "id": "ix_wf_signin",
+   "name": "Signin",
+   "actions": {
+    "0": {
+     "properties": {
+      "element_id": "bTGYf",
+      "custom_state": "custom.err"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_signin_a0"
+    },
+    "1": {
+     "properties": {
+      "value": true,
+      "element_id": "bTGYf",
+      "custom_state": "custom.busy"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_signin_a1"
+    },
+    "2": {
+     "properties": {
+      "email": {
+       "next": {
+        "type": "Message",
+        "name": "get_data",
+        "is_slidable": false
+       },
+       "properties": {
+        "element_id": "ix_email"
+       },
+       "type": "GetElement",
+       "is_slidable": false
+      },
+      "password": {
+       "next": {
+        "type": "Message",
+        "name": "get_data",
+        "is_slidable": false
+       },
+       "properties": {
+        "element_id": "ix_pw"
+       },
+       "type": "GetElement",
+       "is_slidable": false
+      },
+      "stay_logged_in": true
+     },
+     "type": "LogIn",
+     "id": "ix_wf_signin_a2"
+    },
+    "3": {
+     "properties": {
+      "value": false,
+      "element_id": "bTGYf",
+      "custom_state": "custom.busy"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_signin_a3"
+    },
+    "4": {
+     "properties": {
+      "condition": {
+       "next": {
+        "next": {
+         "args": {
+          "properties": {
+           "option_set": "option.role",
+           "option_value": "Admin"
+          },
+          "type": "OptionValue",
+          "is_slidable": false
+         },
+         "type": "Message",
+         "name": "equals",
+         "is_slidable": false
+        },
+        "type": "Message",
+        "name": "role_option_role",
+        "is_slidable": false
+       },
+       "type": "CurrentUser",
+       "is_slidable": false
+      },
+      "element_id": "admin"
+     },
+     "type": "ChangePage",
+     "id": "ix_wf_signin_a4"
+    },
+    "5": {
+     "properties": {
+      "condition": {
+       "next": {
+        "next": {
+         "args": {
+          "properties": {
+           "option_set": "option.role",
+           "option_value": "Author"
+          },
+          "type": "OptionValue",
+          "is_slidable": false
+         },
+         "type": "Message",
+         "name": "equals",
+         "is_slidable": false
+        },
+        "type": "Message",
+        "name": "role_option_role",
+        "is_slidable": false
+       },
+       "type": "CurrentUser",
+       "is_slidable": false
+      },
+      "element_id": "dashboard"
+     },
+     "type": "ChangePage",
+     "id": "ix_wf_signin_a5"
+    }
+   }
+  },
+  "bTGNB": {
+   "properties": {
+    "element_id": "ix_signin"
+   },
+   "type": "OnError",
+   "id": "ix_wf_signin_err",
+   "name": "Signin Error",
+   "actions": {
+    "0": {
+     "properties": {
+      "value": false,
+      "element_id": "bTGYf",
+      "custom_state": "custom.busy"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_signin_err_a0"
+    },
+    "1": {
+     "properties": {
+      "value": {
+       "next": {
+        "next": {
+         "args": "Sign-in failed. Please check your email and password.",
+         "type": "Message",
+         "name": "defaulting_to",
+         "is_slidable": false
+        },
+        "type": "Message",
+        "name": "message",
+        "is_slidable": false
+       },
+       "type": "CurrentWorkflowItem",
+       "is_slidable": false
+      },
+      "element_id": "bTGYf",
+      "custom_state": "custom.err"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_signin_err_a1"
+    }
+   }
+  },
+  "bTGNC": {
+   "properties": {
+    "element_id": "ix_demo_author"
+   },
+   "type": "ButtonClicked",
+   "id": "ix_wf_demo_author",
+   "name": "Demo author",
+   "actions": {
+    "0": {
+     "properties": {
+      "element_id": "bTGYf",
+      "custom_state": "custom.err"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_demo_author_a0"
+    },
+    "1": {
+     "properties": {
+      "value": true,
+      "element_id": "bTGYf",
+      "custom_state": "custom.busy"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_demo_author_a1"
+    },
+    "2": {
+     "properties": {
+      "email": "priya.sharma@email.com",
+      "password": "TestBookLeaf@123",
+      "stay_logged_in": true
+     },
+     "type": "LogIn",
+     "id": "ix_wf_demo_author_a2"
+    },
+    "3": {
+     "properties": {
+      "value": false,
+      "element_id": "bTGYf",
+      "custom_state": "custom.busy"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_demo_author_a3"
+    },
+    "4": {
+     "properties": {
+      "condition": {
+       "next": {
+        "next": {
+         "args": {
+          "properties": {
+           "option_set": "option.role",
+           "option_value": "Admin"
+          },
+          "type": "OptionValue",
+          "is_slidable": false
+         },
+         "type": "Message",
+         "name": "equals",
+         "is_slidable": false
+        },
+        "type": "Message",
+        "name": "role_option_role",
+        "is_slidable": false
+       },
+       "type": "CurrentUser",
+       "is_slidable": false
+      },
+      "element_id": "admin"
+     },
+     "type": "ChangePage",
+     "id": "ix_wf_demo_author_a4"
+    },
+    "5": {
+     "properties": {
+      "condition": {
+       "next": {
+        "next": {
+         "args": {
+          "properties": {
+           "option_set": "option.role",
+           "option_value": "Author"
+          },
+          "type": "OptionValue",
+          "is_slidable": false
+         },
+         "type": "Message",
+         "name": "equals",
+         "is_slidable": false
+        },
+        "type": "Message",
+        "name": "role_option_role",
+        "is_slidable": false
+       },
+       "type": "CurrentUser",
+       "is_slidable": false
+      },
+      "element_id": "dashboard"
+     },
+     "type": "ChangePage",
+     "id": "ix_wf_demo_author_a5"
+    }
+   }
+  },
+  "bTGND": {
+   "properties": {
+    "element_id": "ix_demo_author"
+   },
+   "type": "OnError",
+   "id": "ix_wf_demo_author_err",
+   "name": "Demo author Error",
+   "actions": {
+    "0": {
+     "properties": {
+      "value": false,
+      "element_id": "bTGYf",
+      "custom_state": "custom.busy"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_demo_author_err_a0"
+    },
+    "1": {
+     "properties": {
+      "value": {
+       "next": {
+        "next": {
+         "args": "Sign-in failed. Please check your email and password.",
+         "type": "Message",
+         "name": "defaulting_to",
+         "is_slidable": false
+        },
+        "type": "Message",
+        "name": "message",
+        "is_slidable": false
+       },
+       "type": "CurrentWorkflowItem",
+       "is_slidable": false
+      },
+      "element_id": "bTGYf",
+      "custom_state": "custom.err"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_demo_author_err_a1"
+    }
+   }
+  },
+  "bTGNE": {
+   "properties": {
+    "element_id": "ix_demo_admin"
+   },
+   "type": "ButtonClicked",
+   "id": "ix_wf_demo_admin",
+   "name": "Demo admin",
+   "actions": {
+    "0": {
+     "properties": {
+      "element_id": "bTGYf",
+      "custom_state": "custom.err"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_demo_admin_a0"
+    },
+    "1": {
+     "properties": {
+      "value": true,
+      "element_id": "bTGYf",
+      "custom_state": "custom.busy"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_demo_admin_a1"
+    },
+    "2": {
+     "properties": {
+      "email": "admin@bookleaf.demo",
+      "password": "TestBookLeaf@123",
+      "stay_logged_in": true
+     },
+     "type": "LogIn",
+     "id": "ix_wf_demo_admin_a2"
+    },
+    "3": {
+     "properties": {
+      "value": false,
+      "element_id": "bTGYf",
+      "custom_state": "custom.busy"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_demo_admin_a3"
+    },
+    "4": {
+     "properties": {
+      "condition": {
+       "next": {
+        "next": {
+         "args": {
+          "properties": {
+           "option_set": "option.role",
+           "option_value": "Admin"
+          },
+          "type": "OptionValue",
+          "is_slidable": false
+         },
+         "type": "Message",
+         "name": "equals",
+         "is_slidable": false
+        },
+        "type": "Message",
+        "name": "role_option_role",
+        "is_slidable": false
+       },
+       "type": "CurrentUser",
+       "is_slidable": false
+      },
+      "element_id": "admin"
+     },
+     "type": "ChangePage",
+     "id": "ix_wf_demo_admin_a4"
+    },
+    "5": {
+     "properties": {
+      "condition": {
+       "next": {
+        "next": {
+         "args": {
+          "properties": {
+           "option_set": "option.role",
+           "option_value": "Author"
+          },
+          "type": "OptionValue",
+          "is_slidable": false
+         },
+         "type": "Message",
+         "name": "equals",
+         "is_slidable": false
+        },
+        "type": "Message",
+        "name": "role_option_role",
+        "is_slidable": false
+       },
+       "type": "CurrentUser",
+       "is_slidable": false
+      },
+      "element_id": "dashboard"
+     },
+     "type": "ChangePage",
+     "id": "ix_wf_demo_admin_a5"
+    }
+   }
+  },
+  "bTGNF": {
+   "properties": {
+    "element_id": "ix_demo_admin"
+   },
+   "type": "OnError",
+   "id": "ix_wf_demo_admin_err",
+   "name": "Demo admin Error",
+   "actions": {
+    "0": {
+     "properties": {
+      "value": false,
+      "element_id": "bTGYf",
+      "custom_state": "custom.busy"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_demo_admin_err_a0"
+    },
+    "1": {
+     "properties": {
+      "value": {
+       "next": {
+        "next": {
+         "args": "Sign-in failed. Please check your email and password.",
+         "type": "Message",
+         "name": "defaulting_to",
+         "is_slidable": false
+        },
+        "type": "Message",
+        "name": "message",
+        "is_slidable": false
+       },
+       "type": "CurrentWorkflowItem",
+       "is_slidable": false
+      },
+      "element_id": "bTGYf",
+      "custom_state": "custom.err"
+     },
+     "type": "SetCustomState",
+     "id": "ix_wf_demo_admin_err_a1"
+    }
+   }
+  },
+  "bTGNG": {
+   "properties": {
+    "condition": {
+     "next": {
+      "next": {
+       "args": {
+        "next": {
+         "next": {
+          "args": {
+           "properties": {
+            "option_set": "option.role",
+            "option_value": "Admin"
+           },
+           "type": "OptionValue",
+           "is_slidable": false
+          },
+          "type": "Message",
+          "name": "equals",
+          "is_slidable": false
+         },
+         "type": "Message",
+         "name": "role_option_role",
+         "is_slidable": false
+        },
+        "type": "CurrentUser",
+        "is_slidable": false
+       },
+       "type": "Message",
+       "name": "and_",
+       "is_slidable": false
+      },
+      "type": "Message",
+      "name": "logged_in",
+      "is_slidable": false
+     },
+     "type": "CurrentUser",
+     "is_slidable": false
+    }
+   },
+   "type": "PageLoaded",
+   "id": "ix_wf_go_admin",
+   "name": "Go admin",
+   "actions": {
+    "0": {
+     "properties": {
+      "element_id": "admin"
+     },
+     "type": "ChangePage",
+     "id": "ix_wf_go_admin_a0"
+    }
+   }
+  },
+  "bTGNH": {
+   "properties": {
+    "condition": {
+     "next": {
+      "next": {
+       "args": {
+        "next": {
+         "next": {
+          "args": {
+           "properties": {
+            "option_set": "option.role",
+            "option_value": "Author"
+           },
+           "type": "OptionValue",
+           "is_slidable": false
+          },
+          "type": "Message",
+          "name": "equals",
+          "is_slidable": false
+         },
+         "type": "Message",
+         "name": "role_option_role",
+         "is_slidable": false
+        },
+        "type": "CurrentUser",
+        "is_slidable": false
+       },
+       "type": "Message",
+       "name": "and_",
+       "is_slidable": false
+      },
+      "type": "Message",
+      "name": "logged_in",
+      "is_slidable": false
+     },
+     "type": "CurrentUser",
+     "is_slidable": false
+    }
+   },
+   "type": "PageLoaded",
+   "id": "ix_wf_go_author",
+   "name": "Go author",
+   "actions": {
+    "0": {
+     "properties": {
+      "element_id": "dashboard"
+     },
+     "type": "ChangePage",
+     "id": "ix_wf_go_author_a0"
+    }
+   }
+  },
+  "length": 0
+ },
+ "properties": {
+  "height": 900,
+  "width": 1200,
+  "title": {
+   "entries": {
+    "0": "BookLeaf — Sign in"
+   },
+   "type": "TextExpression"
+  },
+  "use_gap": false,
+  "min_width_px": 0,
+  "preset_width": "full_width",
+  "default_width": 1200,
+  "min_height_px": 700,
+  "new_responsive": true,
+  "element_version": 5,
+  "container_layout": "column",
+  "responsive_version": 1
+ },
+ "type": "Page",
+ "id": "bTGYf",
+ "name": "index",
+ "custom_states": {
+  "err": {
+   "display": "err",
+   "value": "text",
+   "rank": 0,
+   "make_static": true
+  },
+  "busy": {
+   "display": "busy",
+   "value": "boolean",
+   "rank": 0,
+   "default_val": false,
+   "make_static": true
+  }
+ },
+ "is_mobile_view": null
+}

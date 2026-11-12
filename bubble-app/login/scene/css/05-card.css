@@ -1,0 +1,77 @@
+/* ───────────── the sign-in card, skinned onto NATIVE Bubble elements ─────────────
+   Bubble writes inline styles, so look-related properties carry !important. Never transform:
+   GSAP (magnetic button) and the shake/rise keyframes own it. Centring uses `translate`, which
+   composes with transform instead of fighting it. */
+#bl-card {
+  position: fixed !important; z-index: 3 !important; pointer-events: auto;
+  top: calc(var(--bl-top) + (100vh - var(--bl-top) - var(--bl-bottom)) / 2) !important;
+  top: calc(var(--bl-top) + (100dvh - var(--bl-top) - var(--bl-bottom)) / 2) !important;
+  right: calc(var(--bl-gutter) + (var(--bl-col-w) - var(--bl-card-w)) / 2) !important;
+  left: auto !important; bottom: auto !important; translate: 0 -50%;
+  width: var(--bl-card-w) !important; min-width: 0 !important; max-width: var(--bl-card-w) !important;
+  height: auto !important; min-height: 0 !important;
+  max-height: calc(100vh - var(--bl-top) - var(--bl-bottom)) !important;
+  max-height: calc(100dvh - var(--bl-top) - var(--bl-bottom)) !important;
+  margin: 0 !important; padding: 34px 34px 26px !important; box-sizing: border-box !important;
+  flex-direction: column !important; align-items: stretch !important; justify-content: flex-start !important;
+  gap: 0 !important; row-gap: 0 !important;
+  border-radius: 28px !important; background: var(--card) !important; border: 1px solid var(--card-edge) !important;
+  backdrop-filter: blur(24px) saturate(1.35); -webkit-backdrop-filter: blur(24px) saturate(1.35);
+  box-shadow: var(--card-shadow) !important; overflow-x: hidden !important; overflow-y: auto !important;
+  overscroll-behavior: contain; isolation: isolate;
+  color: var(--text) !important; font: 400 15px/1.5 "Manrope", system-ui, sans-serif !important; text-align: left;
+  -webkit-font-smoothing: antialiased;
+  animation: bl-rise .6s var(--ease-out) .05s backwards;
+}
+#bl-card, #bl-card * { box-sizing: border-box; }
+/* paper grain */
+#bl-card::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: .5; pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5  0 0 0 0 .35  0 0 0 0 .38  0 0 0 .09 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>"); }
+/* optional cursor sheen (JS may inject <div class="bl-sheen"> and set --mx / --my on it) */
+#bl-card > .bl-sheen { position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(420px circle at var(--mx, 70%) var(--my, 0%), rgba(255, 255, 255, .5), transparent 60%); opacity: .55; transition: opacity .4s; }
+html[data-theme="dark"] #bl-card > .bl-sheen { background: radial-gradient(420px circle at var(--mx, 70%) var(--my, 0%), rgba(255, 190, 210, .12), transparent 60%); opacity: 1; }
+
+#bl-card.bl-shake { animation: bl-shake .48s cubic-bezier(.36, .07, .19, .97); }
+@keyframes bl-shake { 15%, 85% { transform: translateX(-2px); } 30%, 70% { transform: translateX(5px); } 45%, 55% { transform: translateX(-8px); } 50% { transform: translateX(8px); } }
+/* while a book flies into the card */
+#bl-card > :is(#bl-card-main, #bl-demo) { transition: opacity .4s, filter .4s; }
+#bl-card.bl-dim > :is(#bl-card-main, #bl-demo) { opacity: .12; filter: blur(2px); transition: opacity .5s, filter .5s; }
+
+/* inner Bubble groups: layout only, no look of their own */
+#bl-card :is(#bl-card-main, #bl-demo, #bl-demo-btns, #bl-email-f, #bl-pw-f) {
+  background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+  padding: 0 !important; height: auto !important; min-height: 0 !important; max-height: none !important;
+  width: 100% !important; min-width: 0 !important; max-width: none !important; align-self: stretch !important;
+  overflow: visible !important;
+}
+#bl-card :is(#bl-card-main, #bl-demo) { margin: 0 !important; flex-direction: column !important; gap: 0 !important; row-gap: 0 !important; }
+#bl-card-main { order: 1 !important; }
+#bl-demo { order: 2 !important; }
+
+/* texts */
+#bl-card :is(#bl-title, #bl-sub, #bl-demo-t, #bl-demo-s, #bl-err) {
+  background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important;
+  width: 100% !important; max-width: none !important; height: auto !important; min-height: 0 !important;
+  align-self: stretch !important; white-space: normal !important;
+}
+#bl-card :is(#bl-title, #bl-sub, #bl-demo-t, #bl-demo-s, #bl-err, #bl-email-l, #bl-pw-l, #bl-signin, #bl-demo-author, #bl-demo-admin) * {
+  font: inherit !important; color: inherit !important; letter-spacing: inherit !important; text-transform: inherit !important;
+}
+#bl-card .bl-greet { order: 0 !important; display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; color: var(--rose-text); font: 600 14px/1.5 "Manrope", sans-serif; }
+#bl-card .bl-greet svg { width: 16px; height: 16px; flex: none; }
+#bl-title {
+  order: 1 !important; margin: 6px 0 4px !important; color: var(--text) !important;
+  font: 450 34px/1.1 "Fraunces", Georgia, serif !important; letter-spacing: -.02em !important;
+}
+#bl-sub { order: 2 !important; margin: 0 0 18px !important; color: var(--muted) !important; font: 400 14.5px/1.5 "Manrope", sans-serif !important; }
+
+/* demo section: the title reads as the concept's "or try a demo" divider */
+#bl-demo-t {
+  order: 1 !important; margin: 20px 0 6px !important; color: var(--muted) !important;
+  font: 600 12px/1.4 "Manrope", sans-serif !important; letter-spacing: .08em !important; text-transform: uppercase !important;
+}
+#bl-demo-t:not([style*="display: none"]):not([style*="display:none"]) { display: flex !important; align-items: center; gap: 12px; }
+#bl-demo-t::before, #bl-demo-t::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+#bl-demo-s { order: 2 !important; margin: 0 0 12px !important; color: var(--muted) !important; font: 400 12.5px/1.45 "Manrope", sans-serif !important; text-align: center !important; }
+#bl-demo-btns { order: 3 !important; margin: 0 !important; flex-direction: row !important; gap: 10px !important; column-gap: 10px !important; }
+#bl-demo-btns:not([style*="display: none"]):not([style*="display:none"]) { display: flex !important; }

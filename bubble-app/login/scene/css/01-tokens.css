@@ -1,0 +1,31 @@
+/* ───────────── tokens: both themes. The theme lives on html[data-theme] (set before first paint). ───────────── */
+:root {
+  --rose: #c8475a; --rose-2: #a8344a; --rose-text: #a83a4d;
+  --btn-a: #c8475a; --btn-b: #a8344a;
+  --bg: #fbf3f1; --bg-2: #f4e1df; --text: #1f1a1c; --muted: #67575d; --line: rgba(31, 26, 28, .12);
+  --card: rgba(255, 251, 249, .66); --card-edge: rgba(255, 255, 255, .9);
+  --card-shadow: 0 40px 90px -40px rgba(140, 40, 62, .45), 0 10px 30px -16px rgba(80, 30, 40, .25);
+  --field: rgba(255, 255, 255, .78); --field-border: rgba(31, 26, 28, .14); --focus-ring: rgba(200, 71, 90, .2);
+  --wood-top: #ecd2b0; --wood-mid: #d4a676; --wood-front: #c08b55; --wood-dark: #8a5a30;
+  --wall-dot: rgba(200, 71, 90, .14); --spine-shadow: rgba(110, 40, 40, .30);
+  --green: #1d7a4b; --green-bg: rgba(29, 122, 75, .12); --amber: #9a5a06; --amber-bg: rgba(214, 140, 20, .16);
+  --red: #b3261e; --page: #fbf6ee; --page-ink: #2a2124; --page-muted: #6c5d55;
+  --icon-book: rgba(200, 71, 90, .28);
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  /* layout of the card column (desktop): header 66px + main padding 8px on top, 28px below */
+  --bl-col-w: 440px; --bl-card-w: 430px; --bl-gutter: 48px; --bl-top: 74px; --bl-bottom: 28px;
+}
+html[data-theme="dark"] {
+  --rose: #ee7a8e; --rose-2: #c8475a; --rose-text: #f297a8;
+  --bg: #120b13; --bg-2: #1e1222; --text: #f6ebee; --muted: #c0aab4; --line: rgba(255, 228, 236, .13);
+  --card: rgba(38, 24, 40, .62); --card-edge: rgba(255, 214, 226, .14);
+  --card-shadow: 0 40px 100px -40px rgba(0, 0, 0, .8), 0 0 0 1px rgba(255, 180, 200, .05);
+  --field: rgba(20, 12, 22, .55); --field-border: rgba(255, 220, 232, .16); --focus-ring: rgba(238, 122, 142, .25);
+  --wood-top: #6e4a33; --wood-mid: #563622; --wood-front: #4a2d1b; --wood-dark: #24140c;
+  --wall-dot: rgba(238, 122, 142, .09); --spine-shadow: rgba(0, 0, 0, .55);
+  --green: #6fdba5; --green-bg: rgba(111, 219, 165, .14); --amber: #f3bd5e; --amber-bg: rgba(243, 189, 94, .15);
+  --red: #ff8a80; --page: #f1e6d4; --page-ink: #2a2124; --page-muted: #6a5a50;
+  --icon-book: rgba(238, 122, 142, .22);
+}
+html[data-theme="dark"]:has(#bl-scene) { color-scheme: dark; }
+html[data-theme="light"]:has(#bl-scene) { color-scheme: light; }
