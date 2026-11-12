@@ -14,6 +14,7 @@ shows Sent or Failed with the reason.
 | Admin login | `admin@bookleaf.demo` |
 | Password (all logins) | `TestBookLeaf@123`. The sign-in page also has one-click "Demo author" and "Demo admin" buttons. |
 | Video (3-5 min) | {{VIDEO_URL}} |
+| Bubble editor access | Tried on 12 Nov: on the free plan, Bubble only lets you invite collaborators after upgrading to the Growth plan (the Invite button stays disabled). As BookLeaf's email allows, the live URL, the two logins above and the video are provided instead. |
 | n8n workflows | Self-hosted n8n 2.45.4 on AWS EC2, not n8n Cloud, so there is no shared workspace to open. The 7 workflows are in [`n8n/export/`](n8n/export/), ready to import (see [Setup](#setup--run-it-yourself)). Canvas screenshots are below. |
 
 All emails go to one demo inbox. n8n refuses any other address (422 `RECIPIENT_NOT_ALLOWED`), so
