@@ -29,8 +29,8 @@
 ```
 
 **Things another session should know (2026-11-12, Phase 3):** branch `refactor/n8n-clean` is merged into
-`main` (7d68188). Production n8n still runs the OLD workflows: the release (migration 03 → settings →
-deploy → `$env` blocked) waits for the user's go-ahead. Do not deploy `n8n/` to production meanwhile.
+`main` (7d68188). It was released to production on 12 Nov (migration 03, settings, 7 workflows, `$env` blocked);
+production contracts 43/43 and a live Bubble send passed.
 The book-themed UI was dropped; the current Bubble UI stays.
 
 ---

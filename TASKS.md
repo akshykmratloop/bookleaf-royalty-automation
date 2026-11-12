@@ -44,7 +44,12 @@ Legend: ⬜ TODO · 🔄 In progress · ✅ Done (commit SHA) · ⛔ Blocked
   - one Fable inspection (7.8/10, 16 findings, all fixed in fix round 1; second round stopped to save credits);
   - default-model code review (no CRITICAL/HIGH) + security review (1 HIGH, 2 MEDIUM, fixed: 3650d35, 5bfee44, 002e41e);
   - gates: unit 616, db 50, local contracts 45, build --check clean.
-- ⛔ Production release of the n8n clean-up: backup → migration 03 → settings → deploy → `$env` blocked → contract tests → live smoke. Blocked 12 Nov 02:4x: the auto-mode safety check refused the production migration; waits for the user's go-ahead.
+- ✅ Production release of the n8n clean-up (12 Nov, user's go-ahead):
+  - backup `bookleaf-20261112-014435.dump` → migration 03 (17 settings, 70 jobs unchanged) → production settings (demo inbox + allowed inbox, drills allowed, alerts to the demo inbox);
+  - 7 workflows deployed; `N8N_BLOCK_ENV_ACCESS_IN_NODE` removed from `/opt/n8n/docker-compose.yml` (old file in `/opt/n8n/backups/`), n8n restarted healthy;
+  - production contracts 43/43 (2 local-only skipped);
+  - live Bubble send (AUTH003) → Sent to the demo inbox. Three Bubble drill switches were found ON and turned off first.
+  - Old credentials ("BookLeaf n8n API (X-N8N-API-KEY)", "BookLeaf Bubble API (bearer)", "BookLeaf Webhook Key (X-BookLeaf-Key)") kept for rollback; delete after delivery.
 - ❌ Book-themed UI: dropped on 11 Nov at the user's request; the current UI stays (nothing was written to Bubble; 330d43a reverts the only commit).
 - ⬜ Final inspection of the whole build (default model, per the user's Fable limit)
 - ⬜ System page text names the n8n settings instead of fixed numbers (after the release)
