@@ -1,25 +1,27 @@
 // Review drawer workflows: check edits, approve & send, discard, regenerate with another tone or
 // length, and opening the drawer from the Drafts list, the log, or right after a draft is requested.
-import { chain, f, op, text, value, groupData, parent, state, search, sorted } from '../expr.mjs';
+import { chain, f, op, text, value, groupData, parent, state, search, sorted, optionValue } from '../expr.mjs';
 import { PAGE } from '../queries.mjs';
 import { onClick, setState, trigger, show, hide, display, when } from './actions.mjs';
 import { approveCall, out, okOf, notOkOf, blockedOf, reasonOf, markSending, markDiscarded } from './approve.mjs';
 import { TONES_CHOICES, LENGTHS } from '../sections/emailSettings.mjs';
 import { rvTone, rvLength } from '../sections/reviewDrawer.mjs';
+import { REGEN_PREV } from '../regen/regenAnchor.mjs';
 
 const log = (...ops) => chain(groupData('ad_pop_rev'), ...ops);
 
-/** Clear what a previous check left behind. */
-export const resetReview = (prefix) => [
+/** Clear what a previous check left behind; unless `keepPrev`, also forget the draft a regenerate replaced. */
+export const resetReview = (prefix, { keepPrev = false } = {}) => [
   setState(PAGE, 'rv_checked', text(''), `${prefix}_r1`),
   setState(PAGE, 'rv_issues', text(''), `${prefix}_r2`),
   setState(PAGE, 'rv_preview', text(''), `${prefix}_r3`),
   setState(PAGE, 'rv_tone', text(''), `${prefix}_r4`),
   setState(PAGE, 'rv_len', text(''), `${prefix}_r5`),
+  ...(keepPrev ? [] : [setState(PAGE, REGEN_PREV, undefined, `${prefix}_r6`)]),
 ];
 
 /** Open the drawer on a log. */
-export const openReview = (prefix, logExpr) => [...resetReview(prefix), display('ad_pop_rev', logExpr), show('ad_pop_rev')];
+export const openReview = (prefix, logExpr, opts) => [...resetReview(prefix, opts), display('ad_pop_rev', logExpr), show('ad_pop_rev')];
 
 /** The newest log of an author: the one send_one just created. */
 export const newestLogOf = (authorExpr) =>
@@ -56,11 +58,17 @@ function discard() {
   ], 'Discard draft');
 }
 
-/** New draft for the same author with the tone/length picked in the drawer; the old one is discarded. */
+/**
+ * New draft for the same author with the tone/length picked in the drawer; the old one is discarded.
+ * First it remembers the draft on screen (rv_prev), so the editor keeps its text under the "being
+ * rewritten" mask while the new log is written (a failed retry keeps the original draft remembered).
+ */
 function regenerate() {
   const c = 'rv_regen_call';
   const authorOfLog = log(op('author_custom_author'));
+  const isReady = log(f.option('status', 'sendstatus'), op('equals', { args: optionValue('sendstatus', 'Draft ready') }));
   return onClick('wf_ad_rv_regen', 'ad_rv_regen', [
+    when(setState(PAGE, REGEN_PREV, groupData('ad_pop_rev'), 'rv_regen_p'), isReady),
     setState(PAGE, 'cur_tone', text(rvTone()), 'rv_regen_t'),
     setState(PAGE, 'cur_len', text(rvLength()), 'rv_regen_l'),
     setState(PAGE, 'cur_note', text(value('ad_rv_note')), 'rv_regen_n'),
@@ -70,7 +78,7 @@ function regenerate() {
     approveCall(c, log, 'discard'),
     markDiscarded(groupData('ad_pop_rev'), 'rv_regen_mark'),
     trigger('send_one', 'rv_regen_send'),
-    ...openReview('rv_regen', newestLogOf(state(PAGE, 'cur_author'))),
+    ...openReview('rv_regen', newestLogOf(state(PAGE, 'cur_author')), { keepPrev: true }),
   ], 'Regenerate draft');
 }
 

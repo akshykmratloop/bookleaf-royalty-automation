@@ -40,6 +40,8 @@ export const CUSTOM_STATES = {
   ref_date: { display: 'ref_date', value: 'date', rank: 0, make_static: true },
   cur_author: { display: 'cur_author', value: 'custom.author', rank: 1 },
   ...Object.fromEntries(TEXT_STATES.map((name, i) => [name, { display: name, value: 'text', rank: i + 2 }])),
+  // The draft a regenerate is replacing: its text stays on screen until the new draft is in (regen/).
+  rv_prev: { display: 'rv_prev', value: 'custom.notificationlog', rank: TEXT_STATES.length + 2 },
 };
 
 const ordered = (els) => Object.fromEntries(els.map((e, i) => [e.id, { ...e, properties: { ...e.properties, order: i + 1 } }]));

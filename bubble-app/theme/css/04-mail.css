@@ -1,0 +1,31 @@
+/* ───────────── the royalty email preview in dark mode (admin review pop-up, author statement pop-up) ─────────────
+   The email (n8n/src/render-email.js, render-table.js) is written for mail clients with fixed inline colours,
+   so only the preview is re-coloured here, by matching those inline colours: dark paper, light text,
+   readable table rules, and status pills in the theme's success / warning / danger tones.
+   The green header band keeps its colours. Light mode is untouched.
+   Admin: the email sits in `.bl-mail`. Author: in the first div of the statement pop-up's HTML element. */
+html[data-theme="dark"] .bl-mail {
+  background: #211a20 !important; color: var(--bl-text-1) !important; color-scheme: dark;
+  border-color: var(--bl-border-strong) !important;
+}
+html[data-theme="dark"] :is(.bl-mail, #bl-author-popup-body > div) table[style*="background:#faf7f2"] { background: #1a1419 !important; }
+html[data-theme="dark"] :is(.bl-mail, #bl-author-popup-body > div) table[style*="background:#ffffff"] { background: #241c23 !important; }
+html[data-theme="dark"] :is(.bl-mail, #bl-author-popup-body > div) :is(p, td, li) { color: var(--bl-text-1) !important; }
+html[data-theme="dark"] :is(.bl-mail, #bl-author-popup-body > div) th {
+  color: var(--bl-text-2) !important; border-bottom-color: #4f9a78 !important;
+}
+html[data-theme="dark"] :is(.bl-mail, #bl-author-popup-body > div) td[style*="border-bottom:1px solid #e6e0d6"] {
+  border-bottom-color: var(--bl-border-strong) !important;
+}
+html[data-theme="dark"] :is(.bl-mail, #bl-author-popup-body > div) td[style*="color:#7a7a7a"] {
+  color: var(--bl-text-3) !important; border-top-color: var(--bl-border-strong) !important;
+}
+html[data-theme="dark"] :is(.bl-mail, #bl-author-popup-body > div) span[style*="background:#e1f1e7"] {
+  color: var(--bl-success) !important; background: var(--bl-success-bg) !important;
+}
+html[data-theme="dark"] :is(.bl-mail, #bl-author-popup-body > div) span[style*="background:#fff1cc"] {
+  color: var(--bl-warning) !important; background: var(--bl-warning-bg) !important;
+}
+html[data-theme="dark"] :is(.bl-mail, #bl-author-popup-body > div) span[style*="background:#fde7e5"] {
+  color: var(--bl-danger) !important; background: var(--bl-danger-bg) !important;
+}

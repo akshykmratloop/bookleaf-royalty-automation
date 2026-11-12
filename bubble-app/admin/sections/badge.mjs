@@ -27,8 +27,8 @@ export const statusBadge = (id, pendingCount, overdueCount) =>
     { when: gt0(overdueCount), tone: 'danger', text: text('Overdue') },
   ]);
 
-/** Send status pill; `statusDisplayExpr` is the log's status:display. */
-export function sendBadge(id, statusDisplayExpr) {
+/** Send status pill; `statusDisplayExpr` is the log's status:display. `extra` rules come last (they win). */
+export function sendBadge(id, statusDisplayExpr, extra = []) {
   const is = (v) => chain(statusDisplayExpr, op('equals', { args: v }));
   return pill(id, text(statusDisplayExpr), 'warning', [
     { when: is('Draft ready'), tone: 'info' },
@@ -36,5 +36,6 @@ export function sendBadge(id, statusDisplayExpr) {
     { when: is('Failed'), tone: 'danger' },
     { when: is('Discarded'), tone: 'neutral' },
     { when: is('Duplicate'), tone: 'neutral' },
+    ...extra,
   ]);
 }

@@ -89,4 +89,11 @@ describe('theme layer', () => {
       .filter((u) => readFileSync(u, 'utf8').split('\n').length > 200).map((u) => u.pathname);
     expect(long).toEqual([]);
   });
+
+  it('re-colours the email preview in dark mode on the admin and the author page, header band kept', () => {
+    expect(css).toContain('html[data-theme="dark"] .bl-mail {');
+    expect(css).toContain(':is(.bl-mail, #bl-author-popup-body > div) table[style*="background:#faf7f2"]');
+    expect(css).toContain('span[style*="background:#e1f1e7"]');
+    expect(css).not.toMatch(/background:#1f4d3a/); // the green header is never overridden
+  });
 });
