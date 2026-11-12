@@ -60,6 +60,7 @@ Legend: ⬜ TODO · 🔄 In progress · ✅ Done (commit SHA) · ⛔ Blocked
 - ✅ n8n export: 7 workflows in `n8n/export/`
 - ✅ Sign-in page redesigned as "The Living Bookshelf" (concept 1): native Bubble sign-in, 8 workflows and 2 custom states unchanged; bookshelf scene is one HTML element; live checks passed (4e13027)
 - ✅ Bubble collaborator tried for musavir@bookleafpub.in: the free plan needs Growth to invite; fallback (URL + logins + video) noted in README (353ae27)
+- ✅ Dashboard UI round (admin, reset_pw, 404; desktop): shared theme layer with dark mode and the ink-splash toggle, alignment fixes, pop-ups that fit the window with one scrolling middle, pay chart in ~1.3 s instead of ~8.4 s, dark email preview and backdrop (fbc1d45, 19c2bf6). Author dashboard restyle written but handed to a separate redesign; admin screenshots in `docs/media/` refreshed
 - 🔄 Video (~4 min, real footage + AI voice) being produced
 - ⬜ Share links: GitHub access for the reviewer (private repo) and the video link
 - ⬜ Reply email: draft ready; send on the same thread after the links are in
