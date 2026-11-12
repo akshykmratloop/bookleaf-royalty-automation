@@ -4,6 +4,7 @@ import { chain, f, op, parent, search, text, sorted, groupData, optionValue } fr
 import { group, row, card, label, button, html, list, thingGroup, popup, showWhen, grow } from '../ui.mjs';
 import { T, fill, border, pad, font, sideBorder } from '../theme.mjs';
 import { progress } from './progress.mjs';
+import { popupScroll } from '../popupStyle.mjs';
 
 export function emailPopup() {
   const l = (...ops) => chain(groupData('ad_pop_mail'), ...ops);
@@ -15,7 +16,8 @@ export function emailPopup() {
       ], { gap: 2, props: grow() }),
       button('ad_pm_close', 'Close', 'ghost'),
     ], { gap: 12 }),
-    html('ad_pm_html', text('<div class="bl-mail">', l(f.text('email_html')), '</div>')),
+    // Only ad_pm_scroll scrolls; the subject line and Close stay in view.
+    popupScroll('ad_pm_scroll', [html('ad_pm_html', text('<div class="bl-mail">', l(f.text('email_html')), '</div>'))]),
   ], 780);
 }
 
@@ -44,5 +46,5 @@ export function liveStrip() {
       label('ad_live_n', 'Steps update live; the timer shows how long each email has taken so far.', 'hint'),
     ], { gap: 8 }),
     list('ad_live_rg', 'notificationlog', chain(liveLogs(), op('limit_to', { args: 10 })), liveRow()),
-  ], { gap: 6, props: { ...fill('#fffafb'), ...border('#f6c9cf', 16), ...pad(14, 18) } }), chain(n, op('greater_than', { args: 0 })));
+  ], { gap: 6, props: { ...fill(T.brandSoft), ...border(T.brandSoft, 16), ...pad(14, 18) } }), chain(n, op('greater_than', { args: 0 })));
 }

@@ -1,7 +1,7 @@
 // Authors: name search, city filter, payout-status segmented filter, and one row per author with
 // books, earned, pending, status pill, last email and actions.
 import { chain, f, op, parent, text, state, rupees, dateFmt, yesNo } from '../expr.mjs';
-import { group, row, card, cell, label, button, input, textDropdown, list, thingGroup, withStates, showWhen, hideWhen, hover, grow } from '../ui.mjs';
+import { group, row, card, cell, cellGroup, label, button, input, textDropdown, list, thingGroup, withStates, showWhen, hideWhen, hover, grow, fixedWidth } from '../ui.mjs';
 import { T, fill, border, pad, font, sideBorder, shadow } from '../theme.mjs';
 import { PAGE, settings, filteredAuthors, allCities, authorsWithPending, authorsOverdue, recordsOf, booksOf, logsOf, pendingRecords, overdueRecords, inFlightOf, draftOf } from '../queries.mjs';
 import { statusBadge, pill } from './badge.mjs';
@@ -27,8 +27,8 @@ export function filters() {
     row('ad_chips', [
       chip('ad_f_all', 'All', ''), chip('ad_f_pend', 'Pending', 'pending'),
       chip('ad_f_over', 'Overdue', 'overdue'), chip('ad_f_paid', 'Fully paid', 'paid'),
-    ], { gap: 2, props: { ...fill(T.inset), ...border(T.border, 12), ...pad(3), fit_width: true } }),
-  ], { gap: 10 });
+    ], { gap: 4, props: { ...fill(T.inset), ...border(T.border, 12), ...pad(4), fit_width: true } }),
+  ], { gap: 12 });
 }
 
 /** The table's list: base filter, then intersected with the chosen payout status. */
@@ -44,50 +44,66 @@ function tableSource() {
   };
 }
 
-const COLS = [['city', 'CITY', 100], ['books', 'BOOKS', 56, 'right'], ['earned', 'EARNED', 100, 'right'], ['pend', 'PENDING', 100, 'right'], ['status', 'STATUS', 104], ['last', 'LAST EMAIL', 130]];
+/**
+ * Table columns, shared by the header and every row so they cannot drift: [key, caption, width, align].
+ * Numbers are right-aligned (header too); text and badges are left-aligned. The status column gets 12px of
+ * left padding so it never touches the right-aligned PENDING figure next to it.
+ * Fixed widths + gaps leave the name column 178px in a 1280px window (942px of row), so a row stays on
+ * one line and an email address wraps only at the " · " before it. STATUS fits the widest badge ("Fully paid").
+ */
+const COLS = { city: ['CITY', 84], books: ['BOOKS', 56, 'right'], earned: ['EARNED', 76, 'right'], pend: ['PENDING', 76, 'right'], status: ['STATUS', 112], last: ['LAST EMAIL', 112] };
+const NAME_MIN = '160px';
+const ACT_W = 184;
+const ROW_GAP = 8;
+const STATUS_PAD = { padding_left: 12 };
+const tableRowProps = () => ({ ...sideBorder('bottom'), ...pad(12, 16) });
+const col = (id, key, t, opts = {}) => cell(id, t, COLS[key][1], { align: COLS[key][2] ?? 'left', ...opts });
 
 const head = () => row('ad_t_head', [
-  label('ad_th_name', 'AUTHOR', 'micro', grow({ min_width_css: '190px' })),
-  ...COLS.map(([k, cap, w, align]) => cell(`ad_th_${k}`, cap, w, { look: 'micro', align })),
-  cell('ad_th_act', '', 196, { look: 'micro' }),
-], { gap: 8, props: { ...fill(T.panel2), ...sideBorder('bottom'), ...pad(12, 16) } });
+  label('ad_th_name', 'AUTHOR', 'micro', grow({ min_width_css: NAME_MIN })),
+  ...Object.keys(COLS).map((k) => col(`ad_th_${k}`, k, COLS[k][0], { look: 'micro', props: k === 'status' ? STATUS_PAD : {} })),
+  cell('ad_th_act', '', ACT_W, { look: 'micro' }),
+], { gap: ROW_GAP, props: { ...fill(T.panel2), ...tableRowProps() } });
 
 function lastEmail() {
   const last = chain(logsOf(parent()), op('first_element'));
   const t = text(chain(logsOf(parent()), op('count'), op('equals', { args: 0 }), yesNo('Never sent', [
     chain(last, f.option('status', 'sendstatus'), op('display')), ' · ', chain(last, { type: 'Message', name: 'Created Date', is_slidable: false }, dateFmt('d mmm')),
   ])));
-  return cell('ad_r_last', t, 130, { look: 'hint' });
+  return col('ad_r_last', 'last', t, { look: 'hint' });
 }
 
+/** Actions: View, then one fixed-width slot (Send / Draft & review / Review draft / Working…), so both line up on every row. */
 function actions() {
   const busy = chain(inFlightOf(parent()), op('count'), op('greater_than', { args: 0 }));
   const hasDraft = chain(draftOf(parent()), op('is_not_empty'));
-  const send = withStates(button('ad_r_send', 'Send', 'primary', pad(7, 12)), [{ when: reviewFirst(), set: { text: text('Draft & review') } }]);
+  const slot = { ...pad(8, 12), ...fixedWidth(120) };
+  const send = withStates(button('ad_r_send', 'Send', 'primary', slot), [{ when: reviewFirst(), set: { text: text('Draft & review') } }]);
   return row('ad_r_act', [
-    button('ad_r_view', 'View', 'ghost', pad(7, 10)),
+    button('ad_r_view', 'View', 'ghost', { ...pad(8, 8), ...fixedWidth(56) }),
     // A waiting draft is reviewed, not sent again: the row offers Review instead of Send.
     hideWhen(hideWhen(send, busy), hasDraft),
-    showWhen(button('ad_r_rev', 'Review draft', 'soft', pad(7, 12)), hasDraft),
+    showWhen(button('ad_r_rev', 'Review draft', 'soft', slot), hasDraft),
     showWhen(pill('ad_r_busy', text('Working…'), 'brand'), busy),
-  ], { gap: 6, props: { width: 196, single_width: true, min_width_css: '196px' } });
+  ], { gap: 8, props: fixedWidth(ACT_W) });
 }
 
 function tableRow() {
   const p = (...ops) => chain(parent(), ...ops);
+  const sum = (field) => rupees(chain(recordsOf(parent()), f.num(field), op('sum')));
   const r = thingGroup('ad_t_row', 'author', parent(), [
     group('ad_r_namecol', [
       label('ad_r_name', text(p(f.text('name'))), 'strong'),
       label('ad_r_code', text(p(f.text('code')), ' · ', p(f.text('email'))), 'hint'),
-    ], { gap: 1, props: grow({ min_width_css: '190px' }) }),
-    cell('ad_r_city', text(p(f.text('city'))), 100),
-    cell('ad_r_books', text(count(booksOf(parent()))), 56, { align: 'right' }),
-    cell('ad_r_earned', rupees(chain(recordsOf(parent()), f.num('earned'), op('sum'))), 100, { align: 'right' }),
-    cell('ad_r_pend', rupees(chain(recordsOf(parent()), f.num('pending'), op('sum'))), 100, { align: 'right', look: 'strong' }),
-    group('ad_r_status', [statusBadge('ad_r_badge', count(pendingRecords(parent())), count(overdueRecords(parent())))], { props: { width: 104, single_width: true, min_width_css: '104px' } }),
+    ], { gap: 2, props: grow({ min_width_css: NAME_MIN }) }),
+    col('ad_r_city', 'city', text(p(f.text('city')))),
+    col('ad_r_books', 'books', text(count(booksOf(parent())))),
+    col('ad_r_earned', 'earned', sum('earned')),
+    col('ad_r_pend', 'pend', sum('pending'), { look: 'strong' }),
+    cellGroup('ad_r_status', [statusBadge('ad_r_badge', count(pendingRecords(parent())), count(overdueRecords(parent())))], COLS.status[1], { props: STATUS_PAD }),
     lastEmail(),
     actions(),
-  ], { layout: 'row', gap: 8, props: { ...sideBorder('bottom'), ...pad(12, 16), vert_alignment: 'center' } });
+  ], { layout: 'row', gap: ROW_GAP, props: tableRowProps() });
   return hover(r, fill(T.panel2));
 }
 

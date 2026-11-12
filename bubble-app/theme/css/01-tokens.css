@@ -1,0 +1,102 @@
+/* ───────────── tokens: both themes on html[data-theme] (same key and look as the login page) ─────────────
+   --bl-* are read by every generated element (admin/theme.mjs writes `var(--bl-x, <light>)` into Bubble).
+   Light is the default, so a page without data-theme still looks right. */
+:root {
+  color-scheme: light;
+  --bl-font-ui: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bl-font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --bl-ease: cubic-bezier(.2, .8, .2, 1);
+
+  --bl-bg: #fbf3f1; --bl-bg-2: #f4e1df; --bl-dot: rgba(200, 71, 90, .13);
+  --bl-side: rgba(255, 250, 248, .74); --bl-topbar: rgba(251, 243, 241, .78);
+  --bl-panel: #fffcfb; --bl-card: rgba(255, 252, 250, .84); --bl-card-edge: rgba(255, 255, 255, .9);
+  --bl-panel-2: #fbf1f0; --bl-inset: #fdf7f6; --bl-hover: rgba(200, 71, 90, .06);
+  --bl-border: rgba(31, 26, 28, .09); --bl-border-strong: rgba(31, 26, 28, .17);
+  --bl-text-1: #1f1a1c; --bl-text-2: #5f5056; --bl-text-3: #8d7c83; --bl-placeholder: #a8979e;
+  --bl-text-1-rgb: 31, 26, 28; --bl-text-2-rgb: 95, 80, 86;
+  --bl-brand: #c8475a; --bl-brand-hover: #a8344a; --bl-brand-ink: #a83a4d; --bl-brand-soft: #fbe6e8;
+  --bl-brand-rgb: 200, 71, 90; --bl-brand-soft-rgb: 251, 230, 232;
+  --bl-btn: #c8475a; --bl-btn-hover: #a8344a; --bl-btn-a: #c8475a; --bl-btn-b: #a8344a; --bl-on-brand: #ffffff;
+  --bl-navy: #3d3550; --bl-navy-soft: #efebf3; --bl-accent: #d98a12; --bl-accent-soft: #fbefd9; --bl-accent-rgb: 217, 138, 18;
+  --bl-success: #1d7a4b; --bl-success-bg: #e5f3ea; --bl-success-rgb: 29, 122, 75;
+  --bl-warning: #9a5a06; --bl-warning-bg: #fbefd9; --bl-warning-rgb: 154, 90, 6;
+  --bl-danger: #b3261e; --bl-danger-bg: #fbe8e6; --bl-danger-rgb: 179, 38, 30; --bl-danger-solid: #b3261e;
+  --bl-info: #2f6db5; --bl-info-bg: #e9f0fb;
+  --bl-shadow-soft: rgba(110, 40, 56, .08); --bl-shadow-card: rgba(140, 40, 62, .22);
+  --bl-shadow-lift: rgba(200, 71, 90, .20); --bl-shadow-float: rgba(80, 30, 40, .34);
+  --bl-focus-ring: rgba(200, 71, 90, .22); --bl-backdrop: rgba(60, 22, 34, .30);
+  --bl-mail-frame: #f3e7e5;
+
+  /* charts (read with getComputedStyle(document.documentElement).getPropertyValue('--bl-chart-text')) */
+  --bl-chart-text: #67575d; --bl-chart-grid: rgba(31, 26, 28, .07); --bl-chart-axis: rgba(31, 26, 28, .14);
+  --bl-chart-paid: #3d3550; --bl-chart-pending: #c8475a;
+  --bl-chart-sent: #1d7a4b; --bl-chart-failed: #b3261e; --bl-chart-draft: #2f6db5;
+  --bl-chart-progress: #d98a12; --bl-chart-discarded: #dccfd2; --bl-chart-track: rgba(31, 26, 28, .06);
+  --bl-chart-tooltip-bg: #1f1a1c; --bl-chart-tooltip-text: #fbf3f1;
+  --bl-chart-shimmer: rgba(200, 71, 90, .10);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bl-bg: #120b13; --bl-bg-2: #1e1222; --bl-dot: rgba(238, 122, 142, .085);
+  --bl-side: rgba(26, 16, 28, .78); --bl-topbar: rgba(18, 11, 19, .72);
+  --bl-panel: #1f1422; --bl-card: rgba(38, 24, 40, .66); --bl-card-edge: rgba(255, 214, 226, .12);
+  --bl-panel-2: rgba(255, 228, 236, .055); --bl-inset: rgba(20, 12, 22, .62); --bl-hover: rgba(238, 122, 142, .08);
+  --bl-border: rgba(255, 228, 236, .10); --bl-border-strong: rgba(255, 228, 236, .19);
+  --bl-text-1: #f6ebee; --bl-text-2: #c9b4bd; --bl-text-3: #9a8590; --bl-placeholder: #7f6b76;
+  --bl-text-1-rgb: 246, 235, 238; --bl-text-2-rgb: 201, 180, 189;
+  --bl-brand: #cf4f63; --bl-brand-hover: #e0687b; --bl-brand-ink: #f297a8; --bl-brand-soft: rgba(238, 122, 142, .15);
+  --bl-brand-rgb: 238, 122, 142; --bl-brand-soft-rgb: 70, 32, 46;
+  --bl-btn: #c8475a; --bl-btn-hover: #d95d70; --bl-btn-a: #d55468; --bl-btn-b: #a8344a; --bl-on-brand: #ffffff;
+  --bl-navy: #c3b8d8; --bl-navy-soft: rgba(195, 184, 216, .12); --bl-accent: #f3bd5e; --bl-accent-soft: rgba(243, 189, 94, .14); --bl-accent-rgb: 243, 189, 94;
+  --bl-success: #6fdba5; --bl-success-bg: rgba(111, 219, 165, .13); --bl-success-rgb: 111, 219, 165;
+  --bl-warning: #f3bd5e; --bl-warning-bg: rgba(243, 189, 94, .14); --bl-warning-rgb: 243, 189, 94;
+  --bl-danger: #ff8a80; --bl-danger-bg: rgba(255, 138, 128, .13); --bl-danger-rgb: 255, 138, 128; --bl-danger-solid: #c9372c;
+  --bl-info: #95b8ff; --bl-info-bg: rgba(149, 184, 255, .13);
+  --bl-shadow-soft: rgba(0, 0, 0, .35); --bl-shadow-card: rgba(0, 0, 0, .55);
+  --bl-shadow-lift: rgba(200, 71, 90, .32); --bl-shadow-float: rgba(0, 0, 0, .7);
+  --bl-focus-ring: rgba(238, 122, 142, .28); --bl-backdrop: rgba(8, 4, 10, .62);
+  --bl-mail-frame: #2a1b2d;
+
+  --bl-chart-text: #c0aab4; --bl-chart-grid: rgba(255, 228, 236, .08); --bl-chart-axis: rgba(255, 228, 236, .16);
+  --bl-chart-paid: #a99cc4; --bl-chart-pending: #ee7a8e;
+  --bl-chart-sent: #6fdba5; --bl-chart-failed: #ff8a80; --bl-chart-draft: #95b8ff;
+  --bl-chart-progress: #f3bd5e; --bl-chart-discarded: #5a4752; --bl-chart-track: rgba(255, 228, 236, .07);
+  --bl-chart-tooltip-bg: #f6ebee; --bl-chart-tooltip-text: #1f1a1c;
+  --bl-chart-shimmer: rgba(255, 214, 226, .08);
+}
+
+/* Bubble's own design tokens (set inline on <html> by Bubble, hence !important): the author dashboard,
+   reset_pw and 404 pages use these, so pointing them at --bl-* themes those pages too. */
+html {
+  --font_default: var(--bl-font-ui) !important;
+  --font_body_default: var(--bl-font-ui) !important;
+  --font_heading_default: var(--bl-font-display) !important;
+  --color_primary_default: var(--bl-btn) !important;
+  --color_primary_default_rgb: var(--bl-brand-rgb) !important;
+  --color_text_default: var(--bl-text-1) !important;
+  --color_text_default_rgb: var(--bl-text-1-rgb) !important;
+  --color_surface_default: var(--bl-panel) !important;
+  --color_background_default: var(--bl-bg) !important;
+  --color_destructive_default: var(--bl-danger) !important;
+  --color_success_default: var(--bl-success) !important;
+  --color_alert_default: var(--bl-warning) !important;
+  --color_bltext_default: var(--bl-text-1) !important;
+  --color_bltext_default_rgb: var(--bl-text-1-rgb) !important;
+  --color_blmuted_default: var(--bl-text-2) !important;
+  --color_blmuted_default_rgb: var(--bl-text-2-rgb) !important;
+  --color_blaccent_default: var(--bl-accent) !important;
+  --color_blaccent_default_rgb: var(--bl-accent-rgb) !important;
+  --color_blborder_default: var(--bl-border) !important;
+  --color_blprimary_default: var(--bl-brand) !important;
+  --color_blprimary_default_rgb: var(--bl-brand-rgb) !important;
+  --color_blprimarysoft_default: var(--bl-brand-soft) !important;
+  --color_blsurface_default: var(--bl-card) !important;
+  --color_blbackground_default: var(--bl-bg) !important;
+  --color_badgeredbg_default: var(--bl-danger-bg) !important;
+  --color_badgeredtext_default: var(--bl-danger) !important;
+  --color_badgeamberbg_default: var(--bl-warning-bg) !important;
+  --color_badgeambertext_default: var(--bl-warning) !important;
+  --color_badgegreenbg_default: var(--bl-success-bg) !important;
+  --color_badgegreentext_default: var(--bl-success) !important;
+}

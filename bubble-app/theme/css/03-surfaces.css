@@ -1,0 +1,61 @@
+/* ───────────── surfaces: frosted paper cards, sidebar, top bar, buttons, logo, theme toggle ─────────────
+   Generated elements carry their colour token in the inline style Bubble writes
+   (e.g. `background-color: var(--bl-card, …)`), so attribute selectors find them without extra ids. */
+
+/* Cards: translucent paper over the dotted page, blurred like the login card. */
+.bubble-element[style*="var(--bl-card,"],
+.bubble-element[style*="var(--color_blsurface_default)"] {
+  -webkit-backdrop-filter: blur(14px) saturate(1.15); backdrop-filter: blur(14px) saturate(1.15);
+}
+html[data-theme="dark"] .bubble-element[style*="var(--bl-card,"] {
+  border-color: var(--bl-card-edge) !important;
+}
+
+/* Sidebar and top bar: frosted glass, so the paper texture shows through. */
+#ad_side, #bl-author-side { -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2); }
+.bubble-element.ad_top, #bl-author-bar {
+  -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
+  position: sticky !important; top: 0; z-index: 20;
+}
+
+/* Primary buttons: the login's rose gradient. The hover state swaps the token, which drops the gradient. */
+.bubble-element[style*="background-color: var(--bl-btn,"] {
+  background-image: linear-gradient(140deg, var(--bl-btn-a), var(--bl-btn-b)) !important;
+}
+.bubble-element.Button { transition: transform .2s var(--bl-ease), box-shadow .2s, background-color .15s, border-color .15s, color .15s; }
+.bubble-element.Button:active { transform: translateY(1px); }
+
+/* Logo: the login's rose "/" square. */
+#ad_logo, .bl-logo-sq {
+  background-image: linear-gradient(140deg, var(--bl-btn-a), var(--bl-btn-b)) !important;
+  box-shadow: 0 8px 18px -8px rgba(168, 52, 74, .8) !important;
+}
+
+/* Active sidebar item: a soft rose pill with a hairline edge. */
+#ad_side .bubble-element[style*="var(--bl-brand-soft,"] {
+  box-shadow: inset 0 0 0 1px rgba(var(--bl-brand-rgb), .16), 0 6px 16px -10px rgba(var(--bl-brand-rgb), .55) !important;
+}
+
+/* Elements still built with a fixed colour (see the integrator notes): themed here until they use T. */
+html[data-theme="dark"] .bubble-element.ad_live { background-color: var(--bl-brand-soft) !important; border-color: rgba(var(--bl-brand-rgb), .28) !important; }
+
+/* Popup scroll areas (layout lives in admin/popupStyle.mjs): only their colours here. */
+.ad_rv_scroll, .ad_pa_scroll, .ad_pm_scroll { scrollbar-color: rgba(var(--bl-text-2-rgb), .3) transparent; }
+
+/* ───────────── theme toggle (same drawing as the login's #theme-toggle) ───────────── */
+.bl-theme-toggle {
+  width: 40px; height: 40px; margin: 0; padding: 0; border-radius: 50%; box-sizing: border-box;
+  border: 1px solid var(--bl-border-strong); background: var(--bl-card); color: var(--bl-text-1);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  display: grid; place-items: center; cursor: pointer; transition: transform .3s var(--bl-ease), box-shadow .25s;
+}
+.bl-theme-toggle:hover { transform: rotate(-12deg) scale(1.06); box-shadow: 0 10px 22px -12px rgba(var(--bl-brand-rgb), .6); }
+.bl-theme-toggle svg { width: 20px; height: 20px; overflow: visible; pointer-events: none; }
+.bl-theme-toggle .tg-core { transition: r .5s var(--bl-ease); }
+.bl-theme-toggle .tg-bite { transition: transform .55s var(--bl-ease); transform: translate(14px, -14px); }
+.bl-theme-toggle .tg-rays { transform-origin: 12px 12px; transition: transform .55s var(--bl-ease), opacity .35s; }
+html[data-theme="dark"] .bl-theme-toggle .tg-core { r: 9px; }
+html[data-theme="dark"] .bl-theme-toggle .tg-bite { transform: translate(0, 0); }
+html[data-theme="dark"] .bl-theme-toggle .tg-rays { transform: rotate(90deg) scale(.4); opacity: 0; }
+.bl-theme-toggle.is-floating { position: fixed; top: 20px; right: 24px; z-index: 30; }
+.bl-toggle-slot { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; }

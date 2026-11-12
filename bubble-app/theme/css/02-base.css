@@ -1,0 +1,47 @@
+/* ───────────── page base: fonts, blush paper with a faint dotted texture, theme-switch transitions ───────────── */
+html, body {
+  background-color: var(--bl-bg) !important;
+  color: var(--bl-text-1);
+  font-family: var(--bl-font-ui);
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
+/* The paper: two soft glows and a 22px dot grid, behind the Bubble page and the scrolling main column. */
+body, body > .bubble-element.Page, #ad_main, #bl-author-main {
+  background-image:
+    radial-gradient(var(--bl-dot) 1.1px, transparent 1.4px),
+    radial-gradient(1100px 650px at 8% -12%, var(--bl-bg-2), transparent 70%),
+    radial-gradient(900px 600px at 105% 112%, var(--bl-bg-2), transparent 70%) !important;
+  background-size: 22px 22px, auto, auto !important;
+  background-repeat: repeat, no-repeat, no-repeat !important;
+}
+body > .bubble-element.Page { background-color: var(--bl-bg) !important; }
+
+/* A Bubble style that names a literal family instead of a font token still gets the UI font. */
+.bubble-element[style*="Nunito Sans"], .bubble-element[style*="Lato"] { font-family: var(--bl-font-ui) !important; }
+/* Headings on the display serif (Bubble's heading token points at Fraunces in 01-tokens.css). */
+.bubble-element[style*="--font_heading_default"] { font-family: var(--bl-font-display) !important; font-variation-settings: "opsz" 72; }
+.bubble-element.Text { font-variant-numeric: tabular-nums; }
+
+/* Native controls (selects, date pickers, scrollbars) follow the theme. */
+::selection { background: rgba(var(--bl-brand-rgb), .24); }
+input::placeholder, textarea::placeholder { color: var(--bl-placeholder) !important; opacity: 1; }
+html[data-theme="dark"] select option { background: var(--bl-panel); color: var(--bl-text-1); }
+html[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.85); }
+* { scrollbar-color: rgba(var(--bl-text-2-rgb), .28) transparent; }
+
+/* Focus ring, shared with the login page. */
+.bubble-element :focus-visible, [data-bl-theme-toggle]:focus-visible { outline: 3px solid rgba(var(--bl-brand-rgb), .55); outline-offset: 2px; }
+
+/* Theme switch fallbacks: no View Transitions → colour fade; reduced motion → plain cross-fade. */
+html.theme-fade body, html.theme-fade .bubble-element {
+  transition: background-color .45s, color .45s, border-color .45s, box-shadow .45s !important;
+}
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.ink-run::view-transition-new(root) { -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; }
+html.vt-fade::view-transition-old(root) { animation: bl-vt-out .35s ease both; }
+html.vt-fade::view-transition-new(root) { animation: bl-vt-in .35s ease both; }
+@keyframes bl-vt-out { to { opacity: 0; } }
+@keyframes bl-vt-in { from { opacity: 0; } }
+
+/* Pop-up backdrop: Bubble's .greyout carries an inline colour from the editor. */
+.greyout { background-color: var(--bl-backdrop) !important; }

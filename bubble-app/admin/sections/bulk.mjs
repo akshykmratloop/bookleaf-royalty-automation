@@ -19,12 +19,11 @@ export function bulkCard() {
   const hasBatch = chain(batch(), op('is_not_empty'));
   const n = count(authorsWithPending());
   return card('ad_bulk', [
-    label('ad_bulk_h', 'Royalty emails in bulk', 'h2'),
-    label('ad_bulk_d', text('One personalised email for each of the ', n, ' authors with money pending. Each is written by AI and checked figure by figure against the records. Draft them to read and edit first, or send them now.'), 'sub'),
+    group('ad_bulk_hd', [label('ad_bulk_h', 'Royalty emails in bulk', 'h2'), label('ad_bulk_d', text('One personalised email for each of the ', n, ' authors with money pending. Each is written by AI and checked figure by figure against the records. Draft them to read and edit first, or send them now.'), 'sub')], { gap: 4 }),
     hideWhen(row('ad_bulk_btns', [
       button('ad_bulk_draft', text('Draft all ', n, ' for review'), 'primary'),
       button('ad_bulk_btn', text('Send all ', n, ' now'), 'secondary'),
-    ], { gap: 10 }), bulkRunning()),
+    ], { gap: 12 }), bulkRunning()),
     showWhen(label('ad_bulk_wait', 'Working through the batch. Keep this page open; each author takes a few seconds.', font(13, 700, T.brandInk)), bulkRunning()),
     showWhen(group('ad_bulk_prog', [
       label('ad_bulk_prog_t', text('Batch ', batch(), ' · ', state(PAGE, 'cur_delivery')), 'micro'),
@@ -33,5 +32,5 @@ export function bulkCard() {
         batchWith('Failed'), ' failed · ', batchWith('Processing'), ' in progress',
       ), font(13, 700, T.text1)),
     ], { gap: 4 }), hasBatch),
-  ], { gap: 12, props: grow({ min_width_css: '360px' }) });
+  ], { gap: 16, props: grow({ min_width_css: '360px' }) });
 }

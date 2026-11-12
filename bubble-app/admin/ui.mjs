@@ -27,13 +27,36 @@ export function withStates(element, states) {
 const thisElement = (message) => ({ type: 'ThisElement', is_slidable: false, next: { type: 'Message', name: message, is_slidable: false } });
 export const hover = (element, set) => withStates({ ...element, transitions: SMOOTH }, [{ when: thisElement('is_hovered'), set }]);
 
-/** A flex container. layout: 'column' | 'row'. */
-export function group(id, children, { layout = 'column', gap = 12, style = 'Group_default_', props = {}, ...extra } = {}) {
-  const p = { container_layout: layout, use_gap: gap > 0, row_gap: gap, column_gap: gap, fit_height: true, ...props };
-  return { ...el('Group', id, style, p, extra), elements: kids(children) };
+/**
+ * Bubble has no align-items: a row's children each carry their own align-self (`vert_alignment`), a
+ * column's children theirs (`horiz_alignment`). So a container's cross-axis alignment is pushed down to
+ * every child that has not set its own. Stretched groups must stop fitting their content height.
+ */
+function alignKids(children, layout, align) {
+  const key = layout === 'row' ? 'vert_alignment' : 'horiz_alignment';
+  return children.filter(Boolean).map((c) => {
+    if (!align) return c;
+    const stretch = align === 'stretch' && layout === 'row' && c.type === 'Group' ? { fit_height: false, min_height_css: '0px' } : {};
+    return { ...c, properties: { [key]: align, ...c.properties, ...stretch } };
+  });
 }
 
-export const row = (id, children, opts = {}) => group(id, children, { layout: 'row', ...opts, props: { vert_alignment: 'center', ...opts.props } });
+/**
+ * A flex container. layout: 'column' | 'row'.
+ * align: children's cross-axis alignment (rows default to 'center'; a row's `props.vert_alignment` also sets it).
+ * justify: main-axis alignment ('flex-start' | 'center' | 'flex-end' | 'space-between').
+ */
+export function group(id, children, { layout = 'column', gap = 12, align, justify, style = 'Group_default_', props = {}, ...extra } = {}) {
+  const cross = align ?? (layout === 'row' ? (props.vert_alignment ?? 'center') : undefined);
+  const main = justify ? { [layout === 'row' ? 'container_horiz_alignment' : 'container_vert_alignment']: justify } : {};
+  const p = { container_layout: layout, use_gap: gap > 0, row_gap: gap, column_gap: gap, fit_height: true, ...main, ...props };
+  return { ...el('Group', id, style, p, extra), elements: kids(alignKids(children, layout, cross)) };
+}
+
+export const row = (id, children, opts = {}) => group(id, children, { layout: 'row', ...opts });
+
+/** A fixed width that neither grows nor shrinks (table columns, action buttons). */
+export const fixedWidth = (width) => ({ fit_width: false, width, single_width: true, min_width_css: `${width}px` });
 
 /** White card: 16px radius, hairline border, soft shadow. */
 export const card = (id, children, opts = {}) => group(id, children, { ...opts, props: { ...cardLook(), ...opts.props } });
@@ -61,8 +84,12 @@ export function label(id, t, look = 'body', props = {}, extra = {}) {
 }
 
 /** Fixed-width table cell text. */
-export const cell = (id, t, width, { align = 'left', look = 'cell', ...extra } = {}) =>
-  label(id, t, look, { width, single_width: true, min_width_css: `${width}px`, font_alignment: align, vert_alignment: 'center' }, extra);
+export const cell = (id, t, width, { align = 'left', look = 'cell', props = {}, ...extra } = {}) =>
+  label(id, t, look, { ...fixedWidth(width), font_alignment: align, vert_alignment: 'center', ...props }, extra);
+
+/** A fixed-width table cell that holds elements (a badge, buttons) instead of text. */
+export const cellGroup = (id, children, width, { layout = 'column', gap = 8, ...opts } = {}) =>
+  group(id, children, { layout, gap, ...opts, props: { ...fixedWidth(width), ...opts.props } });
 
 /** Flexible (grows) table cell text. */
 export const flexCell = (id, t, { look = 'cell', ...extra } = {}) =>
@@ -79,6 +106,13 @@ export function button(id, t, variant = 'primary', props = {}, extra = {}) {
 /** Phosphor icon, e.g. icon('x', 'house'). */
 export const icon = (id, name, color = T.text3, size = 18) =>
   el('Icon', id, null, { icon: `phosphor outline ${name}`, icon_color: color, width: size, height: size, single_width: true, single_height: true, min_width_css: `${size}px`, min_height_css: `${size}px`, fit_width: false, fit_height: false });
+
+/** A tinted square with its icon centred both ways (the column centres it vertically, the icon itself horizontally). */
+export const iconBox = (id, name, [color, bg], { box = 36, size = 20, radius = 10, iconId = `${id}_i` } = {}) =>
+  group(id, [icon(iconId, name, color, size)], {
+    gap: 0, align: 'center', justify: 'center',
+    props: { ...fill(bg), ...border(bg, radius), ...fixedWidth(box), height: box, single_height: true, min_height_css: `${box}px`, fit_height: false },
+  });
 
 export function input(id, placeholder, props = {}) {
   const base = el('Input', id, 'Input_default_', {

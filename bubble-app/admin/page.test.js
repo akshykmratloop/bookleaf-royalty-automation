@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { buildAdminPage, CUSTOM_STATES, VIEWS } from './page.mjs';
 import { inFlightOf } from './queries.mjs';
 import { STALE_MINUTES } from './workflows/poll.mjs';
+import { POPUP_CSS, SCROLL_IDS } from './popupStyle.mjs';
 import { OPTION_SETS, OPTION_IDS, TYPES } from '../schema.mjs';
 
 const page = buildAdminPage();
@@ -158,5 +159,13 @@ describe('admin page', () => {
     expect(JSON.stringify(stale)).toContain('NO_ANSWER');
     // The stale check is the last step, so earlier steps never switch to a different log mid-run.
     expect(Object.values(poll.actions).at(-1).id).toBe('poll_stale');
+  });
+
+  it('carries the theme layer and the pop-up layout in the style element, with every pop-up scroll area', () => {
+    const css = elements.find((e) => e.id === 'ad_css').properties.html;
+    expect(css).toContain('bl-login-theme');
+    expect(css).toContain(POPUP_CSS);
+    for (const id of SCROLL_IDS) expect(ids.has(id), id).toBe(true);
+    expect(elements.some((e) => e.id === 'ad_theme_toggle')).toBe(true);
   });
 });
