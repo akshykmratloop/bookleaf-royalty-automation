@@ -9,7 +9,8 @@ const ID = /^[A-Za-z0-9_-]+$/;
  * throw, so the error workflow fails the job.
  */
 export const DRILLS = Object.freeze(['ai_down', 'email_down', 'data_down', 'primary_down', 'crash']);
-export const MAX_ATTEMPT = 20;
+/** Bubble sends finished sends for the author + 1, so this only needs to stop absurd values (it was 20: an author with 20 finished sends could no longer be sent to). */
+export const MAX_ATTEMPT = 100000;
 
 /**
  * @typedef {Object} EnqueueRequest
