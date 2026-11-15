@@ -64,6 +64,6 @@ Legend: ⬜ TODO · 🔄 In progress · ✅ Done (commit SHA) · ⛔ Blocked
 - ✅ Author dashboard redesign "Your shelf" (desktop): face-out books with the login art and status labels, click to jump to the book; KPI count-up, ink meter, amber pending, tear-off payout calendar; paid-vs-pending bars and a ledger total; cover thumbnails; letter-style statements; dark-mode contrast fixed (AA audit 0 fails), stray rectangle removed, reset_pw dark borders (f67cd66). Author screenshots in `docs/media/` refreshed
 - ✅ In-place "Regenerate draft" in the review pop-up: the editor and preview stay on screen under an ink-writing veil with the live step and seconds, then "Done ✓" and the new draft fades in; buttons locked while it runs; the n8n calls are unchanged. Dark email preview shared by the admin and author pop-ups (`theme/css/04-mail.css`). 3 live runs at 900×720 / 1440×900 / 1280×720 passed; failure path covered by tests (926f637)
 - ✅ Fixed: n8n refused authors with more than 20 finished sends (HTTP 400 "attempt must be 1 to 20", seen on Ananya Reddy); limit now 100000; live Royalty Summary patched (Validate Body only) and checked (29e9ee6)
-- 🔄 Video (~4 min, real footage + AI voice) being produced
-- ⬜ Share links: GitHub access for the reviewer (private repo) and the video link
+- ✅ Walkthrough videos recorded by the user in their own voice, in three parts (Author 3 min, Admin 8 min, n8n 6 min), compressed from 669 MB to 102 MB (H.264) and shared in a Google Drive folder; link in the README
+- ⬜ Share links: GitHub access for the reviewer (private repo); video link done (README)
 - ⬜ Reply email: draft ready; send on the same thread after the links are in
